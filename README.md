@@ -1,2 +1,4 @@
 # pjvasp_package
-For DFT calculations.
+Package for DFT calculations
+# Install this package:
+Blanked
