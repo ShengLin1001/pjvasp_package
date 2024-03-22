@@ -36,7 +36,6 @@ def generate_film(   symbols: str = None,                 # str
         my_bulk = bulk(symbols, structure, a = a_hcp, covera = my_covera, cubic=True)
     else:
         raise ValueError('%s is an invalid structure' % structure)
-    
     layer_number_per_slab = my_find_num_per_slab(my_bulk, slice_plane, my_tol, my_periodic, number_per_layer)
     # print('layer_number_per_slab: %s' % layer_number_per_slab)
 
@@ -46,7 +45,6 @@ def generate_film(   symbols: str = None,                 # str
         num_rep_z = replic_z
     else:
         raise ValueError('%s or %s is an invalid value' % num_layers % num_rep_z)
-
     # print('rep_z: %s' %num_rep_z)
     my_slab = surface(my_bulk, slice_plane , num_rep_z, vacuum = my_vacuum, tol=my_tol, periodic=my_periodic)
     my_slab = my_find_prim(my_slab)
@@ -160,21 +158,27 @@ def my_find_num_per_slab(my_bulk: Atoms = None,
     return layer_number_per_slab
     
 
-# # usage
-# def uni_axial_stretch():
-#     film = generate_film(symbols = 'Au', structure = 'fcc', num_layers = 12, my_vacuum = 20, slice_plane = (1,1,1), a_fcc = 2.95*sqrt(2.0))
-#     stretch_factor_list = [0.997 + i * 0.001 for i in range(7)]
-#     #[0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
-#     films_stretch = stretch_list_along_direction_to_cell(film , stretch_factor_list = stretch_factor_list, stretch_direction_list = ['x'])
-    
-#     format_type = '%.3f'
-#     for i, film_stretch in enumerate(films_stretch):
-#         formatted_i = format_type % stretch_factor_list[i]
-#         #print(formatted_i)
-#         #print(array(film_stretch.get_cell()))
-#         filename = f'./y_dir/{formatted_i}/POSCAR' 
-#         makedirs(path.dirname(filename), exist_ok=True)   
-#         my_write_vasp(filename, film_stretch, label = f'Au thin film {formatted_i}')
+# usage
+import os
+def uni_axial_stretch():
+    film = generate_film(symbols = 'Au', structure = 'fcc', num_layers = 12, my_vacuum = 20, slice_plane = (1,1,1), a_fcc = 2.95*sqrt(2.0))
+    stretch_factor_list = [0.997 + i * 0.001 for i in range(7)]
+    #[0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
+    films_stretch = stretch_list_along_direction_to_cell(film , stretch_factor_list = stretch_factor_list, stretch_direction_list = ['x'])
+    format_type = '%.3f'
+    for i, film_stretch in enumerate(films_stretch):
+        formatted_i = format_type % stretch_factor_list[i]
+        #print(formatted_i)
+        #print(array(film_stretch.get_cell()))
+        package_path = os.path.dirname(__file__)
+        print(package_path)
+        filename = f'./y_dir/{formatted_i}/POSCAR' 
+        print(filename, film_stretch)
+        makedirs(path.dirname(filename), exist_ok=True) 
+        print(path.dirname(filename))  
+        my_write_vasp(filename, film_stretch, label = f'Au thin film {formatted_i}')
         
-# uni_axial_stretch()
+uni_axial_stretch()
+
+
 
