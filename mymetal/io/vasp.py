@@ -278,5 +278,13 @@ def my_write_vasp(filename,
                 fd.write('%4s' % s)
         fd.write('\n')
 
-
+def read_vasp_list(filenames: list = None, format: str = None) -> list:
+    """
+    use my_read_vasp to read series of CONTCAR / POSCAR
+    """
+    Atoms_list = []
+    for filename in filenames:
+        my_file = my_read_vasp(filename)
+        Atoms_list.append(my_file)
+    return Atoms_list
 
