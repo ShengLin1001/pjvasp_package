@@ -10,7 +10,6 @@ from ase.data import chemical_symbols
 from ase.build import bulk, surface
 from ase.io import write
 from ase.visualize import view
-from ase.io.vasp import _symbol_count_from_symbols, _write_symbol_count
 # For version independency, it could be instead by 'from ase.io.vasp import *'
 from ase.utils import reader, writer
 
@@ -19,6 +18,10 @@ from pathlib import Path
 from typing import List, Optional, TextIO, Tuple
 import spglib
 
+import sys
+print(sys.path)
+
+from mymetal.io.vasp import my_write_vasp
 
 def generate_film(   symbols: str = None,                 # str
                 structure: str = None,              # str
@@ -127,140 +130,6 @@ def move_atoms(atoms: Atoms = None,
     atoms.wrap()
     return atoms
 
-# my write function
-@writer
-def my_write_vasp(filename,
-               atoms,
-               label=None,
-               lattice_scale_factor = 1,
-               direct=True,
-               sort=None,
-               symbol_count=None,
-               long_format=True,
-               vasp5=True,
-               ignore_constraints=False,
-               wrap=True):
-    """Method to write VASP position (POSCAR/CONTCAR) files.
-
-    Writes label, scalefactor, unitcell, # of various kinds of atoms,
-    positions in cartesian or scaled coordinates (Direct), and constraints
-    to file. Cartesian coordinates is default and default label is the
-    atomic species, e.g. 'C N H Cu'.
-    """
-
-    from ase.constraints import FixAtoms, FixScaled, FixedPlane, FixedLine
-
-    fd = filename  # @writer decorator ensures this arg is a file descriptor
-
-    if isinstance(atoms, (list, tuple)):
-        if len(atoms) > 1:
-            raise RuntimeError('Don\'t know how to save more than ' +
-                               'one image to VASP input')
-        else:
-            atoms = atoms[0]
-
-    # Check lattice vectors are finite
-    if np.any(atoms.cell.cellpar() == 0.):
-        raise RuntimeError(
-            'Lattice vectors must be finite and not coincident. '
-            'At least one lattice length or angle is zero.')
-
-    # Write atom positions in scaled or cartesian coordinates
-    if direct:
-        coord = atoms.get_scaled_positions(wrap=wrap)
-    else:
-        coord = atoms.get_positions(wrap=wrap)
-
-    constraints = atoms.constraints and not ignore_constraints
-
-    if constraints:
-        sflags = np.zeros((len(atoms), 3), dtype=bool)
-        for constr in atoms.constraints:
-            if isinstance(constr, FixScaled):
-                sflags[constr.a] = constr.mask
-            elif isinstance(constr, FixAtoms):
-                sflags[constr.index] = [True, True, True]
-            elif isinstance(constr, FixedPlane):
-                mask = np.all(np.abs(np.cross(constr.dir, atoms.cell)) < 1e-5,
-                              axis=1)
-                if sum(mask) != 1:
-                    raise RuntimeError(
-                        'VASP requires that the direction of FixedPlane '
-                        'constraints is parallel with one of the cell axis')
-                sflags[constr.a] = mask
-            elif isinstance(constr, FixedLine):
-                mask = np.all(np.abs(np.cross(constr.dir, atoms.cell)) < 1e-5,
-                              axis=1)
-                if sum(mask) != 1:
-                    raise RuntimeError(
-                        'VASP requires that the direction of FixedLine '
-                        'constraints is parallel with one of the cell axis')
-                sflags[constr.a] = ~mask
-
-    if sort:
-        ind = np.argsort(atoms.get_chemical_symbols())
-        symbols = np.array(atoms.get_chemical_symbols())[ind]
-        coord = coord[ind]
-        if constraints:
-            sflags = sflags[ind]
-    else:
-        symbols = atoms.get_chemical_symbols()
-
-    # Create a list sc of (symbol, count) pairs
-    if symbol_count:
-        sc = symbol_count
-    else:
-        sc = _symbol_count_from_symbols(symbols)
-
-    # Create the label
-    if label is None:
-        label = ''
-        for sym, c in sc:
-            label += '%2s ' % sym
-    fd.write(label + '\n')
-
-    # Write unitcell in real coordinates and adapt to VASP convention
-    # for unit cell
-    # ase Atoms doesn't store the lattice constant separately, so always
-    # write 1.0.
-    fd.write('%19.16f\n' % lattice_scale_factor)  # pj add
-    scaled_cell = atoms.get_cell()/lattice_scale_factor  # pj add
-    if long_format:
-        latt_form = ' %21.16f'
-    else:
-        latt_form = ' %11.6f'
-    for vec in scaled_cell:
-        fd.write(' ')
-        for el in vec:
-            fd.write(latt_form % el)
-        fd.write('\n')
-
-    # Write out symbols (if VASP 5.x) and counts of atoms
-    _write_symbol_count(fd, sc, vasp5=vasp5)
-
-    if constraints:
-        fd.write('Selective dynamics\n')
-
-    if direct:
-        fd.write('Direct\n')
-    else:
-        fd.write('Cartesian\n')
-
-    if long_format:
-        cform = ' %19.16f'
-    else:
-        cform = ' %9.6f'
-    for iatom, atom in enumerate(coord):
-        for dcoord in atom:
-            fd.write(cform % dcoord)
-        if constraints:
-            for flag in sflags[iatom]:
-                if flag:
-                    s = 'F'
-                else:
-                    s = 'T'
-                fd.write('%4s' % s)
-        fd.write('\n')
 
 # useless
 def file_name(dir_path: str = None, base_name: str = None, special_name: str = None, format_type: str = None) -> str:
@@ -302,21 +171,21 @@ def my_find_num_per_slab(my_bulk: Atoms = None,
     return layer_number_per_slab
     
 
-## usage
-# def uni_axial_stretch():
-#     film = generate_film(symbols = 'Au', structure = 'fcc', num_layers = 12, my_vacuum = 20, slice_plane = (1,1,1), a_fcc = 2.95*sqrt(2.0))
-#     stretch_factor_list = [0.997 + i * 0.001 for i in range(7)]
-#     #[0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
-#     films_stretch = stretch_list_along_direction_to_cell(film , stretch_factor_list = stretch_factor_list, stretch_direction_list = ['x'])
+# usage
+def uni_axial_stretch():
+    film = generate_film(symbols = 'Au', structure = 'fcc', num_layers = 12, my_vacuum = 20, slice_plane = (1,1,1), a_fcc = 2.95*sqrt(2.0))
+    stretch_factor_list = [0.997 + i * 0.001 for i in range(7)]
+    #[0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
+    films_stretch = stretch_list_along_direction_to_cell(film , stretch_factor_list = stretch_factor_list, stretch_direction_list = ['x'])
     
-#     format_type = '%.3f'
-#     for i, film_stretch in enumerate(films_stretch):
-#         formatted_i = format_type % stretch_factor_list[i]
-#         #print(formatted_i)
-#         #print(array(film_stretch.get_cell()))
-#         filename = f'./y_dir/{formatted_i}/POSCAR' 
-#         makedirs(path.dirname(filename), exist_ok=True)   
-#         my_write_vasp(filename, film_stretch, label = f'Au thin film {formatted_i}')
+    format_type = '%.3f'
+    for i, film_stretch in enumerate(films_stretch):
+        formatted_i = format_type % stretch_factor_list[i]
+        #print(formatted_i)
+        #print(array(film_stretch.get_cell()))
+        filename = f'./y_dir/{formatted_i}/POSCAR' 
+        makedirs(path.dirname(filename), exist_ok=True)   
+        my_write_vasp(filename, film_stretch, label = f'Au thin film {formatted_i}')
         
-# uni_axial_stretch()
+uni_axial_stretch()
 

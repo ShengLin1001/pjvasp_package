@@ -1,0 +1,6 @@
+numpy
+scipy
+sympy
+statsmodels
+ase==3.22.1
+ovito
