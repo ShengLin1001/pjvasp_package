@@ -5,8 +5,8 @@ from ase.build import bulk, surface
 # For version independency, it could be instead by 'from ase.io.vasp import *'
 import spglib
 from mymetal.io.vasp import my_write_vasp
-import os
 
+import os
 # 获取当前脚本所在目录
 script_dir = os.path.dirname(__file__)
 # 设置当前工作目录

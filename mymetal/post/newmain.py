@@ -15,6 +15,12 @@ from mymetal.universial.patterntrans import *
 from mymetal.io.construct import *
 from mymetal.io.write import *
 
+import os
+# 获取当前脚本所在目录
+script_dir = os.path.dirname(__file__)
+# 设置当前工作目录
+os.chdir(script_dir)
+
 dir_path = './y_dir/'
 stretch_list = [0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
 

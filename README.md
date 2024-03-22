@@ -18,3 +18,21 @@ Secondly, enter the family directory, and run the following bash command
 ```shell
 pip3 install --user -e  .  
 ```
+
+# some fixed problems
+
+## when i run the test-post/*.py, i found the output file has been generated in the root directory of pjvasp_package
+
+we should add fllowing python commands
+
+```shell
+import os
+# get the path of those script
+script_dir = os.path.dirname(__file__)
+# set the working path
+os.chdir(script_dir)
+```
+
+# some fixing problems
+
+
