@@ -1,4 +1,13 @@
 # pjvasp_package
+
 Package for DFT calculations
+
 # Install this package:
-Blanked
+
+```shell
+pip3 install --upgrade --user   git+https://github.com/ShengLin1001/pjvasp_package.git
+```
+
+```shell
+pip3 install --user -e  .  
+```
