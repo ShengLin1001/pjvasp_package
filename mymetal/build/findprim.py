@@ -1,8 +1,7 @@
-from numpy import array, ndarray, cross
+from numpy import array
 from ase import Atoms
-from ase.io.vasp import read_vasp, write_vasp
-from ase.visualize import view
 import spglib
+from mymetal.universial.moveatom import *
 
 def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag = True, scale_atoms = False) -> Atoms:
     """
@@ -27,15 +26,6 @@ def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag
     primitive_atoms = move_atoms(primitive_atoms, move_list)
     return primitive_atoms
 
-# move atoms
-def move_atoms(atoms: Atoms = None,
-               translate_matrix: ndarray = array([0.1, 0.1, 0.0])) -> Atoms :
-    scaled = atoms.get_scaled_positions()
-    scaled += translate_matrix
-    atoms.set_scaled_positions(scaled)
-    atoms.wrap()
-    return atoms
-
 # check the z-direction of cell is positive
 def check_direction(atoms: Atoms = None, scale_atoms = False) -> Atoms:
     lattice = array(atoms.get_cell())
@@ -52,13 +42,7 @@ def check_direction(atoms: Atoms = None, scale_atoms = False) -> Atoms:
     #print(atoms.get_positions())
     return atoms
 
-# calculate the surface area in xy plane
-def cal_area(atoms: Atoms = None) -> float:
-    lattice = array(atoms.get_cell())
-    a = lattice[0,:]
-    b = lattice[1,:]
-    area = abs(cross(a, b)[2])
-    return area
+
 
 ## usage
 # str1 = read_vasp('POSCAR1')

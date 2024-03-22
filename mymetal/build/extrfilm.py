@@ -2,6 +2,7 @@ from ase.utils import reader
 from ase import Atoms
 from mymetal.universial.datachange import list_to_char
 from mymetal.post.newmain import myfindall
+from numpy import array, cross
 
 ##############################################################
 ############# calculate the lattice
@@ -49,3 +50,11 @@ def my_extr_etot(filename: str = None,
             myfindall(fd, **config, mycontent=etot)
     etot = float(list_to_char(etot))
     return etot
+
+# calculate the surface area in xy plane
+def cal_area(atoms: Atoms = None) -> float:
+    lattice = array(atoms.get_cell())
+    a = lattice[0,:]
+    b = lattice[1,:]
+    area = abs(cross(a, b)[2])
+    return area
