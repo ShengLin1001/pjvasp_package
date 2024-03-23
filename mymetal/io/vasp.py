@@ -2,7 +2,6 @@ from ase.utils import reader, writer
 from ase import Atoms
 import numpy as np
 import re
-from ase import Atoms
 from ase.io.vasp import get_atomtypes_from_formula, atomtypes_outpot
 from ase.io.vasp import _symbol_count_from_symbols, _write_symbol_count
 
