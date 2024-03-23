@@ -21,7 +21,7 @@ def mydel_pos_type(atoms: Atoms = None,
     ps = position_strict
     ts = type_strict
     if atoms:
-        print('1')
+        #print('1')
         if ps is not None and ts is None:
             del temp[[atom.index for atom in temp if check_position(ps, atom.position) ]]
         elif ps is None and ts is not None:
@@ -32,7 +32,6 @@ def mydel_pos_type(atoms: Atoms = None,
             print_after_blank('the position strict and type strict', calling_function)
     else:
         print_after_blank('the input atoms', calling_function)
-
     temp = temp[temp.numbers.argsort()]
     return temp
 
@@ -44,10 +43,8 @@ def check_position(position_strict: ndarray = None,
     tag = False
     p = position
     ps = position_strict
-    print(p, ps)
     if position is None:
-        print('1')
-        #print_after_blank('the atom position', calling_function)
+        print_after_blank('the atom position', calling_function)
     else:
         if p[0] > ps[0] and p[0] < ps[1] and p[1] > ps[2] and p[1] < ps[3] and p[2] > ps[4] and p[2] < ps[5]:
             tag = True
