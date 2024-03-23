@@ -10,7 +10,8 @@ def mydel_pos_type(atoms: Atoms = None,
     """
     using to delete some atoms in specified region or/and type\n
     ps: [xl, xh, yl, yh, zl, zh]\n
-    ts: ['H', 'O', ... ]
+    positive infinity: float('inf'), negative infinity: float('-inf')\n
+    ts: ['H', 'O', ... ]\n
     """
     calling_function = stack()[1].function
     #check_input(getargvalues(currentframe()).locals)
