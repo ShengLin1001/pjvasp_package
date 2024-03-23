@@ -19,6 +19,11 @@ Secondly, enter the family directory, and run the following bash command
 pip3 install --user -e  .  
 ```
 
+## Uninstall
+```shell
+pip3 uninstall mymetal-pkg
+```
+
 # some fixed problems
 
 ## when i run the test-post/*.py, i found the output file has been generated in the root directory of pjvasp_package
