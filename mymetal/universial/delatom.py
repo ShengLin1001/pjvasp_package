@@ -21,7 +21,6 @@ def mydel_pos_type(atoms: Atoms = None,
     ps = position_strict
     ts = type_strict
     if atoms:
-        #print('1')
         if ps is not None and ts is None:
             del temp[[atom.index for atom in temp if check_position(ps, atom.position) ]]
         elif ps is None and ts is not None:
