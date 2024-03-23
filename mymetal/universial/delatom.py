@@ -10,8 +10,9 @@ def mydel_pos_type(atoms: Atoms = None,
     """
     using to delete some atoms in specified region or/and type\n
     ps: [xl, xh, yl, yh, zl, zh]\n
-    positive infinity: float('inf'), negative infinity: float('-inf')\n
     ts: ['H', 'O', ... ]\n
+    temp = mydel_pos_type(temp, [float('-inf'), float('inf'), float('-inf'), float('inf'), float('-inf'), 0.9])\n
+    temp = mydel_pos_type(temp, [float('-inf'), float('inf'), float('-inf'), float('inf'), 10.18, float('inf')])\n
     """
     calling_function = stack()[1].function
     #check_input(getargvalues(currentframe()).locals)
@@ -21,11 +22,11 @@ def mydel_pos_type(atoms: Atoms = None,
     ts = type_strict
     if atoms:
         if ps is not None and ts is None:
-            del temp[[atom.index for atom in temp if check_position(ps, p) ]]
+            del temp[[atom.index for atom in temp if check_position(ps, atom.position) ]]
         elif ps is None and ts is not None:
             del temp[[atom.index for atom in temp if atom.symbol in ts ]]
         elif ps is not None and ts is not None:
-            del temp[[atom.index for atom in temp if ((atom.symbol in ts) and check_position(ps, p) )]]
+            del temp[[atom.index for atom in temp if ((atom.symbol in ts) and check_position(ps, atom.position) )]]
         else:
             print_after_blank('the position strict and type strict', calling_function)
     else:
@@ -42,6 +43,7 @@ def check_position(position_strict: ndarray = None,
     tag = False
     p = position
     ps = position_strict
+    print(p, ps)
     if position is None:
         print_after_blank('the atom position', calling_function)
     else:
