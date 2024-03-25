@@ -3,10 +3,12 @@ from ase import Atoms
 import spglib
 from mymetal.universial.moveatom import *
 
-def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag = True, scale_atoms = False) -> Atoms:
+def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag = True, scale_atoms = False, to_primitive = 1) -> Atoms:
     """
     find primitive cell using spglib\n
-    Convert to a format suitable for spglib
+    Convert to a format suitable for spglib\n
+    if the material is not 2D material, please turn off the check_direction tag\n
+    this function could be used to find conventional cell by controlling the to_primitive tag\n
     """
     
     lattice = array(atoms.get_cell())
@@ -15,7 +17,7 @@ def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag
     pbc = array(atoms.get_pbc())
     cell = (lattice, points, numbers)
 
-    primitive_cell = spglib.standardize_cell(cell, to_primitive=1, no_idealize=1)
+    primitive_cell = spglib.standardize_cell(cell, to_primitive=to_primitive, no_idealize=1)
     # Convert the spglib output back to an ASE Atoms object
     primitive_atoms = Atoms(numbers = primitive_cell[2],
                             scaled_positions = primitive_cell[1],
@@ -26,7 +28,9 @@ def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag
     primitive_atoms = move_atoms(primitive_atoms, move_list)
     return primitive_atoms
 
-# check the z-direction of cell is positive
+
+
+# check the z-direction of cell is positive for 2D material primitive cell
 def check_direction(atoms: Atoms = None, scale_atoms = False) -> Atoms:
     lattice = array(atoms.get_cell())
     

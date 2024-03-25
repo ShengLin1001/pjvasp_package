@@ -26,9 +26,11 @@ def generate_film(   symbols: str = None,                 # str
                 move_atom: list = [0.1, 0.1, 0.0],
                 number_per_layer: float = 1.0
                 ) -> Atoms:
-    # parameters : 1-8 line: general setting
-    #              9 10-11 line: fcc, hcp parameters
-    # when we use surface() function, my_bulk must be a conventional cell, not a primitive cell, so set cubic=True
+    """
+    parameters : 1-8 line: general setting\n
+                  9 10-11 line: fcc, hcp parameters\n
+    when we use surface() function, my_bulk must be a conventional cell, not a primitive cell, so set cubic=True
+    """
 
     if structure == 'fcc':
         my_bulk = bulk(symbols, structure, a=a_fcc, cubic=True)
