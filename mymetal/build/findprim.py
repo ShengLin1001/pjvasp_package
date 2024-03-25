@@ -26,8 +26,8 @@ def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag
     if check_direction_tag:
         primitive_atoms = check_direction(primitive_atoms, scale_atoms)
     primitive_atoms = move_atoms(primitive_atoms, move_list)
+    primitive_atoms = primitive_atoms[primitive_atoms.numbers.argsort()]
     return primitive_atoms
-
 
 
 # check the z-direction of cell is positive for 2D material primitive cell
