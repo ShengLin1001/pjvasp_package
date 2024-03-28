@@ -1,0 +1,23 @@
+# conda env create -f environment.yml
+
+name: myenv_dft
+channels:
+  - conda-forge 
+dependencies:
+  - python=3.11  
+  - numpy
+  - scipy
+  - sympy
+  - matplotlib
+  - spglib
+  - ovito
+  - pip:
+    - git+https://github.com/BinglunYin/myalloy_package.git
+  - pip:
+    - git+https://github.com/ShengLin1001/pjvasp_package.git
+  - pip:
+    - git+https://github.com/vasp-dev/py4vasp.git
+
+
+## pydft
+## pyqint
