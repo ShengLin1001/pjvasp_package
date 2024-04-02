@@ -18,6 +18,7 @@ def generate_film(   symbols: str = None,                 # str
                 a_hcp: float = 2.95,               # float
                 my_covera: float = sqrt(8.0/3.0),  # float
                 move_atom: list = [0.1, 0.1, 0.0],
+                before_move_atom: list = [0.05, 0.05, 0.05],
                 number_per_layer: float = 1.0,
                 bulk_atoms: Atoms = None
                 ) -> Atoms:
@@ -35,7 +36,8 @@ def generate_film(   symbols: str = None,                 # str
             my_bulk = bulk(symbols, structure, a = a_hcp, covera = my_covera, cubic=True)
         else:
             raise ValueError('%s is an invalid structure' % structure)
-    
+    my_bulk = move_atoms(my_bulk, before_move_atom)
+
     layer_number_per_slab = my_find_num_per_slab(my_bulk, slice_plane, my_tol, my_periodic, number_per_layer)
     # print('layer_number_per_slab: %s' % layer_number_per_slab)
 
@@ -126,25 +128,25 @@ def file_name(dir_path: str = None, base_name: str = None, special_name: str = N
     return file_name
 
 
-def my_find_prim(atoms: Atoms = None) -> Atoms:
-    """
-    find primitive cell using spglib\n
-    Convert to a format suitable for spglib
-    """
+# def my_find_prim(atoms: Atoms = None) -> Atoms:
+#     """
+#     find primitive cell using spglib\n
+#     Convert to a format suitable for spglib
+#     """
     
-    lattice = array(atoms.get_cell())
-    points = array(atoms.get_scaled_positions())
-    numbers = array(atoms.get_atomic_numbers())
-    pbc = array(atoms.get_pbc())
-    cell = (lattice, points, numbers)
+#     lattice = array(atoms.get_cell())
+#     points = array(atoms.get_scaled_positions())
+#     numbers = array(atoms.get_atomic_numbers())
+#     pbc = array(atoms.get_pbc())
+#     cell = (lattice, points, numbers)
 
-    primitive_cell = spglib.standardize_cell(cell, to_primitive=1, no_idealize=1)
-    # Convert the spglib output back to an ASE Atoms object
-    primitive_atoms = Atoms(numbers = primitive_cell[2],
-                            scaled_positions = primitive_cell[1],
-                            cell = primitive_cell[0],
-                            pbc=pbc)
-    return primitive_atoms
+#     primitive_cell = spglib.standardize_cell(cell, to_primitive=1, no_idealize=1)
+#     # Convert the spglib output back to an ASE Atoms object
+#     primitive_atoms = Atoms(numbers = primitive_cell[2],
+#                             scaled_positions = primitive_cell[1],
+#                             cell = primitive_cell[0],
+#                             pbc=pbc)
+#     return primitive_atoms
 
 # find number of atoms per slab
 def my_find_num_per_slab(my_bulk: Atoms = None,
