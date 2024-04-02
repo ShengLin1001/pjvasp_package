@@ -6,11 +6,6 @@ import spglib
 from mymetal.build.findprim import my_find_prim
 import os
 
-# 获取当前脚本所在目录
-script_dir = os.path.dirname(__file__)
-# 设置当前工作目录
-os.chdir(script_dir)
-
 def generate_film(   symbols: str = None,                 # str
                 structure: str = None,              # str
                 num_layers: int = None,            # int
