@@ -1,10 +1,9 @@
 from numpy import sqrt, ndarray, array
-from os    import makedirs, path
 from ase import Atoms
 from ase.build import bulk, surface
 # For version independency, it could be instead by 'from ase.io.vasp import *'
 import spglib
-from mymetal.io.vasp import my_write_vasp
+from mymetal.build.findprim import my_find_prim
 import os
 
 # 获取当前脚本所在目录
@@ -24,20 +23,23 @@ def generate_film(   symbols: str = None,                 # str
                 a_hcp: float = 2.95,               # float
                 my_covera: float = sqrt(8.0/3.0),  # float
                 move_atom: list = [0.1, 0.1, 0.0],
-                number_per_layer: float = 1.0
+                number_per_layer: float = 1.0,
+                bulk_atoms: Atoms = None
                 ) -> Atoms:
     """
     parameters : 1-8 line: general setting\n
                   9 10-11 line: fcc, hcp parameters\n
     when we use surface() function, my_bulk must be a conventional cell, not a primitive cell, so set cubic=True
     """
-
-    if structure == 'fcc':
-        my_bulk = bulk(symbols, structure, a=a_fcc, cubic=True)
-    elif structure == 'hcp':
-        my_bulk = bulk(symbols, structure, a = a_hcp, covera = my_covera, cubic=True)
+    if bulk_atoms:
+        my_bulk = my_find_prim(bulk_atoms, to_primitive=0)
     else:
-        raise ValueError('%s is an invalid structure' % structure)
+        if structure == 'fcc':
+            my_bulk = bulk(symbols, structure, a=a_fcc, cubic=True)
+        elif structure == 'hcp':
+            my_bulk = bulk(symbols, structure, a = a_hcp, covera = my_covera, cubic=True)
+        else:
+            raise ValueError('%s is an invalid structure' % structure)
     
     layer_number_per_slab = my_find_num_per_slab(my_bulk, slice_plane, my_tol, my_periodic, number_per_layer)
     # print('layer_number_per_slab: %s' % layer_number_per_slab)
