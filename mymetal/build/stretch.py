@@ -23,6 +23,7 @@ def generate_film(   symbols: str = None,                 # str
                 bulk_atoms: Atoms = None
                 ) -> Atoms:
     """
+    please see the ASE/cut function\n
     parameters : 1-8 line: general setting\n
                   9 10-11 line: fcc, hcp parameters\n
     when we use surface() function, my_bulk must be a conventional cell, not a primitive cell, so set cubic=True
