@@ -58,3 +58,6 @@ def cal_area(atoms: Atoms = None) -> float:
     b = lattice[1,:]
     area = abs(cross(a, b)[2])
     return area
+
+
+
