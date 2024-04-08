@@ -17,7 +17,8 @@ dependencies:
     - git+https://github.com/ShengLin1001/pjvasp_package.git
   - pip:
     - git+https://github.com/vasp-dev/py4vasp.git
-
+  - pip:
+    - git+https://github.com/ShengLin1001/hetbuilder.git
 
 ## pydft
 ## pyqint
