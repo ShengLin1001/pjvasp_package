@@ -1,3 +1,4 @@
+
 numpy
 scipy
 sympy
@@ -12,4 +13,5 @@ git+https://github.com/vasp-dev/py4vasp.git
 pretty_errors
 rich
 networkx
+typer
 git+https://github.com/ShengLin1001/hetbuilder.git
