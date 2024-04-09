@@ -5,40 +5,91 @@ from ase.build import make_supercell
 from ase.build.tools import sort
 from numpy import array, zeros, concatenate
 from ase.visualize import view
+from hetbuilder.algorithm import CoincidenceAlgorithm
+from hetbuilder.plotting import InteractivePlot
+import matplotlib
 
 # set_length Done
-# find_hetero Not Done!!!!!!!!!!!!!!!!!!!!
+# find_hetero Done!!!!!!!!!!!!!!!!!!!!
 # construct_hetero is Done!!!!!!!!!!!!
+# test see below
 
-# test1
-# find_hetero(gold_fcc_film, sio2_film_prim)
-# set_length(sio2_film_prim, 50)
-# print(sio2_film_prim)
+# take from hetbuilder/algorithm.py Line 333 def run()
+def find_hetero(bottom: Atoms = None,
+                top: Atoms = None,
+                Nmax: int = 10,
+                Nmin: int = 0,
+                angles: list = [],
+                angle_limits: tuple = (0, 90),
+                angle_stepsize: float = 1.0,
+                tolerance: float = 0.1,
+                weight: float = 0.5,
+                distance: float = 4,
+                vacuum: float = 15,
+                standardize: bool = False,
+                no_idealize: bool = False,
+                symprec: float = 1e-5,
+                angle_tolerance: float = 5,
+                verbosity: int = 0,
+                plot: bool = True,
+                ) -> list:
+    """
+    Find a heterostucture using hetbuilder API
+    Executes the coincidence lattice algorithm.
 
-# test2
-# from hetbuilder.algorithm import CoincidenceAlgorithm
-# from hetbuilder.plotting import InteractivePlot
-# from ase.io.vasp import read_vasp, write_vasp
-# bottom = read_vasp('CONTCAR_SiO_film')
-# top = read_vasp('CONTCAR_FCC_film')
-# # we set up the algorithm class
-# alg = CoincidenceAlgorithm(bottom, top)
-# # we run the algorithm for a choice of parameters
-# results = alg.run(Nmax = 5, Nmin = 0, 
-#                   tolerance = 2, weight = 0)
-# j = results[1]
-# print(type(j))
-# print(j.bottom)
-# print(j.top)
-# print(j.stack)
-# print(j.strain)
-# view(bottom)
-# view(j.stack)
-# view(build_supercells(bottom, top, j.M, j.N, j.angle, j._weight))
-# if j.stack is same as the supercells 
+    Args:
+        Nmax (int): Maximum number of translations. Defaults to 10.
+        Nmin (int): Minimum number of translations. Defaults to 0.
+        angles (list): List of angles in degree to search. Takes precedence over angle_limits and angle_stepsize.
+        angle_limits (tuple): Lower and upper bound of angles to look through with given step size by angle_stepsize. Defaults to (0, 90) degree.
+        angle_stepsize (float): Increment of angles to look through. Defaults to 1.0 degree.
+        tolerance (float): Tolerance criterion to accept lattice match. Corresponds to a distance in Angström. Defaults to 0.1.
+        weight (float): The coincidence unit cell is C = A + weight * (B-A). Defaults to 0.5.
+        distance (float): Interlayer distance of the stacks. Defaults to 4.0 Angström.
+        vacuum (float): Thickness of the vacuum layer of the stacks. Defaults to 15.0 Angström.
+        standardize (bool): Perform spglib standardization. Defaults to true.
+        no_idealize (bool): Does not idealize unit cell parameters in the spglib standardization routine. Defaults to False.
+        symprec (float): Symmetry precision for spglib. Defaults to 1e-5 Angström.
+        angle_tolerance (float): Angle tolerance fo the spglib `spgat` routines. Defaults to 5.
+        verbosity (int): Debug level for printout of Coincidence Algorithm. Defaults to 0.
+
+    Returns:
+        list : A list of :class:`~hetbuilder.algorithm.Interface`.
+
+    """
+    # we set up the algorithm class
+    alg = CoincidenceAlgorithm(bottom, top)
+    # we run the algorithm for a choice of parameters
+    results = alg.run(Nmax, Nmin, angles, angle_limits, angle_stepsize,
+                tolerance, weight, distance, vacuum, standardize,
+                no_idealize, symprec, angle_tolerance, verbosity,
+                tolerance, weight)
+    if plot:
+        iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
+        iplot.plot_results()
+    return results
+
+# take from hetbuilder/ploting.py Line 211 class InteractivePlot
+def my_plot_results(bottom: Atoms = None,
+        top: Atoms = None,
+        results: list = None,
+        weight: float = 0.5,
+        plot_type: str = 'Qt5Agg') -> None:
+    """ Interactive visualization of the results via matplotlib. 
+    
+    Args:
+        bottom (ase.atoms.Atoms): Lower layer as primitive.
+        top (ase.atoms.Atoms): Upper layer as primitive.
+        results (list): List of :class:`~hetbuilder.algorithm.Interface` returned from the coincidence lattice search.
+        weight (float, optional): Weight of the supercell.
+        plot_type: Default is Qt5Agg, to interactive plot using jupyter notebook.
+    """
+    matplotlib.use(plot_type) # if failed,  pip install PyQt5  PySide2
+    iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
+    iplot.plot_results()
 
 
-def find_hetero( up_layer: Atoms = None,
+def my_find_hetero( up_layer: Atoms = None,
                 bot_layer: Atoms = None,
                 inter_dis: float = None,
                 fix_bot_lat: bool = True) -> Atoms:
@@ -189,4 +240,31 @@ def scale_cell_xy(atoms_origin: Atoms = None, new_cell: array = None):
     # 更新原子的位置
     atoms.set_positions(updated_cart_pos)
 
+
+# test1
+# find_hetero(gold_fcc_film, sio2_film_prim)
+# set_length(sio2_film_prim, 50)
+# print(sio2_film_prim)
+
+# test2
+# from hetbuilder.algorithm import CoincidenceAlgorithm
+# from hetbuilder.plotting import InteractivePlot
+# from ase.io.vasp import read_vasp, write_vasp
+# bottom = read_vasp('CONTCAR_SiO_film')
+# top = read_vasp('CONTCAR_FCC_film')
+# # we set up the algorithm class
+# alg = CoincidenceAlgorithm(bottom, top)
+# # we run the algorithm for a choice of parameters
+# results = alg.run(Nmax = 5, Nmin = 0, 
+#                   tolerance = 2, weight = 0)
+# j = results[1]
+# print(type(j))
+# print(j.bottom)
+# print(j.top)
+# print(j.stack)
+# print(j.strain)
+# view(bottom)
+# view(j.stack)
+# view(build_supercells(bottom, top, j.M, j.N, j.angle, j._weight))
+# if j.stack is same as the supercells 
 
