@@ -31,3 +31,5 @@ sphinx_rtd_theme
 sphinx-markdown-tables
 recommonmark
 pymatgen
+PyQt5
+PySide2
