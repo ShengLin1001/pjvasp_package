@@ -1,14 +1,8 @@
 Metadata-Version: 2.1
 Name: mymetal-pkg
-Version: 0.1
+Version: 0.2.0
 Summary: Package_for_Computational_Metallurgy
 Home-page: https://github.com/ShengLin1001/pjvasp_package.git
 Author: J. Pei
 Author-email: zju_pj@163.com
 License: #
-Requires-Dist: numpy
-Requires-Dist: scipy
-Requires-Dist: sympy
-Requires-Dist: statsmodels
-Requires-Dist: ase==3.22.1
-Requires-Dist: ovito

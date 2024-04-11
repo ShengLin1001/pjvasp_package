@@ -21,5 +21,8 @@ sphinx-markdown-tables
 recommonmark
 PyQt5
 PySide2
+git+https://github.com/BinglunYin/myalloy_package.git
+git+https://github.com/vasp-dev/py4vasp.git
+git+https://github.com/ShengLin1001/hetbuilder.git
 ase == 3.22.1
 
