@@ -1,5 +1,5 @@
 from ase import Atoms
-from numpy import ndarray, array, int
+from numpy import ndarray, array
 from mymetal.universial.printafter import print_after_blank
 from inspect import getargvalues, currentframe, stack
 from mymetal.universial.checkinput import check_input

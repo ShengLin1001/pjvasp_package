@@ -8,6 +8,7 @@ from ase.visualize import view
 from hetbuilder.algorithm import CoincidenceAlgorithm
 from hetbuilder.plotting import InteractivePlot
 import matplotlib
+from mymetal.universial.moveatom import move_atoms
 
 # set_length Done
 # find_hetero Done!!!!!!!!!!!!!!!!!!!!
@@ -24,7 +25,7 @@ def find_hetero(bottom: Atoms = None,
                 angle_stepsize: float = 1.0,
                 tolerance: float = 0.1,
                 weight: float = 0.5,
-                distance: float = 4,
+                distance: float = 3.5,
                 vacuum: float = 15,
                 standardize: bool = False,
                 no_idealize: bool = False,
@@ -32,7 +33,9 @@ def find_hetero(bottom: Atoms = None,
                 angle_tolerance: float = 5,
                 verbosity: int = 0,
                 plot: bool = True,
-                plot_type: str = 'Qt5Agg'
+                plot_type: str = 'Qt5Agg',
+                move_list: list = [0.1, 0.1, 0.1],
+                center: bool = True,
                 ) -> list:
     """
     Find a heterostucture using hetbuilder API
@@ -54,6 +57,8 @@ def find_hetero(bottom: Atoms = None,
         angle_tolerance (float): Angle tolerance fo the spglib `spgat` routines. Defaults to 5.
         verbosity (int): Debug level for printout of Coincidence Algorithm. Defaults to 0.
         plot_type: Default is Qt5Agg, to interactive plot using jupyter notebook.
+        move_list: Default is [0.1, 0.1, 0.1], avoid the value error of 0.0...
+        center: if center, default is True.
 
     Returns:
         list : A list of :class:`~hetbuilder.algorithm.Interface`.
@@ -64,13 +69,17 @@ def find_hetero(bottom: Atoms = None,
     # we run the algorithm for a choice of parameters
     results = alg.run(Nmax, Nmin, angles, angle_limits, angle_stepsize,
                 tolerance, weight, distance, vacuum, standardize,
-                no_idealize, symprec, angle_tolerance, verbosity,
-                tolerance, weight)
+                no_idealize, symprec, angle_tolerance, verbosity)
     if results is not None:
         if plot:
             matplotlib.use(plot_type) # if failed,  pip install PyQt5  PySide2
             iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
             iplot.plot_results()
+        for result in results:
+            result.stack = move_atoms(result.stack, move_list)
+            if center:
+                result.stack.center()
+            result.stack = result.stack[result.stack.numbers.argsort()]
     else:
         print("Sorry, we didn't find any heterostructure")
     return results

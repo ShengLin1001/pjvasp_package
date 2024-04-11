@@ -6,6 +6,7 @@ from mymetal.universial.find import find_line_position, extract_line_at_position
 from mymetal.universial.patterntrans import my_pattern_trans
 from mymetal.universial.printafter import print_after_blank, print_after_cant_read, print_after_read, print_after_not_supported
 from mymetal.universial.delatom import mydel_pos_type, check_position
+from mymetal.universial.fixatom import fixatoms
 
 __all__ = ['check_input',
            'rm_blank', 'my_add_list', 'my_down_up', 'myjust', 'normalize_float_int',
@@ -14,5 +15,6 @@ __all__ = ['check_input',
                     'find_line_position', 'extract_line_at_position',
                     'my_pattern_trans',
                     'print_after_blank', 'print_after_cant_read', 'print_after_read', 'print_after_not_supported',
-                    'mydel_pos_type', 'check_position'             
+                    'mydel_pos_type', 'check_position',
+                    'fixatoms'             
 ]
