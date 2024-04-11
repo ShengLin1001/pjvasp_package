@@ -32,6 +32,7 @@ def find_hetero(bottom: Atoms = None,
                 angle_tolerance: float = 5,
                 verbosity: int = 0,
                 plot: bool = True,
+                plot_type: str = 'Qt5Agg'
                 ) -> list:
     """
     Find a heterostucture using hetbuilder API
@@ -52,6 +53,7 @@ def find_hetero(bottom: Atoms = None,
         symprec (float): Symmetry precision for spglib. Defaults to 1e-5 Angström.
         angle_tolerance (float): Angle tolerance fo the spglib `spgat` routines. Defaults to 5.
         verbosity (int): Debug level for printout of Coincidence Algorithm. Defaults to 0.
+        plot_type: Default is Qt5Agg, to interactive plot using jupyter notebook.
 
     Returns:
         list : A list of :class:`~hetbuilder.algorithm.Interface`.
@@ -64,9 +66,13 @@ def find_hetero(bottom: Atoms = None,
                 tolerance, weight, distance, vacuum, standardize,
                 no_idealize, symprec, angle_tolerance, verbosity,
                 tolerance, weight)
-    if plot:
-        iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
-        iplot.plot_results()
+    if results is not None:
+        if plot:
+            matplotlib.use(plot_type) # if failed,  pip install PyQt5  PySide2
+            iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
+            iplot.plot_results()
+    else:
+        print("Sorry, we didn't find any heterostructure")
     return results
 
 # take from hetbuilder/ploting.py Line 211 class InteractivePlot
