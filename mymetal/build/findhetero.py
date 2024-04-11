@@ -33,7 +33,7 @@ def find_hetero(bottom: Atoms = None,
                 angle_tolerance: float = 5,
                 verbosity: int = 0,
                 plot: bool = True,
-                plot_type: str = 'Qt5Agg',
+                plot_type: str = 'TkAgg' , 
                 move_list: list = [0.1, 0.1, 0.1],
                 center: bool = True,
                 ) -> list:
@@ -56,7 +56,7 @@ def find_hetero(bottom: Atoms = None,
         symprec (float): Symmetry precision for spglib. Defaults to 1e-5 Angström.
         angle_tolerance (float): Angle tolerance fo the spglib `spgat` routines. Defaults to 5.
         verbosity (int): Debug level for printout of Coincidence Algorithm. Defaults to 0.
-        plot_type: Default is Qt5Agg, to interactive plot using jupyter notebook.
+        plot_type: Default is TkAgg or Qt5Agg, to interactive plot using jupyter notebook.
         move_list: Default is [0.1, 0.1, 0.1], avoid the value error of 0.0...
         center: if center, default is True.
 
@@ -71,15 +71,15 @@ def find_hetero(bottom: Atoms = None,
                 tolerance, weight, distance, vacuum, standardize,
                 no_idealize, symprec, angle_tolerance, verbosity)
     if results is not None:
-        if plot:
-            matplotlib.use(plot_type) # if failed,  pip install PyQt5  PySide2
-            iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
-            iplot.plot_results()
         for result in results:
             result.stack = move_atoms(result.stack, move_list)
             if center:
                 result.stack.center()
             result.stack = result.stack[result.stack.numbers.argsort()]
+        if plot:
+            matplotlib.use(plot_type) # if failed,  pip install Qt5Agg{PyQt5  PySide2} TkAgg{tkinter}
+            iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
+            iplot.plot_results()
     else:
         print("Sorry, we didn't find any heterostructure")
     return results
@@ -130,10 +130,11 @@ def set_length( atoms: Atoms = None,
     """
     Set the length of the atoms along the axis.\n
     """
-    cell = atoms.get_cell()
+    atoms_copy = atoms.copy()
+    cell = atoms_copy.get_cell()
     cell[axis] = cell[axis]/magnitude(cell[axis])*length
-    atoms.set_cell(cell)
-    return atoms
+    atoms_copy.set_cell(cell)
+    return atoms_copy
 
 def magnitude(vector: list = None) -> float:
     """
