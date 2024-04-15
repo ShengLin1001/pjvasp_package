@@ -36,6 +36,8 @@ def find_hetero(bottom: Atoms = None,
                 plot_type: str = 'TkAgg' , 
                 move_list: list = [0.1, 0.1, 0.1],
                 center: bool = True,
+                pbc: list = [True, True, False], 
+                reorder=True
                 ) -> list:
     """
     Find a heterostucture using hetbuilder API
@@ -59,6 +61,8 @@ def find_hetero(bottom: Atoms = None,
         plot_type: Default is TkAgg or Qt5Agg, to interactive plot using jupyter notebook.
         move_list: Default is [0.1, 0.1, 0.1], avoid the value error of 0.0...
         center: if center, default is True.
+        pbc: [True, True, False]
+        reorder: True
 
     Returns:
         list : A list of :class:`~hetbuilder.algorithm.Interface`.
@@ -72,6 +76,7 @@ def find_hetero(bottom: Atoms = None,
                 no_idealize, symprec, angle_tolerance, verbosity)
     if results is not None:
         for result in results:
+            #result.stack = build_supercells(result.bottom, result.top, result.M, result.N, result.angle,  result._weight, distance, vacuum, pbc, reorder)
             result.stack = move_atoms(result.stack, move_list)
             if center:
                 result.stack.center()
@@ -173,6 +178,7 @@ def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float =
     Additionally, bottom, top, weight, distance, vacuum.\n
     usage: updating...
     Noted: the cell C = A + weight * [B - A], A - bottom, B - top
+    ############################# has error, not cartesian, should be scaled positions
     """
     # get the max, min z-position 
     bottom = bottom_sup.copy()
