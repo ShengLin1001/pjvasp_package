@@ -1,7 +1,7 @@
 from mymetal.build.extrfilm import cal_area, my_extr_thick
 from ase import Atoms
 import math
-from ase.build import make_supercell
+from ase.build import make_supercell, stack
 from ase.build.tools import sort
 from numpy import array, zeros, concatenate
 from ase.visualize import view
@@ -103,27 +103,6 @@ def my_plot_results(bottom: Atoms = None,
     iplot = InteractivePlot(bottom=bottom, top=top, results=results, weight=weight)
     iplot.plot_results()
 
-
-def my_find_hetero( up_layer: Atoms = None,
-                bot_layer: Atoms = None,
-                inter_dis: float = None,
-                fix_bot_lat: bool = True) -> Atoms:
-    """
-    Find the hetero interface between two layers.\n
-    We think the bot_layer is a bulk-like material.\n
-    so the lattice constant of it is fixed now.\n
-    """
-    up_layer.center(vacuum=0, axis=2)
-    bot_layer.center(vacuum=0, axis=2)
-    area_up = cal_area(up_layer)
-    area_bot = cal_area(bot_layer)
-    thick_up = my_extr_thick(up_layer)
-    thick_bot = my_extr_thick(bot_layer)
-    #view(up_layer)
-    print(up_layer)
-    print(bot_layer)
-    print(area_bot/area_up)
-
 def set_length( atoms: Atoms = None,
                 length: float = None,
                 axis: int = 2) -> Atoms:
@@ -155,7 +134,8 @@ def build_supercells(primitive_bottom: Atoms = None,
                          distance: float = 3.5,
                          vacuum: float = 15,
                          pbc: list = [True, True, False], 
-                         reorder=True ) -> Atoms:
+                         reorder=True,
+                          if_stack = True ) -> Atoms:
     """
     For construct supercell for two primitive cell known transition matrix and rotation angle of top layer around z-dir\n
     Input: must be primitive cell\n
@@ -179,9 +159,12 @@ def build_supercells(primitive_bottom: Atoms = None,
     top_sup.rotate(angle_z, 'z', rotate_cell=True)
     #print(top_sup)
     # translate from hetbuilder (atom_functions.cpp/.h) stack_atoms function
-    stack = stack_atoms(bottom_sup, top_sup, weight, distance, vacuum, pbc, reorder)
-    #print(1)
-    return stack
+    if if_stack:
+        stack = stack_atoms(bottom_sup, top_sup, weight, distance, vacuum, pbc, reorder)
+        #print(1)
+        return stack
+    else:
+        return bottom, top
 
 def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float = 0.5, distance: float = 3.5, vacuum: float = 15, 
                 pbc: list = [True, True, False], reorder: bool=True, shift_tolerance: float = 1e-5) -> Atoms:
