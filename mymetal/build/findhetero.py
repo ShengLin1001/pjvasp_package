@@ -239,6 +239,27 @@ def scale_cell_xy(atoms_origin: Atoms = None, new_cell: array = None):
     # 更新原子的位置
     atoms.set_positions(updated_cart_pos)
 
+def split_model(hetero: Atoms = None, bottom_type: list = None, top_type: list = None, adjust: bool=False, vacuum: float = 15.0, axis: int = 2) -> list:
+    bottom = Atoms()
+    bottom.set_cell(hetero.get_cell())
+    top = Atoms()
+    top.set_cell(hetero.get_cell())
+    if Atoms:
+        if bottom_type and top_type:
+            for atom in hetero:
+                if atom.symbol in bottom_type:
+                    bottom.append(atom)
+                if atom.symbol in top_type:
+                    top.append(atom)
+        else:
+            print("Warning: Atom type not specified in bottom_type or top_type.")
+    else:
+        print("Warning: hetero is None type")
+    if adjust:
+        top.center(vacuum, axis)
+        bottom.center(vacuum, axis)
+    return [bottom, top]
+
 
 # test1
 # find_hetero(gold_fcc_film, sio2_film_prim)
