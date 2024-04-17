@@ -177,8 +177,9 @@ def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float =
     After searching the coincidenced supecell, we get the transition matrix(M for bottom, N for top), and make two supercells, and then try to match them.\n
     Additionally, bottom, top, weight, distance, vacuum.\n
     usage: updating...
-    Noted: the cell C = A + weight * [B - A], A - bottom, B - top
-    ############################# has error, not cartesian, should be scaled positions
+    Noted: the cell C = A + weight * [B - A], A - bottom, B - top.\n
+    has error, not cartesian, should be scaled positions.\n
+    has been fixed!\n
     """
     # get the max, min z-position 
     bottom = bottom_sup.copy()
@@ -208,6 +209,10 @@ def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float =
             new_lattice[i, j] = bottom.cell[i, j] + weight * (top.cell[i, j] - bottom.cell[i, j])
     new_lattice[2,2] = bottom_thickness + distance + top_thickness + vacuum
 
+    # scale x-y position of new cell and fix z-direction
+    bottom = scale_cell_xy(atoms_origin = bottom, new_cell = new_lattice)
+    top = scale_cell_xy(atoms_origin = top, new_cell = new_lattice)
+
     # combine the position and symbols information
     all_positions = concatenate([bottom.positions, top.positions], axis=0)
     all_symbols = bottom.get_chemical_symbols() + top.get_chemical_symbols()
@@ -220,30 +225,24 @@ def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float =
     return stack
 
 
-def scale_cell_xy(atoms_origin: Atoms = None, new_cell: array = None):
+# take from https://github.com/hongyi-zhao/hetbuilder
+def scale_cell_xy(atoms_origin: Atoms = None, new_cell: array = None) -> Atoms:
     """
     After calculating C - supercell, try to scall xy of cell, but fixed z.\n
     It's important for fixing someone's lattice constant, otherwise, the z-dir constant'll changed!
     """
     atoms = atoms_origin.copy()
-    # 获取原始的笛卡尔坐标
     original_cart_pos = atoms.get_positions()
-    
-    # 获取按新晶胞缩放的分数坐标
     scaled_positions = atoms.get_scaled_positions()
 
-    # 更新晶胞，注意这里假设new_cell是一个numpy数组或类似的可直接赋值给atoms.cell的结构
     atoms.set_cell(new_cell)
-
-    # 将缩放的分数坐标转换回笛卡尔坐标，这里直接使用Atoms对象的.set_scaled_positions方法
     atoms.set_scaled_positions(scaled_positions)
 
-    # 保持z方向上的笛卡尔坐标不变
     updated_cart_pos = atoms.get_positions()
     updated_cart_pos[:, 2] = original_cart_pos[:, 2]
 
-    # 更新原子的位置
     atoms.set_positions(updated_cart_pos)
+    return atoms
 
 def split_model(hetero: Atoms = None, bottom_type: list = None, top_type: list = None, adjust: bool=False, vacuum: float = 15.0, axis: int = 2) -> list:
     bottom = Atoms()
