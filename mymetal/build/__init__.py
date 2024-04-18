@@ -5,7 +5,7 @@ from mymetal.build.findhetero import (find_hetero, my_plot_results, set_length, 
                                       stack_atoms, scale_cell_xy, split_model)
 from mymetal.build.extrfilm import (my_extr_lattice, my_extr_thick, my_extr_etot, cal_area)
 from mymetal.build.findcubic import (find_cubic)
-from mymetal.build.calhetero import (compare_atoms, cal_atom_num, relative_diff, cal_dismatch, filter_results, cal_stretch)
+from mymetal.build.calhetero import (compare_atoms, cal_atom_num, relative_diff, cal_mismatch, filter_results, cal_stretch)
 
 
 __all__ = ['my_find_prim', 'move_atoms', 'check_direction',
@@ -14,5 +14,5 @@ __all__ = ['my_find_prim', 'move_atoms', 'check_direction',
             'find_hetero', 'my_plot_results', 'set_length', 'magnitude', 'build_supercells', 'stack_atoms', 'scale_cell_xy', 'split_model',
             'my_extr_lattice', 'my_extr_thick', 'my_extr_etot', 'cal_area',
             'find_cubic',
-            'compare_atoms', 'cal_atom_num', 'relative_diff', 'cal_dismatch', 'filter_results', 'cal_stretch'
+            'compare_atoms', 'cal_atom_num', 'relative_diff', 'cal_mismatch', 'filter_results', 'cal_stretch'
 ]
