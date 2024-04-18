@@ -40,8 +40,10 @@ def find_hetero(bottom: Atoms = None,
                 reorder=True
                 ) -> list:
     """
-    Find a heterostucture using hetbuilder API
+    Find a heterostucture using hetbuilder API.\n
+    ----------
     Executes the coincidence lattice algorithm.
+    ----------
 
     Args:
         Nmax (int): Maximum number of translations. Defaults to 10.
@@ -95,7 +97,9 @@ def my_plot_results(bottom: Atoms = None,
         results: list = None,
         weight: float = 0.5,
         plot_type: str = 'Qt5Agg') -> None:
-    """ Interactive visualization of the results via matplotlib. 
+    """ 
+    Interactive visualization of the results via matplotlib. 
+    ----------
     
     Args:
         bottom (ase.atoms.Atoms): Lower layer as primitive.
@@ -132,9 +136,9 @@ def magnitude(vector: list = None) -> float:
 
 def build_supercells(primitive_bottom: Atoms = None, 
                          primitive_top: Atoms = None,
-                         M: array = None,
-                         N: array = None,
-                         angle_z: float = None, 
+                         M: array = [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                         N: array = [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                         angle_z: float = 0, 
                          weight: float = 0.5,
                          distance: float = 3.5,
                          vacuum: float = 15,
@@ -142,13 +146,16 @@ def build_supercells(primitive_bottom: Atoms = None,
                          reorder=True,
                           if_stack = True ) -> Atoms:
     """
-    For construct supercell for two primitive cell known transition matrix and rotation angle of top layer around z-dir\n
+    For construct supercell for two primitive cell known transition matrix and rotation angle of top layer around z-dir
+    ----------
+    
     Input: must be primitive cell\n
            M, N: bottom, top matrix\n
            angle_z: units: degree, +z direction\n
            distance, vacuum: units: Angstron\n
            weight: must be 0~1, fixing bottom~top\n
            pbc, reorder: the default value is good\n
+           **if_stack**: if false, return bottom, top after make supercell and rotate it.\n
     Output: 
            heterostructure
     """
@@ -169,7 +176,7 @@ def build_supercells(primitive_bottom: Atoms = None,
         #print(1)
         return stack
     else:
-        return bottom, top
+        return bottom_sup, top_sup
 
 def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float = 0.5, distance: float = 3.5, vacuum: float = 15, 
                 pbc: list = [True, True, False], reorder: bool=True, shift_tolerance: float = 1e-5) -> Atoms:
@@ -245,6 +252,13 @@ def scale_cell_xy(atoms_origin: Atoms = None, new_cell: array = None) -> Atoms:
     return atoms
 
 def split_model(hetero: Atoms = None, bottom_type: list = None, top_type: list = None, adjust: bool=False, vacuum: float = 15.0, axis: int = 2) -> list:
+    """
+    Split a heterostructure to substrate and film according to the atom type.
+    ----------
+    Usage: 
+    ----------
+        >> `bottom, top = split_model(hetero, ['Si','O','H'], ['Au'])`
+    """
     bottom = Atoms()
     bottom.set_cell(hetero.get_cell())
     top = Atoms()
