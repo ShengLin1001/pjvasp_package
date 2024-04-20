@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mymetal.universial package &mdash; mymetal 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=f2a433a1"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            mymetal
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">mymetal.universial package</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#module-mymetal.universial">Module contents</a><ul>
+<li><a class="reference internal" href="#mymetal.universial.char_to_dic"><code class="docutils literal notranslate"><span class="pre">char_to_dic()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.check_input"><code class="docutils literal notranslate"><span class="pre">check_input()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.check_position"><code class="docutils literal notranslate"><span class="pre">check_position()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.dic_to_char"><code class="docutils literal notranslate"><span class="pre">dic_to_char()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.extract_line_at_position"><code class="docutils literal notranslate"><span class="pre">extract_line_at_position()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.find_line_position"><code class="docutils literal notranslate"><span class="pre">find_line_position()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.fixatoms"><code class="docutils literal notranslate"><span class="pre">fixatoms()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.list_to_char"><code class="docutils literal notranslate"><span class="pre">list_to_char()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.move_atoms"><code class="docutils literal notranslate"><span class="pre">move_atoms()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_add_list"><code class="docutils literal notranslate"><span class="pre">my_add_list()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_down_up"><code class="docutils literal notranslate"><span class="pre">my_down_up()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_pattern_trans"><code class="docutils literal notranslate"><span class="pre">my_pattern_trans()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.mydel_pos_type"><code class="docutils literal notranslate"><span class="pre">mydel_pos_type()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.myjust"><code class="docutils literal notranslate"><span class="pre">myjust()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.normalize_float_int"><code class="docutils literal notranslate"><span class="pre">normalize_float_int()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_blank"><code class="docutils literal notranslate"><span class="pre">print_after_blank()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_cant_read"><code class="docutils literal notranslate"><span class="pre">print_after_cant_read()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_not_supported"><code class="docutils literal notranslate"><span class="pre">print_after_not_supported()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_read"><code class="docutils literal notranslate"><span class="pre">print_after_read()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.rm_blank"><code class="docutils literal notranslate"><span class="pre">rm_blank()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">mymetal</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">mymetal.universial package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/mymetal.universial.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mymetal-universial-package">
+<h1>mymetal.universial package<a class="headerlink" href="#mymetal-universial-package" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.atom.html">mymetal.universial.atom package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom.delatom">mymetal.universial.atom.delatom module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.delatom.check_position"><code class="docutils literal notranslate"><span class="pre">check_position()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.delatom.mydel_pos_type"><code class="docutils literal notranslate"><span class="pre">mydel_pos_type()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom.fixatom">mymetal.universial.atom.fixatom module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.fixatom.fixatoms"><code class="docutils literal notranslate"><span class="pre">fixatoms()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom.moveatom">mymetal.universial.atom.moveatom module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.moveatom.move_atoms"><code class="docutils literal notranslate"><span class="pre">move_atoms()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.check.html">mymetal.universial.check package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.check.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.check.html#module-mymetal.universial.check.checkinput">mymetal.universial.check.checkinput module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.check.html#mymetal.universial.check.checkinput.check_input"><code class="docutils literal notranslate"><span class="pre">check_input()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.check.html#module-mymetal.universial.check">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.data.html">mymetal.universial.data package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data.dataadjust">mymetal.universial.data.dataadjust module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.my_add_list"><code class="docutils literal notranslate"><span class="pre">my_add_list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.my_down_up"><code class="docutils literal notranslate"><span class="pre">my_down_up()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.myjust"><code class="docutils literal notranslate"><span class="pre">myjust()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.normalize_float_int"><code class="docutils literal notranslate"><span class="pre">normalize_float_int()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.rm_blank"><code class="docutils literal notranslate"><span class="pre">rm_blank()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data.datachange">mymetal.universial.data.datachange module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.datachange.char_to_dic"><code class="docutils literal notranslate"><span class="pre">char_to_dic()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.datachange.dic_to_char"><code class="docutils literal notranslate"><span class="pre">dic_to_char()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.datachange.list_to_char"><code class="docutils literal notranslate"><span class="pre">list_to_char()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data.patterntrans">mymetal.universial.data.patterntrans module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.patterntrans.my_pattern_trans"><code class="docutils literal notranslate"><span class="pre">my_pattern_trans()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.print.html">mymetal.universial.print package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.print.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.print.html#module-mymetal.universial.print.printafter">mymetal.universial.print.printafter module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_blank"><code class="docutils literal notranslate"><span class="pre">print_after_blank()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_cant_read"><code class="docutils literal notranslate"><span class="pre">print_after_cant_read()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_not_supported"><code class="docutils literal notranslate"><span class="pre">print_after_not_supported()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_read"><code class="docutils literal notranslate"><span class="pre">print_after_read()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.print.html#module-mymetal.universial.print">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.search.html">mymetal.universial.search package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.search.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.search.html#module-mymetal.universial.search.find">mymetal.universial.search.find module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.search.html#mymetal.universial.search.find.extract_line_at_position"><code class="docutils literal notranslate"><span class="pre">extract_line_at_position()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.search.html#mymetal.universial.search.find.find_line_position"><code class="docutils literal notranslate"><span class="pre">find_line_position()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.search.html#module-mymetal.universial.search">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="module-mymetal.universial">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-mymetal.universial" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.char_to_dic">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">char_to_dic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mycontent_char</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.char_to_dic" title="Link to this definition"></a></dt>
+<dd><p>“name:n1 gender:male” =&gt;&gt; {“name”:”n1”, “gender”:”male”}</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.check_input">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">check_input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.check_input" title="Link to this definition"></a></dt>
+<dd><p>check_input_blank function is not correct, I think it’s useless</p>
+<p>first line  - check_input_none</p>
+<p>second line - check_input_blank</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.check_position">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">check_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">position_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#mymetal.universial.check_position" title="Link to this definition"></a></dt>
+<dd><p>checking the atom is in ps [xo, xh, yo, yh, zo, zh]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.dic_to_char">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">dic_to_char</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mycontent_dic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'</span>&#160;&#160; <span class="pre">'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.dic_to_char" title="Link to this definition"></a></dt>
+<dd><p>f”name:n1 {tag} gender:male” &lt;&lt;= {“name”:”n1”, “gender”:”male”}</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.extract_line_at_position">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">extract_line_at_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_number_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_list_down_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[-10,</span> <span class="pre">5]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.extract_line_at_position" title="Link to this definition"></a></dt>
+<dd><p>input is a position list generated by find_line_position()</p>
+<p>using my_down_up to enlarge the list controled by move_list_down_up (sorted)</p>
+<p>extract the line in position of list</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.find_line_position">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">find_line_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_string</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.find_line_position" title="Link to this definition"></a></dt>
+<dd><p>find the serch_string in file</p>
+<p>return a list of position of search_string</p>
+<p>noted, from 1, not 0. it’s controled by start=1 or start=0</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.fixatoms">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">fixatoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.fixatoms" title="Link to this definition"></a></dt>
+<dd><p>Constrain chosen atoms.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>list</em><em> of </em><em>int</em>) – Indices for those atoms that should be constrained.</p></li>
+<li><p><strong>mask</strong> (<em>list</em><em> of </em><em>bool</em>) – One boolean per atom indicating if the atom should be
+constrained or not.</p></li>
+<li><p><strong>list.</strong> (<em>To fix some atoms for mask</em>) – </p></li>
+<li><p><strong>----------</strong> – </p></li>
+<li><p><strong>like</strong> (<em>mask=</em><em>[</em><em>atom.symbol == 'Cu' for atom in atoms</em><em>]  </em><em>===&gt;&gt;&gt;   mask =</em><em> [</em><em>True</em><em>, </em><em>...</em><em>, </em><em>False</em><em>, </em><em>...</em><em>]</em><em>.</em>) – indices=[atom.index for atom in atomcopy if atom.symbol == ‘Cu’]  ===&gt;&gt;&gt;  [3, 6, 10, …].
+mask = [ atom.position[2] -  min(hetero.get_positions()[:,2]) &lt; 5 for atom in hetero].</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.list_to_char">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">list_to_char</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mycontent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'char'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">char_tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'</span>&#160;&#160; <span class="pre">'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dic_tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'\n'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_value_interval</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">':</span> <span class="pre">'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_interval</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">',</span> <span class="pre">'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.list_to_char" title="Link to this definition"></a></dt>
+<dd><p>consisted of two function</p>
+<p>list_of_char_to_char to output the list of char to file</p>
+<p>list_of_dic_to_char to output the list of dic to file</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.move_atoms">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">move_atoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">translate_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[0.1,</span> <span class="pre">0.1,</span> <span class="pre">0.0]</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.move_atoms" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_add_list">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_add_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.my_add_list" title="Link to this definition"></a></dt>
+<dd><p>”
+combine two list, and sort it</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_down_up">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_down_up</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_list_down_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.my_down_up" title="Link to this definition"></a></dt>
+<dd><p>enlarge list</p>
+<p>like      [1,4], move_list = [-2,3]</p>
+<blockquote>
+<div><p>=&gt;&gt;  [-1,0,1,2,3,4,5,6,7]  (-1, 7)</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_pattern_trans">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_pattern_trans</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">match_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">char</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.my_pattern_trans" title="Link to this definition"></a></dt>
+<dd><p>generate the regular expression</p>
+<p>char to regular expression</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.mydel_pos_type">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">mydel_pos_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.mydel_pos_type" title="Link to this definition"></a></dt>
+<dd><p>using to delete some atoms in specified region or/and type</p>
+<p>ps: [xl, xh, yl, yh, zl, zh]</p>
+<p>ts: [‘H’, ‘O’, … ]</p>
+<p>temp = mydel_pos_type(temp, [float(‘-inf’), float(‘inf’), float(‘-inf’), float(‘inf’), float(‘-inf’), 0.9])</p>
+<p>temp = mydel_pos_type(temp, [float(‘-inf’), float(‘inf’), float(‘-inf’), float(‘inf’), 10.18, float(‘inf’)])</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.myjust">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">myjust</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.myjust" title="Link to this definition"></a></dt>
+<dd><p>left just or right just of output</p>
+<p>num is digit of variable</p>
+<p>like ‘dig’ =&gt;&gt; ‘dig       ‘  =&gt;&gt; ‘       dig’</p>
+<p>return char_out</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.normalize_float_int">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">normalize_float_int</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.normalize_float_int" title="Link to this definition"></a></dt>
+<dd><p>Helper function to normalize values</p>
+<p>Convert to float and remove trailing zeros, if it’s a float</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_blank">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_blank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">char_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calling_function</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specified_blank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_blank" title="Link to this definition"></a></dt>
+<dd><p>combined two lines</p>
+<blockquote>
+<div><p>print(f”the value is None! - {calling_function}”)</p>
+<p>char_out = ‘’</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_cant_read">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_cant_read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">char_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calling_function</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specified_blank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_cant_read" title="Link to this definition"></a></dt>
+<dd><p>combined two lines</p>
+<blockquote>
+<div><p>print(f”the value is None! - {calling_function}”)</p>
+<p>char_out = ‘’</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_not_supported">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_not_supported</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">char_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calling_function</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specified_blank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_not_supported" title="Link to this definition"></a></dt>
+<dd><p>combined two lines</p>
+<blockquote>
+<div><p>print(f”the value is None! - {calling_function}”)</p>
+<p>char_out = ‘’</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_read">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count_read</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stretch_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_read" title="Link to this definition"></a></dt>
+<dd><p>note if read all {special_name} - OUTCAR</p>
+<p>{name} is class name {self.name}</p>
+<p>nead a count_read variable</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.rm_blank">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">rm_blank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">extr_content</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_string</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'</span> <span class="pre">'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">removed_string</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.rm_blank" title="Link to this definition"></a></dt>
+<dd><p>for 1-D list, remove blank</p>
+<p>like [“reached required accuracy”,”reached required accuracy”]  to</p>
+<blockquote>
+<div><p>[ “reachedrequiredaccuracy” , “reachedrequiredaccuracy” ]</p>
+</div></blockquote>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, louis.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

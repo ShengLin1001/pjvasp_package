@@ -1,0 +1,21 @@
+mymetal.calculate.calqm.py package
+==================================
+
+Submodules
+----------
+
+mymetal.calculate.calqm.py.kpoints module
+-----------------------------------------
+
+.. automodule:: mymetal.calculate.calqm.py.kpoints
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Module contents
+---------------
+
+.. automodule:: mymetal.calculate.calqm.py
+   :members:
+   :undoc-members:
+   :show-inheritance:

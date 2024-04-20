@@ -22,4 +22,8 @@ recommonmark
 PyQt5
 PySide2
 ase == 3.22.1
-
+sphinx
+sphinx-autobuild
+sphinx_rtd_theme
+recommonmark
+sphinx_markdown_tables
