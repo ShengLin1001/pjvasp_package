@@ -7,6 +7,7 @@ from mymetal.universial.data.patterntrans import my_pattern_trans
 from mymetal.universial.print.printafter import print_after_blank, print_after_cant_read, print_after_read, print_after_not_supported
 from mymetal.universial.atom.delatom import mydel_pos_type, check_position
 from mymetal.universial.atom.fixatom import fixatoms
+from mymetal.universial.matrix.adjust import adjust_matrix
 
 __all__ = ['check_input',
            'rm_blank', 'my_add_list', 'my_down_up', 'myjust', 'normalize_float_int',
@@ -16,5 +17,6 @@ __all__ = ['check_input',
                     'my_pattern_trans',
                     'print_after_blank', 'print_after_cant_read', 'print_after_read', 'print_after_not_supported',
                     'mydel_pos_type', 'check_position',
-                    'fixatoms'             
+                    'fixatoms',
+                    'adjust_matrix'             
 ]

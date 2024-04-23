@@ -7,12 +7,14 @@ Welcome to mymetal's documentation!
 ===================================
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: Modules:
 
-   modules
-
-
+   mymetal/build/build
+   mymetal/calculate/calculate
+   mymetal/io/io
+   mymetal/post/post
+   mymetal/universial/universial
 
 Indices and tables
 ==================
