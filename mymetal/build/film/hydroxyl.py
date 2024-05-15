@@ -11,6 +11,7 @@ def add_hydro_atoms(atoms:  Atoms = None,
     Add hydrogen atoms to the surface of the atoms object.
     """
     atoms = atoms.copy()
+    #collect = atoms.copy()
     for atom in atoms:
         if atom.position[surf_direction] > surf_range[0] and atom.position[surf_direction] < surf_range[1] and atom.symbol == added_symbol:
             #print(atom.index, atom.symbol, atom.position)
