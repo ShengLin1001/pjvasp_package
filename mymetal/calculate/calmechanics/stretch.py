@@ -32,7 +32,7 @@ def cal_relative_stretch(bottom: Atoms = None, top: Atoms = None, result: Interf
     if not (all(value != None for value in [bottom, top, result]) or all(value != None for value in [bot, to, stack])):
         raise ValueError('The input [bottom, top, result] or [bot, to, stack] must not be None simultaneously.')
     stretch = cal_stretch(bottom, top, result,bot = bot, to = to, stack = stack, tag_z = tag_z, tag_value=tag_value, tag_type = tag_type)
-    relative_stretch_factor = stretch[0] - 1
+    relative_stretch_factor = [stretch[0][0] - 1, stretch[0][1] - 1]
     relative_stretch_direction = stretch[1]
     return [relative_stretch_factor, relative_stretch_direction]
 
@@ -71,9 +71,10 @@ def cal_stretch(bottom: Atoms = None, top: Atoms = None, result: Interface = Non
         num = 2
     else:
         raise ValueError('Unsupported type.')
-    stretch_all = cal_strain_matrix_root(bottom, top, result,bot = bot, to = to, stack = stack, tag_z = tag_z, tag_value=tag_value)[2+num]
-    stretch_factor = np.sqrt(stretch_all[0])
-    stretch_direction = stretch_all[1]
+    temp = cal_strain_matrix_root(bottom, top, result,bot = bot, to = to, stack = stack, tag_z = tag_z, tag_value=tag_value)
+    stretch_all = [strain[2+num] for strain in temp]
+    stretch_factor = [np.sqrt(stretch[0]) for stretch in stretch_all]
+    stretch_direction = [stretch[1] for stretch in stretch_all]
     return [stretch_factor, stretch_direction]
 
 

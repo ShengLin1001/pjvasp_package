@@ -49,11 +49,13 @@ def cal_principal_and_shear_strain_root(bottom: Atoms = None, top: Atoms = None,
         num = 2
     else:
         raise ValueError(f'Unsupported tag_type {tag_type}.')
-    principal_shear_strain = cal_strain_matrix_root(bottom, top, result, bot = bot, to = to, stack = stack, tag_z = tag_z, tag_value = tag_value)[3+num][2]
-    principal_strain_matrix = principal_shear_strain[0]
-    shear_strain_matrix = principal_shear_strain[1]
-    priciple_strain = principal_shear_strain[2]
-    priciple_direction = principal_shear_strain[3]
+    temp = cal_strain_matrix_root(bottom, top, result, bot = bot, to = to, stack = stack, tag_z = tag_z, 
+                                                    tag_value = tag_value)
+    principal_shear_strain = [strain[3+num][2] for strain in temp]
+    principal_strain_matrix = [strain[0] for strain in principal_shear_strain]
+    shear_strain_matrix = [strain[1] for strain in principal_shear_strain]
+    priciple_strain = [strain[2] for strain in principal_shear_strain]
+    priciple_direction = [strain[3] for strain in principal_shear_strain]
     return [priciple_strain, priciple_direction, shear_strain_matrix]
 
 def cal_strain_matrix_root(bottom: Atoms = None, top: Atoms = None, result: Interface = None, 
@@ -75,6 +77,7 @@ def cal_strain_matrix_root(bottom: Atoms = None, top: Atoms = None, result: Inte
         tag_value (float, optional): The value to set for the z-components if tag_z is True. Defaults to 50.
 
     Returns:
+        Two lists [top, bottom]
         list: A list containing the deformation matrix, strain matrix, eigenvalues and eigenvectors for left and right multiplication, 
         and principal and shear strains for both left and right matrices:
         - defor: The deformation matrix calculated as the dot product of the top cell and inverse of the stack cell.
@@ -112,14 +115,16 @@ def cal_strain_matrix_root(bottom: Atoms = None, top: Atoms = None, result: Inte
         top_cell[2,2] = tag_value
         bottom_cell[2,2] = tag_value
         stack_cell[2,2] = tag_value
-    defor = cal_deform_matrix(top_cell, stack_cell)
-    eigenvalues_left, eigenvectors_left = np.linalg.eig(np.dot(defor.T,defor))
-    eigenvalues_right, eigenvectors_right = np.linalg.eig(np.dot(defor,defor.T))
-    strain_matrix = cal_strain_matrix(defor)
-    strain_list_left = cal_principal_and_shear_strain(strain_matrix[0])
-    strain_list_right = cal_principal_and_shear_strain(strain_matrix[1])
-    return [defor, strain_matrix, [eigenvalues_left, eigenvectors_left],strain_list_left, [eigenvalues_right, eigenvectors_right], strain_list_right]
-
+    defor_all = [cal_deform_matrix(top_cell, stack_cell), cal_deform_matrix(bottom_cell, stack_cell)]
+    content = []
+    for defor in defor_all:
+        eigenvalues_left, eigenvectors_left = np.linalg.eig(np.dot(defor.T,defor))
+        eigenvalues_right, eigenvectors_right = np.linalg.eig(np.dot(defor,defor.T))
+        strain_matrix = cal_strain_matrix(defor)
+        strain_list_left = cal_principal_and_shear_strain(strain_matrix[0])
+        strain_list_right = cal_principal_and_shear_strain(strain_matrix[1])
+        content.append([defor, strain_matrix, [eigenvalues_left, eigenvectors_left],strain_list_left, [eigenvalues_right, eigenvectors_right], strain_list_right])
+    return content
 
 def cal_strain_matrix(deformation_matrix: np.array = None) -> list:
     """To calculate the lagrangian and euler strain matrix.

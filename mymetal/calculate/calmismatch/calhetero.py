@@ -225,10 +225,14 @@ def filter_results(bottom: Atoms = None, top: Atoms = None, results: list = None
                 num = 2
             else:
                 raise ValueError(f'Unsupported tag_type {tag_type}.')
-            defor = cal_deform_matrix(top_cell, stack_cell)
-            relative_stretch = np.sqrt(cal_strain_matrix_root(bot = bot, to =to,stack =stack, tag_z =tag_z, tag_value = tag_value)[2+num][0]) - 1
-            #strain_matrix = cal_strain_matrix(defor) bot = bot, to = to, stack = stack,
-            principal_strain = cal_strain_matrix_root(bot = bot, to = to, stack = stack, tag_z = tag_z, tag_value = tag_value)[3+num][2]
+            #defor = cal_deform_matrix(top_cell, stack_cell)
+            temp = cal_strain_matrix_root(bot = bot, to =to,stack =stack, tag_z =tag_z, tag_value = tag_value)
+            relative_stretch_all = [np.sqrt(strain[2+num][0])-1 for strain in temp]
+            relative_stretch = [item for sublist in relative_stretch_all for item in sublist]
+            #relative_stretch = np.sqrt(cal_strain_matrix_root(bot = bot, to =to,stack =stack, tag_z =tag_z, tag_value = tag_value)[2+num][0]) - 1
+            principal_strain_list = [strain[3+num][2] for strain in temp]
+            principal_strain = [item for sublist in principal_strain_list for item in sublist]
+            #principal_strain = cal_strain_matrix_root(bot = bot, to = to, stack = stack, tag_z = tag_z, tag_value = tag_value)[3+num][2]
             #strain_list = cal_principal_and_shear_strain(strain_matrix[num])
 
             # For eigenvalue, normal strain
