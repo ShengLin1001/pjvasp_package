@@ -3,7 +3,7 @@ scipy
 sympy
 statsmodels
 spglib
-ovito
+ovito == 3.10.6
 pymatgen
 colorama
 matplotlib
