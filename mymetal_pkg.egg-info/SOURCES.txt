@@ -38,6 +38,11 @@ mymetal/universial/data/__init__.py
 mymetal/universial/data/dataadjust.py
 mymetal/universial/data/datachange.py
 mymetal/universial/data/patterntrans.py
+<<<<<<< HEAD
+=======
+mymetal/universial/index/__init__.py
+mymetal/universial/index/indextrans.py
+>>>>>>> fc99fe5a735f6614b7159979a5342f35d4bb573d
 mymetal/universial/matrix/__init__.py
 mymetal/universial/matrix/adjust.py
 mymetal/universial/search/__init__.py

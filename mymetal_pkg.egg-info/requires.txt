@@ -1,15 +1,18 @@
-PyQt5
-PySide2
-ase==3.22.1
+numpy
+scipy
+sympy
+statsmodels
+spglib
+ovito==3.10.6
+pymatgen
 colorama
 iprPy
 matplotlib
 networkx
-numpy
-ovito
 pretty-errors
 pybind11
 pybind11-global
+<<<<<<< HEAD
 pymatgen
 recommonmark
 recommonmark
@@ -26,5 +29,22 @@ sphinx_rtd_theme
 sphinxcontrib-napoleon
 statsmodels
 sympy
+=======
+rich
+scikit-build
+>>>>>>> fc99fe5a735f6614b7159979a5342f35d4bb573d
 typer
 typing_extensions
+sphinxcontrib-napoleon
+sphinx_rtd_theme
+sphinx-markdown-tables
+recommonmark
+PyQt5
+PySide2
+ase==3.22.1
+sphinx
+sphinx-autobuild
+sphinx_rtd_theme
+recommonmark
+sphinx_markdown_tables
+iprPy
