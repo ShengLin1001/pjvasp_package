@@ -2,6 +2,7 @@ PyQt5
 PySide2
 ase==3.22.1
 colorama
+iprPy
 matplotlib
 networkx
 numpy
@@ -11,11 +12,16 @@ pybind11
 pybind11-global
 pymatgen
 recommonmark
+recommonmark
 rich
 scikit-build
 scipy
 spglib
+sphinx
+sphinx-autobuild
 sphinx-markdown-tables
+sphinx_markdown_tables
+sphinx_rtd_theme
 sphinx_rtd_theme
 sphinxcontrib-napoleon
 statsmodels
