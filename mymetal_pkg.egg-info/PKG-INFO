@@ -36,3 +36,6 @@ Requires-Dist: sphinx_rtd_theme
 Requires-Dist: recommonmark
 Requires-Dist: sphinx_markdown_tables
 Requires-Dist: iprPy
+Requires-Dist: torch
+Requires-Dist: torchvision
+Requires-Dist: scikit-learn

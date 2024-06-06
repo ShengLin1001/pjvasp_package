@@ -6,33 +6,13 @@ spglib
 ovito==3.10.6
 pymatgen
 colorama
-iprPy
 matplotlib
 networkx
 pretty-errors
 pybind11
 pybind11-global
-<<<<<<< HEAD
-pymatgen
-recommonmark
-recommonmark
 rich
 scikit-build
-scipy
-spglib
-sphinx
-sphinx-autobuild
-sphinx-markdown-tables
-sphinx_markdown_tables
-sphinx_rtd_theme
-sphinx_rtd_theme
-sphinxcontrib-napoleon
-statsmodels
-sympy
-=======
-rich
-scikit-build
->>>>>>> fc99fe5a735f6614b7159979a5342f35d4bb573d
 typer
 typing_extensions
 sphinxcontrib-napoleon
@@ -48,3 +28,6 @@ sphinx_rtd_theme
 recommonmark
 sphinx_markdown_tables
 iprPy
+torch
+torchvision
+scikit-learn

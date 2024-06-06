@@ -30,3 +30,7 @@ recommonmark
 sphinx_markdown_tables
 
 iprPy
+
+torch
+torchvision
+scikit-learn
