@@ -3,6 +3,7 @@ import torch
 from torch.utils.data import Dataset
 from PIL import Image
 import torchvision
+from torchvision.datasets import ImageFolder
 
 class CustomDataset(Dataset):
     def __init__(self, img_paths: list=None, labels: list=None, transform: torchvision.transforms.transforms.Compose=None,
@@ -106,3 +107,63 @@ def get_all_data(data_dir: str=None, categories: list=None, file_end: tuple=('.p
                 all_data.append(img_path)
                 all_labels.append(category)
     return all_data, all_labels
+
+
+def get_mean_std(train_data: ImageFolder = None, colors: str = 'RGB') -> tuple:
+    '''
+    Compute mean and standard deviation for training data.
+
+    Parameters:
+    -----------
+    train_data : torchvision.datasets.ImageFolder
+        Custom Dataset or ImageFolder containing the training data.
+    colors : str, optional
+        Color mode of the images ('RGB' or 'gray'). Default is 'RGB'.
+
+    Returns:
+    --------
+    tuple
+        A tuple containing the mean and standard deviation of the training data.
+        (mean, std), where mean and std are lists of floats.
+
+    Example:
+    --------
+    >>> data_dir = './data_prepared/train'
+    >>> train_dataset = ImageFolder(data_dir, transform=mytransform)
+    >>> mean, std = get_mean_std(train_dataset, colors='gray')
+    >>> print(mean, std)
+    '''
+    
+    # Input checks
+    if train_data is None:
+        raise ValueError("train_data cannot be None. Please provide a valid ImageFolder dataset.")
+    
+    if not isinstance(train_data, ImageFolder):
+        raise TypeError("train_data must be an instance of torchvision.datasets.ImageFolder.")
+    
+    if colors not in ['RGB', 'rgb', 'g', 'gray', 'G', 'Gray']:
+        raise ValueError("Invalid value for colors. Choose from 'RGB', 'rgb', 'g', 'gray', 'G', 'Gray'.")
+
+    print('Compute mean and variance for training data.')
+    print(len(train_data))
+    
+    if colors in ['RGB', 'rgb']:
+        temp = 3
+    elif colors in ['g', 'gray', 'G', 'Gray']:
+        temp = 1
+    
+    train_loader = torch.utils.data.DataLoader(
+        train_data, batch_size=1, shuffle=False, num_workers=0, pin_memory=True)
+    
+    mean = torch.zeros(temp)
+    std = torch.zeros(temp)
+    
+    for X, _ in train_loader:
+        for d in range(temp):
+            mean[d] += X[:, d, :, :].mean()
+            std[d] += X[:, d, :, :].std()
+    
+    mean.div_(len(train_data))
+    std.div_(len(train_data))
+    
+    return (list(mean.numpy()), list(std.numpy()))
