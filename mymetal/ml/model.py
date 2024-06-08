@@ -69,6 +69,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25, dataloade
                     torch.save(model.state_dict(), best_model_params_path)
 
             print()
+            torch.cuda.empty_cache()
 
         time_elapsed = time.time() - since
         print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
