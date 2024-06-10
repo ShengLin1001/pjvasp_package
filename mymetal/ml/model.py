@@ -126,3 +126,4 @@ def visualize_model_predictions(model,img_path, data_transforms: dict=None,
         my_imshow(img.cpu().data[0])
 
         model.train(mode=was_training)
+
