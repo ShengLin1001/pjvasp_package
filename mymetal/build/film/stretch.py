@@ -51,6 +51,7 @@ def generate_film(   symbols: str = None,                 # str
 
     # print('rep_z: %s' %num_rep_z)
     my_slab = surface(my_bulk, slice_plane , num_rep_z, vacuum = my_vacuum, tol=my_tol, periodic=my_periodic)
+    print(my_slab)
     my_slab = my_find_prim(my_slab)
 
     my_slab = move_atoms(my_slab, move_atom)
