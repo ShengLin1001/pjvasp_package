@@ -9,7 +9,10 @@ mymetal/build/film/findhetero.py
 mymetal/build/film/findprim.py
 mymetal/build/film/hydroxyl.py
 mymetal/build/film/stretch.py
+mymetal/build/film/surface.py
 mymetal/calculate/__init__.py
+mymetal/calculate/calmath/__init__.py
+mymetal/calculate/calmath/matrix.py
 mymetal/calculate/calmechanics/__init__.py
 mymetal/calculate/calmechanics/deformation.py
 mymetal/calculate/calmechanics/strain.py
@@ -25,7 +28,10 @@ mymetal/io/post/__init__.py
 mymetal/io/post/construct.py
 mymetal/io/post/write.py
 mymetal/ml/__init__.py
+mymetal/ml/confusionmatrix.py
 mymetal/ml/dataset.py
+mymetal/ml/model.py
+mymetal/ml/plot.py
 mymetal/post/__init__.py
 mymetal/post/newmain.py
 mymetal/post/oldmain.py

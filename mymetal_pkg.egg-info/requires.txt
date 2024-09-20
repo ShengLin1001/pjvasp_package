@@ -5,6 +5,8 @@ statsmodels
 spglib
 ovito==3.10.6
 pymatgen
+crystal_toolkit
+mp-api
 colorama
 matplotlib
 networkx
