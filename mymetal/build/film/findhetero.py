@@ -185,12 +185,14 @@ def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float =
     Additionally, bottom, top, weight, distance, vacuum.\n
     usage: updating...
     Noted: the cell C = A + weight * [B - A], A - bottom, B - top.\n
-    has error, not cartesian, should be scaled positions.\n
-    has been fixed!\n
+    has error, not cartesian, should be scaled positions. has been fixed!\n
+    For filter some particular atoms, such as have the constraint, we do a simple copy manually.
     """
     # get the max, min z-position 
     bottom = bottom_sup.copy()
     top = top_sup.copy()
+    bottom = Atoms(bottom.get_chemical_symbols(),bottom.get_positions(), cell = bottom.get_cell(), pbc = bottom.get_pbc())
+    top = Atoms(top.get_chemical_symbols(), top.get_positions(), cell = top.get_cell(), pbc = top.get_pbc())
     min_z1, max_z1 = bottom.positions[:,2].min(), bottom.positions[:,2].max()
     min_z2, max_z2 = top.positions[:,2].min(), top.positions[:,2].max()
     bottom_thickness = max_z1 - min_z1
@@ -236,7 +238,8 @@ def stack_atoms(bottom_sup: Atoms = None, top_sup: Atoms = None, weight: float =
 def scale_cell_xy(atoms_origin: Atoms = None, new_cell: array = None) -> Atoms:
     """
     After calculating C - supercell, try to scall xy of cell, but fixed z.\n
-    It's important for fixing someone's lattice constant, otherwise, the z-dir constant'll changed!
+    It's important for fixing someone's lattice constant, otherwise, the z-dir constant'll changed!\n
+    Only work when the new_cell is similiar with the original cell, because the cartesian position maybe cross the boundary.\n
     """
     atoms = atoms_origin.copy()
     original_cart_pos = atoms.get_positions()
