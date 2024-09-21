@@ -5,6 +5,7 @@ from ase.build import bulk, surface
 import spglib
 from mymetal.build.film.findprim import my_find_prim
 import os
+from mymetal.universial.atom.moveatom import move_atoms
 
 def generate_film(   symbols: str = None,                 # str
                 structure: str = None,              # str
@@ -227,58 +228,6 @@ def print_after_what(char_name = '', variable = None,calling_function = '', spec
     # print(f"the value is None! - {calling_function}")
     print(f"the {character} {char_name} {variable} {character} is {after_what}! - {calling_function}")
     return specified_blank
-
-# move atoms
-def move_atoms(atoms: Atoms = None,
-               translate_matrix: ndarray = array([0.1, 0.1, 0.0]),
-               if_scale_position: bool = True) -> Atoms :
-    """
-    Translates the atomic positions in the provided structure by a given translation matrix. 
-    The translation can be applied either in scaled (fractional) coordinates or in Cartesian coordinates.
-
-    Args:
-        atoms (Atoms): The atomic structure to be translated, represented as an ASE Atoms object.
-        translate_matrix (ndarray): The translation vector to apply to each atom, either in fractional or Cartesian coordinates, depending on `if_scale_position`. 
-            The default is [0.1, 0.1, 0.0].
-        if_scale_position (bool): Whether to apply the translation in scaled (fractional) coordinates. If `True`, the translation is applied to the scaled 
-            positions (default). If `False`, the translation is applied to the Cartesian positions.
-
-    Returns:
-        Atoms: The translated atomic structure.
-
-    Raises:
-        ValueError: If the `atoms` argument is not provided or is not an instance of ASE Atoms.
-        ValueError: If `translate_matrix` is not a 1D array of length 3.
-        ValueError: If `if_scale_position` is not a boolean.
-
-    Example:
-        >>> from ase.build import molecule
-        >>> atoms = molecule('H2O')
-        >>> translated_atoms = move_atoms(atoms, translate_matrix=np.array([0.5, 0.5, 0.0]), if_scale_position=False)
-        >>> print(translated_atoms.get_positions())
-    """
-    translate_matrix = array(translate_matrix)
-    # Input validation
-    if atoms is None or not isinstance(atoms, Atoms):
-        raise ValueError("`atoms` must be an instance of ASE Atoms.")
-    
-    if not isinstance(translate_matrix, ndarray) or translate_matrix.shape != (3,):
-        raise ValueError("`translate_matrix` must be a 1D numpy array of length 3.")
-    
-    if not isinstance(if_scale_position, bool):
-        raise ValueError("`if_scale_position` must be a boolean value.")
-    
-    atoms_copy = atoms.copy()
-    if if_scale_position:
-        scaled = atoms_copy.get_scaled_positions()
-        scaled += translate_matrix
-        atoms_copy.set_scaled_positions(scaled)
-    else:
-        positions = atoms_copy.get_positions()
-        positions += translate_matrix
-        atoms_copy.set_positions(positions)
-    atoms_copy.wrap()
-    return atoms_copy
 
 # useless
 def file_name(dir_path: str = None, base_name: str = None, special_name: str = None, format_type: str = None) -> str:
