@@ -5,8 +5,8 @@ from inspect import getargvalues, currentframe, stack
 from mymetal.universial.check.checkinput import check_input
 
 def mydel_pos_type(atoms: Atoms = None,
-          position_strict: ndarray = None,
-          type_strict: array = None) -> Atoms:
+          position_strict: list = None,
+          type_strict: list = None) -> Atoms:
     """
     using to delete some atoms in specified region or/and type\n
     ps: [xl, xh, yl, yh, zl, zh]\n
