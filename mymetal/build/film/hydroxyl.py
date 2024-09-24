@@ -325,7 +325,10 @@ def passivate_surface_custom(bulk: Atoms = None,
                              bulk_pbc: list = [True, True, True],
                              vacuum: float = 7.5,
                              axis: int = 2,
-                             if_print: bool = True) -> Atoms:
+                             if_vacuum: bool = True,
+                             if_sort: bool = True,
+                             if_print: bool = True,
+                             top_or_bottom: list = ['top', 'bottom']) -> Atoms:
     """
     Adds adsorbates (e.g., hydrogen) to passivate dangling bonds on the surface of a slab.
     
@@ -343,8 +346,10 @@ def passivate_surface_custom(bulk: Atoms = None,
             should be applied along each axis for the bulk (e.g., [True, True, True]).
         vacuum (float): The amount of vacuum to add to the slab in the specified axis direction.
         axis (int): The axis (0, 1, or 2) along which vacuum should be added (default is 2, for the z-axis).
+        if_vacuum (bool): Control if add vacuum to the slab.
+        if_sort (bool): Control if sort the atoms in the slab.
         if_print (bool): Control if print the amount of the dangling bonds.
-        enlarge_size: 
+        top_or_bottom (list): The surface to be passivated, can be 'top', 'bottom', or both.
 
     Returns:
         Atoms: The passivated slab structure with adsorbates added.
@@ -389,12 +394,18 @@ def passivate_surface_custom(bulk: Atoms = None,
     surface_atoms_top = [atom.index for atom in slab if atom.position[2] > z_max - 2.0]
     surface_atoms_bottom = [atom.index for atom in slab if atom.position[2] < z_min + 2.0]
 
+    surface_atoms = []
+    if 'top' in top_or_bottom:
+        surface_atoms = surface_atoms + surface_atoms_top
+    if 'bottom' in top_or_bottom:
+        surface_atoms = surface_atoms + surface_atoms_bottom
     #print(slab.get_pbc())
     #print(bulk.get_pbc())
+    print(surface_atoms)
     # 2. 查找存在悬挂键的原子
     #print(surface_atoms_top + surface_atoms_bottom)
     adsorbate_info = []  # 用来存储要添加的吸附物信息
-    for idx in surface_atoms_top + surface_atoms_bottom:
+    for idx in surface_atoms:
         atom_symbol = slab[idx].symbol
         if atom_symbol not in adsorbates:
             continue
@@ -444,10 +455,8 @@ def passivate_surface_custom(bulk: Atoms = None,
         for symbol in counts:
             print(f'Totally, dangling bonds of {symbol}: {counts[symbol]}')
     slab_with_passivation.wrap()
-    slab_with_passivation.center(vacuum = vacuum, axis = axis)
-    slab_with_passivation = slab_with_passivation[slab_with_passivation.numbers.argsort()]
+    if if_vacuum:
+        slab_with_passivation.center(vacuum = vacuum, axis = axis)
+    if if_sort:
+        slab_with_passivation = slab_with_passivation[slab_with_passivation.numbers.argsort()]
     return slab_with_passivation
-
-
-
-
