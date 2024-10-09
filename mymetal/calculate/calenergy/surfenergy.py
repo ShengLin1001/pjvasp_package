@@ -5,7 +5,8 @@ def cal_surface_energy(bulk_energy: float = None,
                        relaxed_surface_energy: float = None,
                        surface_atoms_number: int = None,
                        area: float = None,
-                       energy_unit: str = 'eV') -> float:
+                       energy_unit: str = 'eV',
+                       factor: int = 2) -> float:
     """
     Calculate surface energy based on bulk and relaxed surface energy data.
     
@@ -47,7 +48,7 @@ def cal_surface_energy(bulk_energy: float = None,
     bulk_energy_per_atom = bulk_energy / bulk_atoms_number  # eV/atom 或 J/atom
     
     # 计算表面能
-    surface_energy = (relaxed_surface_energy - bulk_energy_per_atom * surface_atoms_number) / (2 * area)
+    surface_energy = (relaxed_surface_energy - bulk_energy_per_atom * surface_atoms_number) / (factor * area)
     
     # 根据单位进行转换
     surface_energy_converted = surface_energy * conversion_factor

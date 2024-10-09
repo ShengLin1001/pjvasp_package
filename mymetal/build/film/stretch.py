@@ -84,7 +84,7 @@ def generate_film(   symbols: str = None,                 # str
 
     # print('rep_z: %s' %num_rep_z)
     my_slab = surface(my_bulk, slice_plane , num_rep_z, vacuum = my_vacuum, tol=my_tol, periodic=my_periodic)
-    print(my_slab)
+    # print(my_slab)
     my_slab = my_find_prim(my_slab)
 
     my_slab = move_atoms(my_slab, move_atom)
@@ -93,8 +93,8 @@ def generate_film(   symbols: str = None,                 # str
 
 # stretch unit cell
 def stretch_list_along_direction_to_cell(atoms: Atoms = None , stretch_factor_list: list = [0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003],
-                                         stretch_direction_list: list = ['x', 'y', 'z', 'xy', 'xz', 'yz', 'xyz'],
-                                        stretch_3_direction_lists: list = None, my_scale_atoms: bool = True) -> list:
+                                         stretch_direction_list: list = ['x', 'y', 'z', 'xy', 'xz', 'yz', 'xyz', '1', '2', '3', '12', '123'],
+                                        stretch_3_direction_lists: list = None, my_scale_atoms: bool = True, stretch_3_direction_symbol: str = 'xyz') -> list:
     """
     Stretches the unit cell of the provided atomic structure along specified directions by a set of stretch factors.
     The function supports stretching in multiple directions and provides an option to scale atomic positions accordingly.
@@ -141,7 +141,8 @@ def stretch_list_along_direction_to_cell(atoms: Atoms = None , stretch_factor_li
     stretched_atoms = []
     if stretch_3_direction_lists:
         for stretch_3_direction_list in stretch_3_direction_lists:
-            stretch_along_direction_to_cell(atoms_copy, stretch_3_direction_list = stretch_3_direction_list, my_scale_atoms = my_scale_atoms, stretched_atoms_list = stretched_atoms)
+            stretch_along_direction_to_cell(atoms_copy, stretch_3_direction_list = stretch_3_direction_list, my_scale_atoms = my_scale_atoms, stretched_atoms_list = stretched_atoms,
+                                            stretch_3_direction_symbol = stretch_3_direction_symbol)
     elif len(stretch_factor_list) == len(stretch_direction_list):
         for index, stretch_factor in enumerate(stretch_factor_list):
             stretch_direction = stretch_direction_list[index]
@@ -153,7 +154,7 @@ def stretch_list_along_direction_to_cell(atoms: Atoms = None , stretch_factor_li
     return stretched_atoms
 
 def stretch_along_direction_to_cell(atoms: Atoms = None ,stretch_factor: float = None, stretch_direction: chr = None, stretch_3_direction_list: list = None,
-                                my_scale_atoms: bool = True, stretched_atoms_list: list = None):
+                                my_scale_atoms: bool = True, stretched_atoms_list: list = None, stretch_3_direction_symbol: str = 'xyz'):
     """
     Stretches the unit cell of the provided atomic structure along specified directions or by specific stretch factors for each axis. 
     Allows for scaling of atomic positions along with the unit cell.
@@ -202,7 +203,10 @@ def stretch_along_direction_to_cell(atoms: Atoms = None ,stretch_factor: float =
     temp = my_cell.copy()
     if stretch_3_direction_list and len(stretch_3_direction_list) == 3:
         for i, factor in enumerate(stretch_3_direction_list):
-            temp[:,i] = my_cell[:,i] * factor
+            if stretch_3_direction_symbol == 'xyz':
+                temp[:,i] = my_cell[:,i] * factor
+            elif stretch_3_direction_symbol == 'a1a2a3':
+                temp[i,:] = my_cell[i,:] * factor
     else:
         if stretch_direction == 'x':
             temp[:,0] = my_cell[:,0] * stretch_factor
@@ -215,10 +219,23 @@ def stretch_along_direction_to_cell(atoms: Atoms = None ,stretch_factor: float =
         elif stretch_direction == 'yz' or 'zy':
             temp[:,1:] = my_cell[:,1:] * stretch_factor
         elif stretch_direction == 'zx' or 'xz':
-            temp[:,2] = my_cell[:,2] * stretch_factor
-            temp[:,0] = my_cell[:,0] * stretch_factor
+            temp[:,::2] = my_cell[:,::2] * stretch_factor
         elif stretch_direction == 'xyz' or 'xzy' or 'yzx' or 'yxz' or 'zxy' or 'zyx':
             temp[:,2] = my_cell[:,2] * stretch_factor
+        elif stretch_direction == '1':
+            temp[0,:] = my_cell[0,:] * stretch_factor
+        elif stretch_direction == '2':
+            temp[1,:] = my_cell[1,:] * stretch_factor
+        elif stretch_direction == '3':
+            temp[2,:] = my_cell[2,:] * stretch_factor
+        elif stretch_direction == '12' or '21':
+            temp[:2,:] = my_cell[:2,:] * stretch_factor
+        elif stretch_direction == '23' or '32':
+            temp[1:,:] = my_cell[1:,:] * stretch_factor
+        elif stretch_direction == '13' or '31':
+            temp[::2,:] = my_cell[::2,:] * stretch_factor
+        elif stretch_direction == '123' or '132' or '213' or '231' or '312' or '321':
+            temp[:,:] = my_cell[:,:] * stretch_factor
     atoms_copy.set_cell(temp, scale_atoms=my_scale_atoms)
     if stretched_atoms_list is not None:
         stretched_atoms_list.append(atoms_copy)
