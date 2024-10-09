@@ -6,6 +6,36 @@ import spglib
 from mymetal.build.film.findprim import my_find_prim
 import os
 from mymetal.universial.atom.moveatom import move_atoms
+    
+####################################################################################################
+# # usage
+# def uni_axial_stretch():
+#     film = generate_film(symbols = 'Au', structure = 'fcc', num_layers = 12, my_vacuum = 20, slice_plane = (1,1,1), a_fcc = 2.95*sqrt(2.0))
+#     stretch_factor_list = [0.997 + i * 0.001 for i in range(7)]
+#     #[0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
+#     films_stretch = stretch_list_along_direction_to_cell(film , stretch_factor_list = stretch_factor_list, stretch_direction_list = ['x'])
+    
+#     format_type = '%.3f'
+#     for i, film_stretch in enumerate(films_stretch):
+#         formatted_i = format_type % stretch_factor_list[i]
+#         #print(formatted_i)
+#         #print(array(film_stretch.get_cell()))
+#         filename = f'./y_dir/{formatted_i}/POSCAR' 
+#         makedirs(path.dirname(filename), exist_ok=True)   
+#         my_write_vasp(filename, film_stretch, label = f'Au thin film {formatted_i}')
+# uni_axial_stretch()
+####################################################################################################
+# # Example usage:
+# # Lattice vectors before stretching
+# lattice_before = np.array([[2.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 2.0]])
+
+# # Lattice vectors after stretching
+# lattice_after = np.array([[2.5, 0.0, 0.0], [0.0, 2.5, 0.0], [0.0, 0.0, 2.5]])
+
+# # Adjust lattice to conserve volume
+# adjusted_lattice = adjust_lattice_for_volume_conservation(lattice_before, lattice_after, change_axis=[0])
+# print(adjusted_lattice)
+####################################################################################################
 
 def generate_film(   symbols: str = None,                 # str
                 structure: str = None,              # str
@@ -27,7 +57,7 @@ def generate_film(   symbols: str = None,                 # str
     please see the ASE/cut function\n
     parameters : 1-8 line: general setting\n
                   9 10-11 line: fcc, hcp parameters\n
-    when we use surface() function, my_bulk must be a conventional cell, not a primitive cell, so set cubic=True
+    when we use surface() function, my_bulk must be a conventional cell, not a primitive cell, so set cubic=True (except for hcp)\n
     Generates a thin film structure (slab) from bulk material and applies modifications. Please see the ASE/cut function\n
 
     The function allows the user to create a thin film from an bulk structure from `bulk_atoms` or specify the lattice constant of only supported hcp/fcc structure
@@ -67,7 +97,7 @@ def generate_film(   symbols: str = None,                 # str
         if structure == 'fcc':
             my_bulk = bulk(symbols, structure, a=a_fcc, cubic=True)
         elif structure == 'hcp':
-            my_bulk = bulk(symbols, structure, a = a_hcp, covera = my_covera, cubic=True)
+            my_bulk = bulk(symbols, structure, a = a_hcp, covera = my_covera)
         else:
             raise ValueError('%s is an invalid structure' % structure)
     my_bulk = move_atoms(my_bulk, before_move_atom)
@@ -284,23 +314,40 @@ def my_find_num_per_slab(my_bulk: Atoms = None,
     atom_number_per_slab = len(prim_one_slab.get_positions())
     layer_number_per_slab = atom_number_per_slab/number_per_layer
     return layer_number_per_slab
-    
 
-# # usage
-# def uni_axial_stretch():
-#     film = generate_film(symbols = 'Au', structure = 'fcc', num_layers = 12, my_vacuum = 20, slice_plane = (1,1,1), a_fcc = 2.95*sqrt(2.0))
-#     stretch_factor_list = [0.997 + i * 0.001 for i in range(7)]
-#     #[0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
-#     films_stretch = stretch_list_along_direction_to_cell(film , stretch_factor_list = stretch_factor_list, stretch_direction_list = ['x'])
+
+def adjust_lattice_for_volume_conservation(lattice_before, lattice_after, change_axis: list = [0, 1, 2]):
+    """
+    Adjust the 'lattice_after' so that the volume remains the same as 'lattice_before'.
     
-#     format_type = '%.3f'
-#     for i, film_stretch in enumerate(films_stretch):
-#         formatted_i = format_type % stretch_factor_list[i]
-#         #print(formatted_i)
-#         #print(array(film_stretch.get_cell()))
-#         filename = f'./y_dir/{formatted_i}/POSCAR' 
-#         makedirs(path.dirname(filename), exist_ok=True)   
-#         my_write_vasp(filename, film_stretch, label = f'Au thin film {formatted_i}')
+    Parameters:
+    lattice_before: np.array
+        3x3 array representing the lattice vectors before stretching.
+    lattice_after: np.array
+        3x3 array representing the lattice vectors after stretching.
         
-# uni_axial_stretch()
+    Returns:
+    adjusted_lattice_after: np.array
+        Adjusted 3x3 array representing the lattice vectors after stretching, 
+        ensuring volume conservation.
+    """
+    
+    # Compute the volume before and after stretching
+    volume_before = np.abs(np.linalg.det(lattice_before))
+    volume_after = np.abs(np.linalg.det(lattice_after))
+    
+    # Scaling factor to adjust the lattice_after to conserve volume
+    if len(change_axis) == 3:
+        scaling_factor = (volume_before / volume_after) ** (1/3)
+    elif len(change_axis) == 2:
+        scaling_factor = (volume_before / volume_after) ** (1/2)
+    elif len(change_axis) == 1:
+        scaling_factor = volume_before / volume_after
+    
+    for axis in change_axis:
+        lattice_after[axis, :] = lattice_after[axis, :] * scaling_factor
+
+    adjusted_lattice_after = lattice_after
+    
+    return adjusted_lattice_after, scaling_factor
 
