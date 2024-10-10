@@ -51,7 +51,8 @@ def generate_film(   symbols: str = None,                 # str
                 move_atom: list = [0.1, 0.1, 0.0],
                 before_move_atom: list = [0.05, 0.05, 0.05],
                 number_per_layer: float = 1.0,
-                bulk_atoms: Atoms = None
+                bulk_atoms: Atoms = None,
+                if_find_prim: bool = True,
                 ) -> Atoms:
     """
     please see the ASE/cut function\n
@@ -115,7 +116,8 @@ def generate_film(   symbols: str = None,                 # str
     # print('rep_z: %s' %num_rep_z)
     my_slab = surface(my_bulk, slice_plane , num_rep_z, vacuum = my_vacuum, tol=my_tol, periodic=my_periodic)
     # print(my_slab)
-    my_slab = my_find_prim(my_slab)
+    if if_find_prim:
+        my_slab = my_find_prim(my_slab)
 
     my_slab = move_atoms(my_slab, move_atom)
     my_slab.wrap()

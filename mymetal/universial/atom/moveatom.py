@@ -92,7 +92,7 @@ def move_atoms(atoms: Atoms = None,
     else:
         atoms_copy.set_positions(positions_to_modify)
     
-    print(f'Move {len(indices_to_move)} atoms')
+    #print(f'Move {len(indices_to_move)} atoms')
     atoms_copy.wrap()
     return atoms_copy
 
