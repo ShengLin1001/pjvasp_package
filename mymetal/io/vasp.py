@@ -184,7 +184,7 @@ def my_write_vasp(filename,
     if direct:
         coord = atoms.get_scaled_positions(wrap=wrap)
     else:
-        coord = atoms.get_positions(wrap=wrap)
+        coord = atoms.get_positions(wrap=wrap)/lattice_scale_factor
 
     constraints = atoms.constraints and not ignore_constraints
 
