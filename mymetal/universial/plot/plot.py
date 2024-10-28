@@ -7,14 +7,16 @@ from matplotlib.ticker import MultipleLocator, AutoMinorLocator
 from brokenaxes import brokenaxes
 
 def my_plot(
-    fig_wh: List[float] = [10.72, 8.205],    
+    one_fig_wh: List[float] = [10.72, 8.205],    
     fig_subp: List[int] = [1, 1], 
     fig_sharex: bool = True, 
     grid: bool = True, 
     labelpad: int = 15, 
     tick_pad: int = 10, 
     left: float = 1.918, 
-    top: float = 0.9517
+    top: float = 0.9517,
+    axes_height: float = 5.89,
+    axes_width: float = 7.31,
 ) -> Tuple[Figure, List[Axes]]:
     """Creates a customized matplotlib figure with specific layout adjustments.
 
@@ -23,7 +25,7 @@ def my_plot(
     It also enables minor ticks and customizes the axes' appearance.
 
     Args:
-        fig_wh (list of float): Width and height of the figure in inches 
+        one_fig_wh (list of float): Width and height of the figure in inches (one_figure)
             (default: [10.72, 8.205]).
         fig_subp (list of int): Number of rows and columns of subplots 
             (default: [1, 1]).
@@ -61,15 +63,16 @@ def my_plot(
     plt.rcParams['legend.labelspacing'] = 0.5
     plt.rcParams['legend.columnspacing'] = 0.5
 
+    fig_wh = [a * b for a, b in zip(one_fig_wh, fig_subp)]
     fig, ax = plt.subplots(nrows=fig_subp[0], ncols=fig_subp[1], 
                            sharex=fig_sharex, figsize=(fig_wh[0], fig_wh[1]))
     # inch 10.72* 8.205 is one figsize
     left = left
-    right = 10.72-left-7.31
+    right = one_fig_wh[0]-left-axes_width
     top = top
-    bottom = 8.205-top-5.89
-    wspace = (left+right)/7.31  # axes_height 7.31 inch
-    hspace = (top+bottom)/5.89  # axes_width 5.89 inch
+    bottom = one_fig_wh[1]-top-axes_height
+    wspace = (left+right)/axes_width  # axes_width 7.31 inch
+    hspace = (top+bottom)/axes_height  # axes_height 5.89 inch
 
     fig.subplots_adjust(left=left/fig_wh[0], right=(fig_wh[0]-right)/fig_wh[0], 
                         top=(fig_wh[1]-top)/fig_wh[1], bottom=(bottom)/fig_wh[1],
@@ -107,14 +110,16 @@ def my_plot(
     return fig, ax
 
 def my_plot_brokenaxed(
-    fig_wh: List[float] = [10.72, 8.205], 
+    one_fig_wh: List[float] = [10.72, 8.205],    
     fig_subp: List[int] = [1, 1], 
     fig_sharex: bool = True, 
     grid: bool = True, 
     tick_pad: int = 10, 
     left: float = 1.918, 
     top: float = 0.9517, 
-    ylims: List[Tuple[float, float]] = [(0, 1), (2, 3), (4, 5)]
+    ylims: List[Tuple[float, float]] = [(0, 1), (2, 3), (4, 5)],
+    axes_height: float = 5.89,
+    axes_width: float = 7.31,
 ) -> Tuple[Figure, brokenaxes]:
     """Creates a broken axes plot with customized layout and legend settings.
 
@@ -122,7 +127,7 @@ def my_plot_brokenaxed(
     the layout, and sets up the appearance of ticks, grid, and legend styles.
 
     Args:
-        fig_wh (List[float]): Width and height of the figure in inches 
+        one_fig_wh (List[float]): Width and height of the figure in inches (one figure)
             (default: [10.72, 8.205]).
         fig_subp (List[int]): Number of rows and columns of subplots 
             (default: [1, 1]).
@@ -161,12 +166,14 @@ def my_plot_brokenaxed(
     plt.rcParams['legend.labelspacing'] = 0.5
     plt.rcParams['legend.columnspacing'] = 0.5
 
+    fig_wh = [a * b for a, b in zip(one_fig_wh, fig_subp)]
+    # inch 10.72* 8.205 is one figsize
     left = left
-    right = 10.72-left-7.31
+    right = one_fig_wh[0]-left-axes_width
     top = top
-    bottom = 8.205-top-5.89
-    wspace = (left+right)/7.31  # axes_height 7.31 inch
-    hspace = (top+bottom)/5.89  # axes_width 5.89 inch
+    bottom = one_fig_wh[1]-top-axes_height
+    wspace = (left+right)/axes_width  # axes_width 7.31 inch
+    hspace = (top+bottom)/axes_height  # axes_height 5.89 inch
 
     fig = plt.figure(figsize=(fig_wh[0], fig_wh[1]))
     fig.subplots_adjust(left=left/fig_wh[0], right=(fig_wh[0]-right)/fig_wh[0], 
