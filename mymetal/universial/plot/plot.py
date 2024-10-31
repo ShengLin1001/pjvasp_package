@@ -5,6 +5,7 @@ from matplotlib.axes import Axes
 from typing import List, Tuple, Union
 from matplotlib.ticker import MultipleLocator, AutoMinorLocator
 from brokenaxes import brokenaxes
+from matplotlib.ticker import MaxNLocator
 
 def my_plot(
     one_fig_wh: List[float] = [10.72, 8.205],    
@@ -16,18 +17,19 @@ def my_plot(
     left: float = 1.918, 
     top: float = 0.9517,
     axes_height: float = 5.89,
-    axes_width: float = 7.31,
+    axes_width: float = 7.31
 ) -> Tuple[Figure, List[Axes]]:
     """Creates a customized matplotlib figure with specific layout adjustments.
 
     This function sets global matplotlib settings, creates a figure with 
     subplots, and adjusts their layout according to the given parameters. 
-    It also enables minor ticks and customizes the axes' appearance.
+    It also enables minor ticks and customizes the axes' appearance, margins, 
+    and tick settings.
 
     Args:
-        one_fig_wh (list of float): Width and height of the figure in inches (one_figure)
+        one_fig_wh (List[float]): Width and height of the figure in inches 
             (default: [10.72, 8.205]).
-        fig_subp (list of int): Number of rows and columns of subplots 
+        fig_subp (List[int]): Number of rows and columns of subplots 
             (default: [1, 1]).
         fig_sharex (bool): Whether the subplots share the same x-axis 
             (default: True).
@@ -36,12 +38,14 @@ def my_plot(
         tick_pad (int): Padding between tick labels and the axes (default: 10).
         left (float): Left margin in inches (default: 1.918).
         top (float): Top margin in inches (default: 0.9517).
+        axes_height (float): Height of each subplot in inches (default: 5.89).
+        axes_width (float): Width of each subplot in inches (default: 7.31).
 
     Returns:
-        tuple: A tuple containing:
-            - fig (matplotlib.figure.Figure): The created figure object.
-            - axes (list of matplotlib.axes.Axes): A list of axes objects for 
-              the subplots. If there's only one subplot, it returns a list with one item.
+        Tuple[Figure, List[Axes]]: A tuple containing:
+            - fig (Figure): The created figure object.
+            - axes (List[Axes]): A list of axes objects for the subplots. 
+              If there's only one subplot, it returns a list with one item.
     """
     plt.rcParams['font.family'] = 'Arial'
     plt.rcParams['font.size'] = 28
@@ -102,10 +106,24 @@ def my_plot(
         legend.get_frame().set_edgecolor('black')
         legend.get_frame().set_facecolor('white')
         legend.get_frame().set_alpha(1)
+        
+    def general_margin_bin(axis,
+                            y_margin = 0.1, 
+                            y_nbins = 3,
+                            x_margin = 0.1, 
+                            x_nbins = 4, 
+                            prune = 'both',
+                            if_autoscale = True):
+        axis.margins(x=x_margin, y=y_margin)
+        axis.yaxis.set_major_locator(MaxNLocator(nbins=y_nbins, prune=prune))
+        axis.xaxis.set_major_locator(MaxNLocator(nbins=x_nbins, prune=prune))
+        if if_autoscale:
+            # Force axis limits to update based on the new margins
+            axis.autoscale(enable=True, axis='both', tight=False)
     
     # 将修改图例函数绑定到 fig 对象，方便调用
     fig.general_modify_legend = general_modify_legend
-
+    fig.general_margin_bin = general_margin_bin
 
     return fig, ax
 
