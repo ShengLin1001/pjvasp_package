@@ -11,6 +11,8 @@ mymetal/build/film/hydroxyl.py
 mymetal/build/film/stretch.py
 mymetal/build/film/surface.py
 mymetal/calculate/__init__.py
+mymetal/calculate/calenergy/__init__.py
+mymetal/calculate/calenergy/surfenergy.py
 mymetal/calculate/calmath/__init__.py
 mymetal/calculate/calmath/matrix.py
 mymetal/calculate/calmechanics/__init__.py
@@ -50,6 +52,10 @@ mymetal/universial/index/__init__.py
 mymetal/universial/index/indextrans.py
 mymetal/universial/matrix/__init__.py
 mymetal/universial/matrix/adjust.py
+mymetal/universial/plot/__init__.py
+mymetal/universial/plot/plot.py
+mymetal/universial/print/__init__.py
+mymetal/universial/print/printafter.py
 mymetal/universial/search/__init__.py
 mymetal/universial/search/find.py
 mymetal_pkg.egg-info/PKG-INFO
