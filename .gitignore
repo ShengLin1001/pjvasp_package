@@ -1,3 +1,4 @@
-__pycache__/
-*.pyc
 *.pyo
+*.pyc
+**/__pycache__
+**/mymetal_pkg.egg-info/
