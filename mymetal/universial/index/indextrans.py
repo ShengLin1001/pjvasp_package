@@ -46,8 +46,8 @@ def three_index_to_four_index(index: list = None, reverse: bool = False) -> list
         three_index = np.array(index).reshape(3, 1)
         #print(three_index)
         four_index = np.dot(transformation_matrix, three_index).flatten()
-        print(four_index)
+        #print(four_index)
         index = four_index
         four_index = np.array([index[0], index[1], -(index[0] + index[1]), index[2]])
-        print(four_index)
+        #print(four_index)
         return four_index.tolist()
