@@ -67,7 +67,7 @@ def my_plot(
     plt.rcParams['legend.labelspacing'] = 0.5
     plt.rcParams['legend.columnspacing'] = 0.5
 
-    fig_wh = [a * b for a, b in zip(one_fig_wh, fig_subp)]
+    fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
     fig, ax = plt.subplots(nrows=fig_subp[0], ncols=fig_subp[1], 
                            sharex=fig_sharex, figsize=(fig_wh[0], fig_wh[1]))
     # inch 10.72* 8.205 is one figsize
