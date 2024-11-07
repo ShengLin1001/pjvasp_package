@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mymetal.universial.atom package &mdash; mymetal 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=8d563738"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            mymetal
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">mymetal.universial.atom package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-mymetal.universial.atom.delatom">mymetal.universial.atom.delatom module</a><ul>
+<li><a class="reference internal" href="#mymetal.universial.atom.delatom.check_position"><code class="docutils literal notranslate"><span class="pre">check_position()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.atom.delatom.mydel_pos_type"><code class="docutils literal notranslate"><span class="pre">mydel_pos_type()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-mymetal.universial.atom.fixatom">mymetal.universial.atom.fixatom module</a><ul>
+<li><a class="reference internal" href="#mymetal.universial.atom.fixatom.fixatoms"><code class="docutils literal notranslate"><span class="pre">fixatoms()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-mymetal.universial.atom.moveatom">mymetal.universial.atom.moveatom module</a><ul>
+<li><a class="reference internal" href="#mymetal.universial.atom.moveatom.move_atoms"><code class="docutils literal notranslate"><span class="pre">move_atoms()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-mymetal.universial.atom">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">mymetal</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">mymetal.universial.atom package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/mymetal.universial.atom.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mymetal-universial-atom-package">
+<h1>mymetal.universial.atom package<a class="headerlink" href="#mymetal-universial-atom-package" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-mymetal.universial.atom.delatom">
+<span id="mymetal-universial-atom-delatom-module"></span><h2>mymetal.universial.atom.delatom module<a class="headerlink" href="#module-mymetal.universial.atom.delatom" title="Link to this heading"></a></h2>
+<p>delatom submodule</p>
+<p>This submodule provides functions for deleting atoms from a structure. It includes functions for deleting atoms based on
+their positions, types, or both. These functions are designed to streamline common tasks in materials science simulations
+and data handling.</p>
+<dl class="simple">
+<dt>Functions:</dt><dd><ul class="simple">
+<li><p>mydel_pos_type: Delete atoms based on their positions and types.</p></li>
+<li><p>check_position: Check if an atom is within a specified position range.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.atom.delatom.check_position">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.atom.delatom.</span></span><span class="sig-name descname"><span class="pre">check_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">position_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#mymetal.universial.atom.delatom.check_position" title="Link to this definition"></a></dt>
+<dd><p>checking the atom is in ps [xo, xh, yo, yh, zo, zh]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.atom.delatom.mydel_pos_type">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.atom.delatom.</span></span><span class="sig-name descname"><span class="pre">mydel_pos_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.atom.delatom.mydel_pos_type" title="Link to this definition"></a></dt>
+<dd><p>using to delete some atoms in specified region or/and type</p>
+<p>ps: [xl, xh, yl, yh, zl, zh]</p>
+<p>ts: [‘H’, ‘O’, … ]</p>
+<p>temp = mydel_pos_type(temp, [float(‘-inf’), float(‘inf’), float(‘-inf’), float(‘inf’), float(‘-inf’), 0.9])</p>
+<p>temp = mydel_pos_type(temp, [float(‘-inf’), float(‘inf’), float(‘-inf’), float(‘inf’), 10.18, float(‘inf’)])</p>
+</dd></dl>
+
+</section>
+<section id="module-mymetal.universial.atom.fixatom">
+<span id="mymetal-universial-atom-fixatom-module"></span><h2>mymetal.universial.atom.fixatom module<a class="headerlink" href="#module-mymetal.universial.atom.fixatom" title="Link to this heading"></a></h2>
+<p>fixatom submodule</p>
+<p>This submodule provides functions for fixing atoms in a structure. It includes functions for fixing atoms based on
+their indices or a boolean mask. These functions are designed to streamline common tasks in materials science simulations
+and data handling.</p>
+<dl class="simple">
+<dt>Functions:</dt><dd><ul class="simple">
+<li><p>fixatoms: Fix atoms in a structure based on their indices or a boolean mask.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.atom.fixatom.fixatoms">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.atom.fixatom.</span></span><span class="sig-name descname"><span class="pre">fixatoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.atom.fixatom.fixatoms" title="Link to this definition"></a></dt>
+<dd><p>Constrain chosen atoms.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>list</em><em> of </em><em>int</em>) – Indices for those atoms that should be constrained.</p></li>
+<li><p><strong>mask</strong> (<em>list</em><em> of </em><em>bool</em>) – One boolean per atom indicating if the atom should be
+constrained or not.</p></li>
+<li><p><strong>list.</strong> (<em>To fix some atoms for mask</em>) – </p></li>
+<li><p><strong>----------</strong> – </p></li>
+<li><p><strong>like</strong> (<em>mask=</em><em>[</em><em>atom.symbol == 'Cu' for atom in atoms</em><em>]  </em><em>===&gt;&gt;&gt;   mask =</em><em> [</em><em>True</em><em>, </em><em>...</em><em>, </em><em>False</em><em>, </em><em>...</em><em>]</em><em>.</em>) – indices=[atom.index for atom in atomcopy if atom.symbol == ‘Cu’]  ===&gt;&gt;&gt;  [3, 6, 10, …].
+mask = [ atom.position[2] -  min(hetero.get_positions()[:,2]) &lt; 5 for atom in hetero].</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-mymetal.universial.atom.moveatom">
+<span id="mymetal-universial-atom-moveatom-module"></span><h2>mymetal.universial.atom.moveatom module<a class="headerlink" href="#module-mymetal.universial.atom.moveatom" title="Link to this heading"></a></h2>
+<p>moveatom submodule</p>
+<p>This submodule provides functions for moving atoms in a structure. It includes functions for translating atoms based on
+a translation matrix. These functions are designed to streamline common tasks in materials science simulations and data handling.</p>
+<dl class="simple">
+<dt>Functions:</dt><dd><ul class="simple">
+<li><p>move_atoms: Move atoms in a structure by applying a translation matrix.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.atom.moveatom.move_atoms">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.atom.moveatom.</span></span><span class="sig-name descname"><span class="pre">move_atoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">translate_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">array([0.1,</span> <span class="pre">0.1,</span> <span class="pre">0.])</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_scale_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atom_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">((-inf,</span> <span class="pre">inf),</span> <span class="pre">(-inf,</span> <span class="pre">inf),</span> <span class="pre">(-inf,</span> <span class="pre">inf))</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.atom.moveatom.move_atoms" title="Link to this definition"></a></dt>
+<dd><p>Move atoms by a translation matrix(in cartesian or direct coordination).
+The atoms to move can be filtered by atom type and position range(always in cartesian coordination).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>atoms</strong> (<em>Atoms</em><em>, </em><em>optional</em>) – The atomic structure to be translated, represented as an ASE <cite>Atoms</cite> object.
+This is the system of atoms to which the translation will be applied. Defaults to None.</p></li>
+<li><p><strong>translate_matrix</strong> (<em>ndarray</em><em>, </em><em>optional</em>) – The translation vector to apply to each selected atom. The translation
+can be applied in either Cartesian or scaled (fractional) coordinates, depending on the value of <cite>if_scale_position</cite>.
+Defaults to np.array([0.1, 0.1, 0.0]).</p></li>
+<li><p><strong>if_scale_position</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to apply the translation in scaled (fractional) coordinates. If True,
+the translation is applied to the scaled positions. If False, the translation is applied to Cartesian coordinates.
+Defaults to True.</p></li>
+<li><p><strong>atom_type</strong> (<em>list</em><em>, </em><em>optional</em>) – A list of atomic symbols specifying which types of atoms should be moved (e.g., [‘O’, ‘H’]).
+If None, all atom types are considered. Defaults to None.</p></li>
+<li><p><strong>position_range</strong> (<em>tuple</em><em>, </em><em>optional</em>) – A tuple ((x_min, x_max), (y_min, y_max), (z_min, z_max)) specifying the range of positions
+in Cartesian coordinates to filter which atoms should be moved. Only atoms within the specified position range will be moved.
+Defaults to ((-np.inf, np.inf), (-np.inf, np.inf), (0.0, 1.0)) to restrict movement in the z-axis.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A new ASE <cite>Atoms</cite> object with translated positions for the selected atoms.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Atoms</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">ase.build</span> <span class="kn">import</span> <span class="n">molecule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">atoms</span> <span class="o">=</span> <span class="n">molecule</span><span class="p">(</span><span class="s1">&#39;H2O&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">translated_atoms</span> <span class="o">=</span> <span class="n">move_atoms</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">translate_matrix</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
+<span class="go">                                  atom_type=[&#39;O&#39;], position_range=((-np.inf, np.inf), (-np.inf, np.inf), (0.0, 1.0)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">translated_atoms</span><span class="o">.</span><span class="n">get_positions</span><span class="p">())</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+<section id="module-mymetal.universial.atom">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-mymetal.universial.atom" title="Link to this heading"></a></h2>
+<p>atom module</p>
+<p>This module provides functions for atom manipulation and analysis. It includes functions for moving atoms,
+deleting atoms, and fixing atoms in a structure. These functions are designed to streamline common tasks
+in materials science simulations and data handling.</p>
+<dl class="simple">
+<dt>Submodules:</dt><dd><ul class="simple">
+<li><p>moveatom: Module for moving atoms in a structure.</p></li>
+<li><p>delatom: Module for deleting atoms from a structure.</p></li>
+<li><p>fixatom: Module for fixing atoms in a structure.</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, louis.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

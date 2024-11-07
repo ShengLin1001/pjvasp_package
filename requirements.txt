@@ -30,6 +30,7 @@ sphinx-autobuild
 sphinx_rtd_theme
 recommonmark
 sphinx_markdown_tables
+brokenaxes
 ############## jupyter
 # iprPy
 

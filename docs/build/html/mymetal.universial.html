@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mymetal.universial package &mdash; mymetal 1.0.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+
+  
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="_static/jquery.js?v=5d32c60e"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+        <script src="_static/documentation_options.js?v=8d563738"></script>
+        <script src="_static/doctools.js?v=888ff710"></script>
+        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            mymetal
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">mymetal.universial package</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#module-mymetal.universial">Module contents</a><ul>
+<li><a class="reference internal" href="#mymetal.universial.adjust_matrix"><code class="docutils literal notranslate"><span class="pre">adjust_matrix()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.char_to_dic"><code class="docutils literal notranslate"><span class="pre">char_to_dic()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.check_input"><code class="docutils literal notranslate"><span class="pre">check_input()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.check_position"><code class="docutils literal notranslate"><span class="pre">check_position()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.dic_to_char"><code class="docutils literal notranslate"><span class="pre">dic_to_char()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.extract_line_at_position"><code class="docutils literal notranslate"><span class="pre">extract_line_at_position()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.find_line_position"><code class="docutils literal notranslate"><span class="pre">find_line_position()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.fixatoms"><code class="docutils literal notranslate"><span class="pre">fixatoms()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.list_to_char"><code class="docutils literal notranslate"><span class="pre">list_to_char()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.move_atoms"><code class="docutils literal notranslate"><span class="pre">move_atoms()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_add_list"><code class="docutils literal notranslate"><span class="pre">my_add_list()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_down_up"><code class="docutils literal notranslate"><span class="pre">my_down_up()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_pattern_trans"><code class="docutils literal notranslate"><span class="pre">my_pattern_trans()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_plot"><code class="docutils literal notranslate"><span class="pre">my_plot()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.my_plot_brokenaxed"><code class="docutils literal notranslate"><span class="pre">my_plot_brokenaxed()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.mydel_pos_type"><code class="docutils literal notranslate"><span class="pre">mydel_pos_type()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.myjust"><code class="docutils literal notranslate"><span class="pre">myjust()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.normalize_float_int"><code class="docutils literal notranslate"><span class="pre">normalize_float_int()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_blank"><code class="docutils literal notranslate"><span class="pre">print_after_blank()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_cant_read"><code class="docutils literal notranslate"><span class="pre">print_after_cant_read()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_not_supported"><code class="docutils literal notranslate"><span class="pre">print_after_not_supported()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.print_after_read"><code class="docutils literal notranslate"><span class="pre">print_after_read()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.rm_blank"><code class="docutils literal notranslate"><span class="pre">rm_blank()</span></code></a></li>
+<li><a class="reference internal" href="#mymetal.universial.three_index_to_four_index"><code class="docutils literal notranslate"><span class="pre">three_index_to_four_index()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">mymetal</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">mymetal.universial package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/mymetal.universial.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mymetal-universial-package">
+<h1>mymetal.universial package<a class="headerlink" href="#mymetal-universial-package" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.atom.html">mymetal.universial.atom package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom.delatom">mymetal.universial.atom.delatom module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.delatom.check_position"><code class="docutils literal notranslate"><span class="pre">check_position()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.delatom.mydel_pos_type"><code class="docutils literal notranslate"><span class="pre">mydel_pos_type()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom.fixatom">mymetal.universial.atom.fixatom module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.fixatom.fixatoms"><code class="docutils literal notranslate"><span class="pre">fixatoms()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom.moveatom">mymetal.universial.atom.moveatom module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.atom.html#mymetal.universial.atom.moveatom.move_atoms"><code class="docutils literal notranslate"><span class="pre">move_atoms()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.atom.html#module-mymetal.universial.atom">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.check.html">mymetal.universial.check package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.check.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.check.html#module-mymetal.universial.check.checkinput">mymetal.universial.check.checkinput module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.check.html#mymetal.universial.check.checkinput.check_input"><code class="docutils literal notranslate"><span class="pre">check_input()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.check.html#module-mymetal.universial.check">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.data.html">mymetal.universial.data package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data.dataadjust">mymetal.universial.data.dataadjust module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.my_add_list"><code class="docutils literal notranslate"><span class="pre">my_add_list()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.my_down_up"><code class="docutils literal notranslate"><span class="pre">my_down_up()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.myjust"><code class="docutils literal notranslate"><span class="pre">myjust()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.normalize_float_int"><code class="docutils literal notranslate"><span class="pre">normalize_float_int()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.dataadjust.rm_blank"><code class="docutils literal notranslate"><span class="pre">rm_blank()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data.datachange">mymetal.universial.data.datachange module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.datachange.char_to_dic"><code class="docutils literal notranslate"><span class="pre">char_to_dic()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.datachange.dic_to_char"><code class="docutils literal notranslate"><span class="pre">dic_to_char()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.datachange.list_to_char"><code class="docutils literal notranslate"><span class="pre">list_to_char()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data.patterntrans">mymetal.universial.data.patterntrans module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.data.html#mymetal.universial.data.patterntrans.my_pattern_trans"><code class="docutils literal notranslate"><span class="pre">my_pattern_trans()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.data.html#module-mymetal.universial.data">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.index.html">mymetal.universial.index package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.index.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.index.html#module-mymetal.universial.index.indextrans">mymetal.universial.index.indextrans module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.index.html#mymetal.universial.index.indextrans.three_index_to_four_index"><code class="docutils literal notranslate"><span class="pre">three_index_to_four_index()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.index.html#module-mymetal.universial.index">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.matrix.html">mymetal.universial.matrix package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.matrix.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.matrix.html#module-mymetal.universial.matrix.adjust">mymetal.universial.matrix.adjust module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.matrix.html#mymetal.universial.matrix.adjust.adjust_matrix"><code class="docutils literal notranslate"><span class="pre">adjust_matrix()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.matrix.html#module-mymetal.universial.matrix">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.plot.html">mymetal.universial.plot package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.plot.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.plot.html#module-mymetal.universial.plot.plot">mymetal.universial.plot.plot module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.plot.html#mymetal.universial.plot.plot.my_plot"><code class="docutils literal notranslate"><span class="pre">my_plot()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.plot.html#mymetal.universial.plot.plot.my_plot_brokenaxed"><code class="docutils literal notranslate"><span class="pre">my_plot_brokenaxed()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.plot.html#module-mymetal.universial.plot">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.print.html">mymetal.universial.print package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.print.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.print.html#module-mymetal.universial.print.printafter">mymetal.universial.print.printafter module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_blank"><code class="docutils literal notranslate"><span class="pre">print_after_blank()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_cant_read"><code class="docutils literal notranslate"><span class="pre">print_after_cant_read()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_not_supported"><code class="docutils literal notranslate"><span class="pre">print_after_not_supported()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.print.html#mymetal.universial.print.printafter.print_after_read"><code class="docutils literal notranslate"><span class="pre">print_after_read()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.print.html#module-mymetal.universial.print">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mymetal.universial.search.html">mymetal.universial.search package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.search.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.search.html#module-mymetal.universial.search.find">mymetal.universial.search.find module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.search.html#mymetal.universial.search.find.extract_line_at_position"><code class="docutils literal notranslate"><span class="pre">extract_line_at_position()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="mymetal.universial.search.html#mymetal.universial.search.find.find_line_position"><code class="docutils literal notranslate"><span class="pre">find_line_position()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mymetal.universial.search.html#module-mymetal.universial.search">Module contents</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="module-mymetal.universial">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-mymetal.universial" title="Link to this heading"></a></h2>
+<p>mymetal.universial</p>
+<p>This subpackage provides a collection of utility functions and tools that are commonly used across various
+modules in the <cite>mymetal</cite> package. It includes functions for input validation, data adjustments, atom manipulation,
+data transformations, matrix adjustments, and more. These utilities are designed to streamline common tasks
+in materials science simulations and data handling.</p>
+<dl class="simple">
+<dt>Modules:</dt><dd><ul class="simple">
+<li><p>check: Module for input validation and error checking.</p></li>
+<li><p>data: Module for data adjustments and transformations.</p></li>
+<li><p>atom: Module for atom manipulation and analysis.</p></li>
+<li><p>search: Module for searching and extracting data from files.</p></li>
+<li><p>print: Module for printing messages and warnings.</p></li>
+<li><p>matrix: Module for matrix adjustments and transformations.</p></li>
+<li><p>index: Module for indexing transformations and adjustments.</p></li>
+<li><p>plot: Module for plotting data and results.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.adjust_matrix">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">adjust_matrix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">array</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row_num</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">column_num</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.adjust_matrix" title="Link to this definition"></a></dt>
+<dd><p>Adjusts the specified row and/or column of a matrix by setting all their elements to a specified value.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>matrix</strong> (<em>np.ndarray</em>) – The matrix to adjust.</p></li>
+<li><p><strong>row_num</strong> (<em>int</em><em>, </em><em>optional</em>) – The row index to adjust. If None, no row will be adjusted.</p></li>
+<li><p><strong>column_num</strong> (<em>int</em><em>, </em><em>optional</em>) – The column index to adjust. If None, no column will be adjusted.</p></li>
+<li><p><strong>value</strong> (<em>float</em>) – The value to set the specified row and/or column elements to.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>ValueError</strong> – Input matrix cannot be None.</p></li>
+<li><p><strong>IndexError</strong> – row_num is out of bounds.</p></li>
+<li><p><strong>IndexError</strong> – column_num is out of bounds.</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a changed matrix</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.char_to_dic">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">char_to_dic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mycontent_char</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.char_to_dic" title="Link to this definition"></a></dt>
+<dd><p>“name:n1 gender:male” =&gt;&gt; {“name”:”n1”, “gender”:”male”}</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.check_input">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">check_input</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">check_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'none'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.check_input" title="Link to this definition"></a></dt>
+<dd><p>check_input_blank function is not correct, I think it’s useless</p>
+<p>first line  - check_input_none</p>
+<p>second line - check_input_blank</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.check_position">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">check_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">position_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#mymetal.universial.check_position" title="Link to this definition"></a></dt>
+<dd><p>checking the atom is in ps [xo, xh, yo, yh, zo, zh]</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.dic_to_char">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">dic_to_char</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mycontent_dic</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'</span>&#160;&#160; <span class="pre">'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.dic_to_char" title="Link to this definition"></a></dt>
+<dd><p>f”name:n1 {tag} gender:male” &lt;&lt;= {“name”:”n1”, “gender”:”male”}</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.extract_line_at_position">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">extract_line_at_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_number_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_list_down_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[-10,</span> <span class="pre">5]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.extract_line_at_position" title="Link to this definition"></a></dt>
+<dd><p>input is a position list generated by find_line_position()</p>
+<p>using my_down_up to enlarge the list controled by move_list_down_up (sorted)</p>
+<p>extract the line in position of list</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.find_line_position">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">find_line_position</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">search_string</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.find_line_position" title="Link to this definition"></a></dt>
+<dd><p>find the serch_string in file</p>
+<p>return a list of position of search_string</p>
+<p>noted, from 1, not 0. it’s controled by start=1 or start=0</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.fixatoms">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">fixatoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mask</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indices</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.fixatoms" title="Link to this definition"></a></dt>
+<dd><p>Constrain chosen atoms.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>indices</strong> (<em>list</em><em> of </em><em>int</em>) – Indices for those atoms that should be constrained.</p></li>
+<li><p><strong>mask</strong> (<em>list</em><em> of </em><em>bool</em>) – One boolean per atom indicating if the atom should be
+constrained or not.</p></li>
+<li><p><strong>list.</strong> (<em>To fix some atoms for mask</em>) – </p></li>
+<li><p><strong>----------</strong> – </p></li>
+<li><p><strong>like</strong> (<em>mask=</em><em>[</em><em>atom.symbol == 'Cu' for atom in atoms</em><em>]  </em><em>===&gt;&gt;&gt;   mask =</em><em> [</em><em>True</em><em>, </em><em>...</em><em>, </em><em>False</em><em>, </em><em>...</em><em>]</em><em>.</em>) – indices=[atom.index for atom in atomcopy if atom.symbol == ‘Cu’]  ===&gt;&gt;&gt;  [3, 6, 10, …].
+mask = [ atom.position[2] -  min(hetero.get_positions()[:,2]) &lt; 5 for atom in hetero].</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.list_to_char">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">list_to_char</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mycontent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'char'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">char_tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'</span>&#160;&#160; <span class="pre">'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dic_tag</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'\n'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_value_interval</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">':</span> <span class="pre">'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_interval</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">',</span> <span class="pre">'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.list_to_char" title="Link to this definition"></a></dt>
+<dd><p>consisted of two function</p>
+<p>list_of_char_to_char to output the list of char to file</p>
+<p>list_of_dic_to_char to output the list of dic to file</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.move_atoms">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">move_atoms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">translate_matrix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ndarray</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">array([0.1,</span> <span class="pre">0.1,</span> <span class="pre">0.])</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">if_scale_position</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">atom_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_range</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">((-inf,</span> <span class="pre">inf),</span> <span class="pre">(-inf,</span> <span class="pre">inf),</span> <span class="pre">(-inf,</span> <span class="pre">inf))</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.move_atoms" title="Link to this definition"></a></dt>
+<dd><p>Move atoms by a translation matrix(in cartesian or direct coordination).
+The atoms to move can be filtered by atom type and position range(always in cartesian coordination).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>atoms</strong> (<em>Atoms</em><em>, </em><em>optional</em>) – The atomic structure to be translated, represented as an ASE <cite>Atoms</cite> object.
+This is the system of atoms to which the translation will be applied. Defaults to None.</p></li>
+<li><p><strong>translate_matrix</strong> (<em>ndarray</em><em>, </em><em>optional</em>) – The translation vector to apply to each selected atom. The translation
+can be applied in either Cartesian or scaled (fractional) coordinates, depending on the value of <cite>if_scale_position</cite>.
+Defaults to np.array([0.1, 0.1, 0.0]).</p></li>
+<li><p><strong>if_scale_position</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to apply the translation in scaled (fractional) coordinates. If True,
+the translation is applied to the scaled positions. If False, the translation is applied to Cartesian coordinates.
+Defaults to True.</p></li>
+<li><p><strong>atom_type</strong> (<em>list</em><em>, </em><em>optional</em>) – A list of atomic symbols specifying which types of atoms should be moved (e.g., [‘O’, ‘H’]).
+If None, all atom types are considered. Defaults to None.</p></li>
+<li><p><strong>position_range</strong> (<em>tuple</em><em>, </em><em>optional</em>) – A tuple ((x_min, x_max), (y_min, y_max), (z_min, z_max)) specifying the range of positions
+in Cartesian coordinates to filter which atoms should be moved. Only atoms within the specified position range will be moved.
+Defaults to ((-np.inf, np.inf), (-np.inf, np.inf), (0.0, 1.0)) to restrict movement in the z-axis.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A new ASE <cite>Atoms</cite> object with translated positions for the selected atoms.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Atoms</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span> <span class="nn">ase.build</span> <span class="kn">import</span> <span class="n">molecule</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">atoms</span> <span class="o">=</span> <span class="n">molecule</span><span class="p">(</span><span class="s1">&#39;H2O&#39;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">translated_atoms</span> <span class="o">=</span> <span class="n">move_atoms</span><span class="p">(</span><span class="n">atoms</span><span class="p">,</span> <span class="n">translate_matrix</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
+<span class="go">                                  atom_type=[&#39;O&#39;], position_range=((-np.inf, np.inf), (-np.inf, np.inf), (0.0, 1.0)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">translated_atoms</span><span class="o">.</span><span class="n">get_positions</span><span class="p">())</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_add_list">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_add_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">list2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.my_add_list" title="Link to this definition"></a></dt>
+<dd><p>”
+combine two list, and sort it</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_down_up">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_down_up</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">move_list_down_up</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[0,</span> <span class="pre">0]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.my_down_up" title="Link to this definition"></a></dt>
+<dd><p>enlarge list</p>
+<p>like      [1,4], move_list = [-2,3]</p>
+<blockquote>
+<div><p>=&gt;&gt;  [-1,0,1,2,3,4,5,6,7]  (-1, 7)</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_pattern_trans">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_pattern_trans</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">match_type</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">char</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.my_pattern_trans" title="Link to this definition"></a></dt>
+<dd><p>generate the regular expression</p>
+<p>char to regular expression</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_plot">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">one_fig_wh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[10.72,</span> <span class="pre">8.205]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fig_subp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[1,</span> <span class="pre">1]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fig_sharex</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">labelpad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tick_pad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.918</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9517</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes_height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5.89</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">7.31</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Figure</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Axes</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#mymetal.universial.my_plot" title="Link to this definition"></a></dt>
+<dd><p>Creates a customized matplotlib figure with specific layout adjustments.</p>
+<p>This function sets global matplotlib settings, creates a figure with
+subplots, and adjusts their layout according to the given parameters.
+It also enables minor ticks and customizes the axes’ appearance, margins,
+and tick settings.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>one_fig_wh</strong> (<em>List</em><em>[</em><em>float</em><em>]</em>) – Width and height of the figure in inches
+(default: [10.72, 8.205]).</p></li>
+<li><p><strong>fig_subp</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – Number of rows and columns of subplots
+(default: [1, 1]).</p></li>
+<li><p><strong>fig_sharex</strong> (<em>bool</em>) – Whether the subplots share the same x-axis
+(default: True).</p></li>
+<li><p><strong>grid</strong> (<em>bool</em>) – Whether to display a grid on the plots (default: True).</p></li>
+<li><p><strong>labelpad</strong> (<em>int</em>) – Padding between axis labels and the axis (default: 15).</p></li>
+<li><p><strong>tick_pad</strong> (<em>int</em>) – Padding between tick labels and the axes (default: 10).</p></li>
+<li><p><strong>left</strong> (<em>float</em>) – Left margin in inches (default: 1.918).</p></li>
+<li><p><strong>top</strong> (<em>float</em>) – Top margin in inches (default: 0.9517).</p></li>
+<li><p><strong>axes_height</strong> (<em>float</em>) – Height of each subplot in inches (default: 5.89).</p></li>
+<li><p><strong>axes_width</strong> (<em>float</em>) – Width of each subplot in inches (default: 7.31).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>A tuple containing:</dt><dd><ul class="simple">
+<li><p>fig (Figure): The created figure object.</p></li>
+<li><p>axes (List[Axes]): A list of axes objects for the subplots.
+If there’s only one subplot, it returns a list with one item.</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple[Figure, List[Axes]]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.my_plot_brokenaxed">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">my_plot_brokenaxed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">one_fig_wh</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[10.72,</span> <span class="pre">8.205]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fig_subp</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[1,</span> <span class="pre">1]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fig_sharex</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tick_pad</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.918</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">top</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.9517</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ylims</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">float</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">float</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[(0,</span> <span class="pre">1),</span> <span class="pre">(2,</span> <span class="pre">3),</span> <span class="pre">(4,</span> <span class="pre">5)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes_height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">5.89</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axes_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">7.31</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">Figure</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">brokenaxes</span><span class="p"><span class="pre">]</span></span></span></span><a class="headerlink" href="#mymetal.universial.my_plot_brokenaxed" title="Link to this definition"></a></dt>
+<dd><p>Creates a broken axes plot with customized layout and legend settings.</p>
+<p>This function creates a figure with subplots using brokenaxes, adjusts
+the layout, and sets up the appearance of ticks, grid, and legend styles.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>one_fig_wh</strong> (<em>List</em><em>[</em><em>float</em><em>]</em>) – Width and height of the figure in inches (one figure)
+(default: [10.72, 8.205]).</p></li>
+<li><p><strong>fig_subp</strong> (<em>List</em><em>[</em><em>int</em><em>]</em>) – Number of rows and columns of subplots
+(default: [1, 1]).</p></li>
+<li><p><strong>fig_sharex</strong> (<em>bool</em>) – Whether the subplots share the same x-axis
+(default: True).</p></li>
+<li><p><strong>grid</strong> (<em>bool</em>) – Whether to display a grid on the plots (default: True).</p></li>
+<li><p><strong>tick_pad</strong> (<em>int</em>) – Padding between tick labels and the axes (default: 10).</p></li>
+<li><p><strong>left</strong> (<em>float</em>) – Left margin in inches (default: 1.918).</p></li>
+<li><p><strong>top</strong> (<em>float</em>) – Top margin in inches (default: 0.9517).</p></li>
+<li><p><strong>ylims</strong> (<em>List</em><em>[</em><em>Tuple</em><em>[</em><em>float</em><em>, </em><em>float</em><em>]</em><em>]</em>) – List of y-axis limits for each segment
+of the broken axes (default: [(0, 1), (2, 3), (4, 5)]).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>A tuple containing:</dt><dd><ul class="simple">
+<li><p>fig (Figure): The created figure object.</p></li>
+<li><p>ax (brokenaxes): The brokenaxes object containing the subplots.</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple[Figure, brokenaxes]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.mydel_pos_type">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">mydel_pos_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">atoms</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Atoms</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">position_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">type_strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Atoms</span></span></span><a class="headerlink" href="#mymetal.universial.mydel_pos_type" title="Link to this definition"></a></dt>
+<dd><p>using to delete some atoms in specified region or/and type</p>
+<p>ps: [xl, xh, yl, yh, zl, zh]</p>
+<p>ts: [‘H’, ‘O’, … ]</p>
+<p>temp = mydel_pos_type(temp, [float(‘-inf’), float(‘inf’), float(‘-inf’), float(‘inf’), float(‘-inf’), 0.9])</p>
+<p>temp = mydel_pos_type(temp, [float(‘-inf’), float(‘inf’), float(‘-inf’), float(‘inf’), 10.18, float(‘inf’)])</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.myjust">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">myjust</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.myjust" title="Link to this definition"></a></dt>
+<dd><p>left just or right just of output</p>
+<p>num is digit of variable</p>
+<p>like ‘dig’ =&gt;&gt; ‘dig       ‘  =&gt;&gt; ‘       dig’</p>
+<p>return char_out</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.normalize_float_int">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">normalize_float_int</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.normalize_float_int" title="Link to this definition"></a></dt>
+<dd><p>Helper function to normalize values</p>
+<p>Convert to float and remove trailing zeros, if it’s a float</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_blank">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_blank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">char_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calling_function</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specified_blank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_blank" title="Link to this definition"></a></dt>
+<dd><p>combined two lines</p>
+<blockquote>
+<div><p>print(f”the value is None! - {calling_function}”)</p>
+<p>char_out = ‘’</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_cant_read">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_cant_read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">char_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calling_function</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specified_blank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_cant_read" title="Link to this definition"></a></dt>
+<dd><p>combined two lines</p>
+<blockquote>
+<div><p>print(f”the value is None! - {calling_function}”)</p>
+<p>char_out = ‘’</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_not_supported">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_not_supported</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">char_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">calling_function</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">specified_blank</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_not_supported" title="Link to this definition"></a></dt>
+<dd><p>combined two lines</p>
+<blockquote>
+<div><p>print(f”the value is None! - {calling_function}”)</p>
+<p>char_out = ‘’</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.print_after_read">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">print_after_read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">count_read</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stretch_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">special_name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.print_after_read" title="Link to this definition"></a></dt>
+<dd><p>note if read all {special_name} - OUTCAR</p>
+<p>{name} is class name {self.name}</p>
+<p>nead a count_read variable</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.rm_blank">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">rm_blank</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">extr_content</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">remove_string</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'</span> <span class="pre">'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">removed_string</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#mymetal.universial.rm_blank" title="Link to this definition"></a></dt>
+<dd><p>for 1-D list, remove blank</p>
+<p>like [“reached required accuracy”,”reached required accuracy”]  to</p>
+<blockquote>
+<div><p>[ “reachedrequiredaccuracy” , “reachedrequiredaccuracy” ]</p>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="mymetal.universial.three_index_to_four_index">
+<span class="sig-prename descclassname"><span class="pre">mymetal.universial.</span></span><span class="sig-name descname"><span class="pre">three_index_to_four_index</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reverse</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#mymetal.universial.three_index_to_four_index" title="Link to this definition"></a></dt>
+<dd><p>Converts a three-index notation to a four-index notation for HCP crystals, or vice versa.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>list</em>) – A list of three elements [U, V, W] for forward conversion or
+four elements [u, v, t, w] for reverse conversion.</p></li>
+<li><p><strong>reverse</strong> (<em>bool</em>) – If True, converts from four-index to three-index notation.
+If False, converts from three-index to four-index notation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A list representing the converted index.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If the index is None or does not have the correct number of elements
+    for the specified conversion direction.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, louis.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
