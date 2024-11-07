@@ -1,4 +1,6 @@
 ./mymetal/
+├── build
+│   └── film
 ├── calculate
 │   ├── calenergy
 │   ├── calmath
@@ -35,4 +37,4 @@
     ├── print
     └── search
 
-29 directories, 7 files
+31 directories, 7 files
