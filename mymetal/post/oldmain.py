@@ -1,3 +1,9 @@
+"""
+oldmain module
+
+Please don't use this module anymore. Use newmain instead.
+"""
+
 # pre-function
 from re import findall, search, IGNORECASE
 from os import listdir

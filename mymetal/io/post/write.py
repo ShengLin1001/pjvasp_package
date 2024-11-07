@@ -1,3 +1,12 @@
+""" 
+write submodule
+
+This submodule provides functions for writing content to files for post-processing tasks related to materials simulations designed for mymetal.post subpackage.
+
+Functions:
+    - write_content_to_file: Writes content to a file.
+"""
+
 from inspect import getargvalues, currentframe, stack
 from mymetal.universial.check.checkinput import check_input
 

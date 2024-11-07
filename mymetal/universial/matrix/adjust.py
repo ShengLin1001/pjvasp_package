@@ -1,3 +1,12 @@
+"""
+adjust submodule
+
+This submodule contains functions for adjusting the size of a matrix.
+
+Functions:
+    - adjust_matrix: Adjusts the specified row and/or column of a matrix by setting all their elements to a specified value.
+"""
+
 from numpy import array
 def adjust_matrix(matrix: array= None,row_num: int = None, column_num: int = None, value: float = 0):
     """Adjusts the specified row and/or column of a matrix by setting all their elements to a specified value.

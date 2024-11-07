@@ -1,3 +1,14 @@
+"""
+model module
+
+This module provides functions for training and visualizing machine learning models.
+
+Functions:
+    - train_model: Train a PyTorch model.
+    - visualize_model: Visualize a PyTorch model.
+    - visualize_model_predictions: Visualize predictions made by a PyTorch model.
+"""
+
 import torch
 import torchvision
 import matplotlib.pyplot as plt

@@ -9,7 +9,6 @@ mymetal/build/film/findhetero.py
 mymetal/build/film/findprim.py
 mymetal/build/film/hydroxyl.py
 mymetal/build/film/stretch.py
-mymetal/build/film/surface.py
 mymetal/calculate/__init__.py
 mymetal/calculate/calenergy/__init__.py
 mymetal/calculate/calenergy/surfenergy.py

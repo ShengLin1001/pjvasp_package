@@ -1,3 +1,12 @@
+"""
+moveatom submodule
+
+This submodule provides functions for moving atoms in a structure. It includes functions for translating atoms based on
+a translation matrix. These functions are designed to streamline common tasks in materials science simulations and data handling.
+
+Functions:
+    - move_atoms: Move atoms in a structure by applying a translation matrix.
+"""
 from numpy import array, ndarray
 from ase import Atoms
 import numpy as np

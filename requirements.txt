@@ -1,9 +1,10 @@
+############## core package
 numpy
 scipy
 sympy
 statsmodels
 spglib
-ovito == 3.10.6
+ovito
 pymatgen
 crystal_toolkit
 mp-api
@@ -23,16 +24,19 @@ sphinx-markdown-tables
 recommonmark
 PyQt5
 PySide2
-ase == 3.22.1
-
+ase
 sphinx
 sphinx-autobuild
 sphinx_rtd_theme
 recommonmark
 sphinx_markdown_tables
+############## jupyter
+# iprPy
 
-iprPy
+############## ml package
+# torch
+# torchvision
+# scikit-learn
 
-torch
-torchvision
-scikit-learn
+############## find heterostructure
+# hetbuilder

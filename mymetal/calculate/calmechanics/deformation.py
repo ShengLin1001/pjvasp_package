@@ -1,3 +1,13 @@
+"""
+deformation module
+
+This module provides functions for calculating deformation matrices. 
+Deformation analysis is important for studying the mechanical behavior of materials under stress.
+
+Functions:
+    - cal_deform_matrix: Calculate the deformation matrix for a given structure.
+"""
+
 from ase import Atoms
 import numpy as np
 

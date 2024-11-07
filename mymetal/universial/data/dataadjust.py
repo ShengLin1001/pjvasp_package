@@ -1,3 +1,18 @@
+"""
+dataadjust submodule
+
+This submodule provides functions for adjusting data structures. It includes functions for removing blank spaces, combining lists,
+normalizing values, and justifying text. These functions are designed to streamline common tasks in materials science simulations
+and data handling.
+
+Functions:
+    - rm_blank: Remove blank spaces from a list of strings.
+    - my_add_list: Combine two lists and sort them.
+    - normalize_float_int: Normalize values by converting them to floats and removing trailing zeros.
+    - myjust: Justify text to the left or right.
+    - my_down_up: Enlarge a list by moving its elements up or down.
+"""
+
 from inspect import getargvalues, currentframe, stack
 from mymetal.universial.check.checkinput import check_input
 

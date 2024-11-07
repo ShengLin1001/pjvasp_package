@@ -1,3 +1,14 @@
+"""
+checkinput submodule
+
+This submodule provides functions for checking the validity of input data and parameters. It includes functions for checking
+the presence of input arguments and their data types. These functions are designed to streamline common tasks in materials
+science simulations and data handling.
+
+Functions:
+    - check_input: Check the presence of input arguments and their data types.
+"""
+
 from inspect import stack
 
 ##############################################################

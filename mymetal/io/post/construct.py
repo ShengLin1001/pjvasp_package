@@ -1,3 +1,12 @@
+"""
+construct submodule
+
+This submodule provides functions for generating content for post-processing tasks related to materials simulations designed for mymetal.post subpackage.
+
+Functions:
+    - create_content: Creates the content required for post-processing tasks.
+"""
+
 from inspect import getargvalues, currentframe, stack
 from mymetal.universial.check.checkinput import check_input
 from mymetal.universial.data.dataadjust import myjust

@@ -1,9 +1,23 @@
+"""
+vasp module
+
+This module provides functions for reading and writing VASP (Vienna Ab initio Simulation Package) 
+input and output files. Taken from ase.io.vasp 3.22.1, but the ase version isn't restricted to 3.22.1.
+I reviesd the `my_write_vasp()` function to add a lattice_scale_factor argument, and the `my_read_vasp()` function to return a additional lattice_constant argument.
+
+Functions:
+    my_read_vasp: Reads a VASP file and returns its content.
+    my_write_vasp: Writes data to a VASP file.
+    read_vasp_list: Reads a list of VASP files and returns their contents.
+"""
+
+
 from ase.utils import reader, writer
 from ase import Atoms
 import numpy as np
 import re
-from ase.io.vasp import get_atomtypes_from_formula, atomtypes_outpot
-from ase.io.vasp import _symbol_count_from_symbols, _write_symbol_count
+from ase.io import ParseError
+from pathlib import Path
 
 @reader
 def my_read_vasp(filename='CONTCAR') -> Atoms:
@@ -140,14 +154,16 @@ def my_read_vasp(filename='CONTCAR') -> Atoms:
             constraints.append(FixAtoms(indices))
         if constraints:
             atoms.set_constraint(constraints)
-    return atoms
+    return atoms, lattice_constant
 
 # my write function
 @writer
 def my_write_vasp(filename,
                atoms,
                label=None,
+               ##########################################################################################
                lattice_scale_factor = 1,
+               ##########################################################################################
                direct=True,
                sort=None,
                symbol_count=None,
@@ -184,7 +200,9 @@ def my_write_vasp(filename,
     if direct:
         coord = atoms.get_scaled_positions(wrap=wrap)
     else:
+        ##########################################################################################
         coord = atoms.get_positions(wrap=wrap)/lattice_scale_factor
+        ##########################################################################################
 
     constraints = atoms.constraints and not ignore_constraints
 
@@ -234,12 +252,14 @@ def my_write_vasp(filename,
             label += '%2s ' % sym
     fd.write(label + '\n')
 
+    ##########################################################################################
     # Write unitcell in real coordinates and adapt to VASP convention
     # for unit cell
     # ase Atoms doesn't store the lattice constant separately, so always
     # write 1.0.
     fd.write('%19.16f\n' % lattice_scale_factor)  # pj add
     scaled_cell = atoms.get_cell()/lattice_scale_factor  # pj add
+    ##########################################################################################
     if long_format:
         latt_form = ' %21.16f'
     else:
@@ -287,3 +307,139 @@ def read_vasp_list(filenames: list = None, format: str = None) -> list:
         Atoms_list.append(my_file)
     return Atoms_list
 
+# taken from ase.io.vasp 3.22.1
+def get_atomtypes(fname):
+    """Given a file name, get the atomic symbols.
+
+    The function can get this information from OUTCAR and POTCAR
+    format files.  The files can also be compressed with gzip or
+    bzip2.
+
+    """
+    fpath = Path(fname)
+
+    atomtypes = []
+    atomtypes_alt = []
+    if fpath.suffix == '.gz':
+        import gzip
+        opener = gzip.open
+    elif fpath.suffix == '.bz2':
+        import bz2
+        opener = bz2.BZ2File
+    else:
+        opener = open
+    with opener(fpath) as fd:
+        for line in fd:
+            if 'TITEL' in line:
+                atomtypes.append(line.split()[3].split('_')[0].split('.')[0])
+            elif 'POTCAR:' in line:
+                atomtypes_alt.append(line.split()[2].split('_')[0].split('.')[0])
+
+    if len(atomtypes) == 0 and len(atomtypes_alt) > 0:
+        # old VASP doesn't echo TITEL, but all versions print out species lines
+        # preceded by "POTCAR:", twice
+        if len(atomtypes_alt) % 2 != 0:
+            raise ParseError(f'Tried to get atom types from {len(atomtypes_alt)} "POTCAR": '
+                              'lines in OUTCAR, but expected an even number')
+        atomtypes = atomtypes_alt[0:len(atomtypes_alt)//2]
+
+    return atomtypes
+
+# taken from ase.io.vasp 3.22.1
+def atomtypes_outpot(posfname, numsyms):
+    """Try to retrieve chemical symbols from OUTCAR or POTCAR
+
+    If getting atomtypes from the first line in POSCAR/CONTCAR fails, it might
+    be possible to find the data in OUTCAR or POTCAR, if these files exist.
+
+    posfname -- The filename of the POSCAR/CONTCAR file we're trying to read
+
+    numsyms -- The number of symbols we must find
+
+    """
+    posfpath = Path(posfname)
+
+    # Check files with exactly same path except POTCAR/OUTCAR instead
+    # of POSCAR/CONTCAR.
+    fnames = [posfpath.with_name('POTCAR'),
+              posfpath.with_name('OUTCAR')]
+    # Try the same but with compressed files
+    fsc = []
+    for fnpath in fnames:
+        fsc.append(fnpath.parent / (fnpath.name + '.gz'))
+        fsc.append(fnpath.parent / (fnpath.name + '.bz2'))
+    for f in fsc:
+        fnames.append(f)
+    # Code used to try anything with POTCAR or OUTCAR in the name
+    # but this is no longer supported
+
+    tried = []
+    for fn in fnames:
+        if fn in posfpath.parent.iterdir():
+            tried.append(fn)
+            at = get_atomtypes(fn)
+            if len(at) == numsyms:
+                return at
+
+    raise ParseError('Could not determine chemical symbols. Tried files ' +
+                     str(tried))
+
+# taken from ase.io.vasp 3.22.1
+def get_atomtypes_from_formula(formula):
+    """Return atom types from chemical formula (optionally prepended
+    with and underscore).
+    """
+    from ase.symbols import string2symbols
+    symbols = string2symbols(formula.split('_')[0])
+    atomtypes = [symbols[0]]
+    for s in symbols[1:]:
+        if s != atomtypes[-1]:
+            atomtypes.append(s)
+    return atomtypes
+
+# taken from ase.io.vasp 3.22.1
+def _symbol_count_from_symbols(symbols):
+    """Reduce list of chemical symbols into compact VASP notation
+
+    args:
+        symbols (iterable of str)
+
+    returns:
+        list of pairs [(el1, c1), (el2, c2), ...]
+    """
+    sc = []
+    psym = symbols[0]
+    count = 0
+    for sym in symbols:
+        if sym != psym:
+            sc.append((psym, count))
+            psym = sym
+            count = 1
+        else:
+            count += 1
+    sc.append((psym, count))
+    return sc
+
+# taken from ase.io.vasp 3.22.1
+def _write_symbol_count(fd, sc, vasp5=True):
+    """Write the symbols and numbers block for POSCAR or XDATCAR
+
+    Args:
+        f (fd): Descriptor for writable file
+        sc (list of 2-tuple): list of paired elements and counts
+        vasp5 (bool): if False, omit symbols and only write counts
+
+    e.g. if sc is [(Sn, 4), (S, 6)] then write::
+
+      Sn   S
+       4   6
+
+    """
+    if vasp5:
+        for sym, _ in sc:
+            fd.write(' {:3s}'.format(sym))
+        fd.write('\n')
+
+    for _, count in sc:
+        fd.write(' {:3d}'.format(count))
+    fd.write('\n')

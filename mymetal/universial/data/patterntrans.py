@@ -1,3 +1,14 @@
+"""
+patterntrans submodule
+
+This submodule provides functions for transforming data patterns. It includes functions for generating regular expressions
+from input data and parameters. These functions are designed to streamline common tasks in materials science simulations
+and data handling.
+
+Functions:
+    - my_pattern_trans: Generate a regular expression from input data and parameters.
+"""
+
 from inspect import getargvalues, currentframe, stack
 from mymetal.universial.check.checkinput import check_input
 from mymetal.universial.print.printafter import print_after_blank

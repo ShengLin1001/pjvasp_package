@@ -1,3 +1,14 @@
+"""
+dataset module
+
+This module provides functions for handling datasets, including creating custom datasets and computing statistics.
+
+Functions:
+    - CustomDataset: Custom dataset class for handling image data.
+    - get_all_data: Get all image file paths and their corresponding labels.
+    - get_mean_std: Compute mean and standard deviation for training data.
+"""
+
 import os
 import torch
 from torch.utils.data import Dataset

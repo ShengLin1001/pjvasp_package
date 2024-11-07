@@ -1,3 +1,12 @@
+"""
+plot module
+
+This module provides functions for data visualization, including displaying images and plots.
+
+Functions:
+    - my_imshow: Display image for Tensor.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 

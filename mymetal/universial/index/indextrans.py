@@ -1,3 +1,13 @@
+"""
+indextrans submodule
+
+This submodule contains functions for converting between three-index and four-index notation for HCP crystals.
+
+Functions:
+    - three_index_to_four_index: Converts a three-index notation to a four-index notation for HCP crystals, or vice versa.
+"""
+
+
 import numpy as np
 
 def three_index_to_four_index(index: list = None, reverse: bool = False) -> list:

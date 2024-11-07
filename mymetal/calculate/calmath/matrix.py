@@ -1,3 +1,15 @@
+"""
+matrix module
+
+This module provides functions for performing matrix operations, particularly 
+focused on the computation of Hermite normal forms and other linear algebra 
+tools. These are useful for analyzing crystal structures and other material properties 
+that can be represented through matrices.
+
+Functions:
+    - hermite_normal_form: Compute the Hermite normal form of a matrix.
+"""
+
 import numpy as np
 
 def hermite_normal_form(matrix):
@@ -54,10 +66,3 @@ def hermite_normal_form(matrix):
             hnf[i] -= q * hnf[:, k]
 
     return hnf
-
-# # Example usage
-# if __name__ == "__main__":
-#     matrix = np.array([[1, 2], [0, 1]])
-#     hnf_matrix = hermite_normal_form(matrix)
-#     print("Hermite Normal Form of the matrix:")
-#     print(hnf_matrix)

@@ -1,3 +1,14 @@
+"""
+surfenergy module
+
+This module provides functions for calculating surface energy of materials. 
+Surface energy is an important property for materials science, especially 
+in the study of material interfaces, thin films, and catalysis.
+
+Functions:
+    - cal_surface_energy: Calculate the surface energy of a given material structure.
+"""
+
 from ase import Atoms
 
 def cal_surface_energy(bulk_energy: float = None,

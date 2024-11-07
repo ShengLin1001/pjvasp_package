@@ -1,3 +1,14 @@
+"""
+plot submodule
+
+This submodule contains functions for creating customized plots.
+
+Functions:
+    - my_plot: Creates a customized matplotlib figure with specific layout adjustments.
+    - my_plot_brokenaxed: Creates a broken axes plot with customized layout and legend settings.
+"""
+
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure

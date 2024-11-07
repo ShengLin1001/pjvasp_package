@@ -1,3 +1,15 @@
+"""
+fixatom submodule
+
+This submodule provides functions for fixing atoms in a structure. It includes functions for fixing atoms based on
+their indices or a boolean mask. These functions are designed to streamline common tasks in materials science simulations
+and data handling.
+
+Functions:
+    - fixatoms: Fix atoms in a structure based on their indices or a boolean mask.
+"""
+
+
 from ase.constraints import FixAtoms
 from ase import Atoms
 

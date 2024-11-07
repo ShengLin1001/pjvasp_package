@@ -1,4 +1,19 @@
+"""
+confusionmatrix module
 
+This module provides a class for creating confusion matrices, which are used to evaluate the performance of classification models.
+
+Classes:
+    - ConfusionMatrix: Class for creating confusion matrices.
+
+Functions:
+    - plot: Plots the confusion matrix.
+    - summary: Computes the accuracy, precision, recall, and specificity of the model.
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+from prettytable import PrettyTable
 # take from https://blog.csdn.net/weixin_43760844/article/details/115208925
 class ConfusionMatrix(object):
 

@@ -1,3 +1,14 @@
+"""
+stretch module
+
+This module provides functions for calculating relative stretch and lattice stretching, 
+important for studying material deformation and mechanical properties.
+
+Functions:
+    - cal_relative_stretch: Calculate the relative stretch of a material.
+    - cal_stretch: Calculate the total stretch of a material.
+"""
+
 from mymetal.calculate.calmechanics.strain import cal_strain_matrix_root
 from ase import Atoms
 from hetbuilder import Interface

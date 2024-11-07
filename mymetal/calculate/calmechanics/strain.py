@@ -1,3 +1,18 @@
+"""
+strain module
+
+This module provides functions for calculating various types of strain, including 
+principal strain, shear strain, and von Mises strain. Strain analysis is vital 
+in the study of material plasticity and mechanical properties.
+
+Functions:
+    - cal_principal_and_shear_strain: Calculate the principal and shear strains.
+    - cal_principal_and_shear_strain_root: Calculate the square root of principal and shear strains.
+    - cal_strain_matrix: Calculate the strain matrix for a given structure.
+    - cal_strain_matrix_root: Calculate the square root of the strain matrix.
+    - cal_von_mises_strain: Calculate the von Mises strain.
+"""
+
 from ase import Atoms
 import numpy as np
 from numpy import array

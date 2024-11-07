@@ -1,3 +1,19 @@
+"""
+calhetero module
+
+This module provides functions for comparing atoms, calculating atom numbers, 
+analyzing relative differences, and identifying mismatches between structures. 
+It also includes functionality for filtering results and calculating lattice stretching.
+
+Functions:
+    - compare_atoms: Compare atoms between different structures.
+    - cal_atom_num: Calculate the number of atoms in a given structure.
+    - relative_diff: Calculate the relative difference between values.
+    - cal_mismatch: Calculate the mismatch between two structures.
+    - filter_results: Filter calculation results based on criteria.
+    - cal_stretch_lattice: Calculate lattice stretching.
+"""
+
 from ase import Atoms
 from mymetal.build.film.findhetero import build_supercells
 from numpy import array

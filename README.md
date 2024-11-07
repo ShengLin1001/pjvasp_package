@@ -1,50 +1,79 @@
 # pjvasp_package
 
-Package for DFT calculations
+A package designed for modeling and postprocessing metal systems, with a special focus on thin film applications.
 
-# Install this package:
-
-## --user for all virtual environment
+## Install this package:
 
 ```shell
-pip3 install --upgrade --user git+https://github.com/ShengLin1001/pjvasp_package.git
+pip install -r requirements.txt
+pip install git+https://github.com/BinglunYin/myalloy_package.git
+###########
+pip install git+https://github.com/ShengLin1001/pjvasp_package.git
+# or, download the repository.
+pip install -e  .
+###########
+pip uninstall mymetal-pkg
 ```
 
-## Recommended
-Firstly, you need to download .zip and unzip it (Insteading, just cloning using desktop GitHub!)
-
-Secondly, enter the family directory, and run the following bash command
+## Structure: The documentation is currently under construction using sphinx.
 
 ```shell
-pip3 install --user -e  .  
+./mymetal/
+├── calculate
+│   ├── calenergy
+│   ├── calmath
+│   ├── calmechanics
+│   ├── calmismatch
+│   └── calqm
+├── example
+│   ├── test-cut
+│   ├── test-generate-bulk
+│   ├── test-hetbuilder-fixatom
+│   ├── test-hydroxylated
+│   ├── test-hydroxylated-custom
+│   ├── test-post
+│   ├── test-stack
+│   └── test-stretch
+├── io
+│   ├── post
+│   └── vasp.py
+├── ml
+│   ├── confusionmatrix.py
+│   ├── dataset.py
+│   ├── model.py
+│   └── plot.py
+├── post
+│   ├── newmain.py
+│   └── oldmain.py
+└── universial
+    ├── atom
+    ├── check
+    ├── data
+    ├── index
+    ├── matrix
+    ├── plot
+    ├── print
+    └── search
+
+29 directories, 7 files
 ```
 
-## Uninstall
+Each module and function includes a docstring. If you have any questions, please refer to the source code or use the help() function.
+
+I am working on generating the documentation directly from the docstrings. The /mymetal/example/ directory contains all the special functions I have developed.
+
+## Additional requirements for ml, heterostructure.
+
 ```shell
-pip3 uninstall mymetal-pkg
+############## jupyter
+# iprPy
+
+############## ml package
+# torch
+# torchvision
+# scikit-learn
+
+############## find heterostructure
+# hetbuilder
 ```
-
-# some fixed problems
-
-## when i run the test-post/*.py, i found the output file has been generated in the root directory of pjvasp_package
-
-we should add fllowing python commands
-
-```shell
-import os
-# get the path of those script
-script_dir = os.path.dirname(__file__)
-# set the working path
-os.chdir(script_dir)
-```
-
-# some fixing problems
-
-# unfilled code
-
-root/create_package.py  generate the structure of package
-
-build/extrfilm.py
-
-universal/printafter.py  
 

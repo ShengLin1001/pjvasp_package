@@ -1,3 +1,15 @@
+"""
+datachange submodule
+
+This submodule provides functions for changing data formats. It includes functions for converting lists to strings, strings to dictionaries, 
+and dictionaries to strings. These functions are designed to streamline common tasks in materials science simulations and data handling.
+
+Functions:
+    - list_to_char: Convert a list of characters or dictionaries to a string.
+    - char_to_dic: Convert a string to a dictionary.
+    - dic_to_char: Convert a dictionary to a string.
+"""
+
 from inspect import getargvalues, currentframe, stack
 from mymetal.universial.check.checkinput import check_input
 from mymetal.universial.print.printafter import print_after_blank

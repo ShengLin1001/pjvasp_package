@@ -1,59 +1,38 @@
 ./mymetal/
-├── build
-│   ├── film
-│   │   ├── extrfilm.py
-│   │   ├── findcubic.py
-│   │   ├── findhetero.py
-│   │   ├── findprim.py
-│   │   ├── hydroxyl.py
-│   │   ├── __init__.py
-│   │   └── stretch.py
-│   └── __init__.py
 ├── calculate
+│   ├── calenergy
+│   ├── calmath
 │   ├── calmechanics
-│   │   ├── deformation.py
-│   │   ├── __init__.py
-│   │   ├── strain.py
-│   │   └── stress.py
 │   ├── calmismatch
-│   │   ├── calhetero.py
-│   │   └── __init__.py
-│   ├── calqm.py
-│   │   ├── __init__.py
-│   │   └── kpoints.py
-│   └── __init__.py
-├── __init__.py
+│   └── calqm
+├── example
+│   ├── test-cut
+│   ├── test-generate-bulk
+│   ├── test-hetbuilder-fixatom
+│   ├── test-hydroxylated
+│   ├── test-hydroxylated-custom
+│   ├── test-post
+│   ├── test-stack
+│   └── test-stretch
 ├── io
-│   ├── __init__.py
 │   ├── post
-│   │   ├── construct.py
-│   │   ├── __init__.py
-│   │   └── write.py
 │   └── vasp.py
+├── ml
+│   ├── confusionmatrix.py
+│   ├── dataset.py
+│   ├── model.py
+│   └── plot.py
 ├── post
-│   ├── __init__.py
 │   ├── newmain.py
 │   └── oldmain.py
 └── universial
     ├── atom
-    │   ├── delatom.py
-    │   ├── fixatom.py
-    │   ├── __init__.py
-    │   └── moveatom.py
     ├── check
-    │   ├── checkinput.py
-    │   └── __init__.py
     ├── data
-    │   ├── dataadjust.py
-    │   ├── datachange.py
-    │   ├── __init__.py
-    │   └── patterntrans.py
-    ├── __init__.py
+    ├── index
+    ├── matrix
+    ├── plot
     ├── print
-    │   ├── __init__.py
-    │   └── printafter.py
     └── search
-        ├── find.py
-        └── __init__.py
 
-16 directories, 41 files
+29 directories, 7 files

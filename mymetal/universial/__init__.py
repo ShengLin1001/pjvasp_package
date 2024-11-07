@@ -1,3 +1,22 @@
+"""
+mymetal.universial
+
+This subpackage provides a collection of utility functions and tools that are commonly used across various 
+modules in the `mymetal` package. It includes functions for input validation, data adjustments, atom manipulation, 
+data transformations, matrix adjustments, and more. These utilities are designed to streamline common tasks 
+in materials science simulations and data handling.
+
+Modules:
+    - check: Module for input validation and error checking.
+    - data: Module for data adjustments and transformations.
+    - atom: Module for atom manipulation and analysis.
+    - search: Module for searching and extracting data from files.
+    - print: Module for printing messages and warnings.
+    - matrix: Module for matrix adjustments and transformations.
+    - index: Module for indexing transformations and adjustments.
+    - plot: Module for plotting data and results.
+"""
+
 from mymetal.universial.check.checkinput import check_input
 from mymetal.universial.data.dataadjust import rm_blank, my_add_list, my_down_up, myjust, normalize_float_int
 from mymetal.universial.atom.moveatom import move_atoms
@@ -9,6 +28,7 @@ from mymetal.universial.atom.delatom import mydel_pos_type, check_position
 from mymetal.universial.atom.fixatom import fixatoms
 from mymetal.universial.matrix.adjust import adjust_matrix
 from mymetal.universial.index.indextrans import three_index_to_four_index
+from mymetal.universial.plot.plot import my_plot, my_plot_brokenaxed
 
 __all__ = ['check_input',
            'rm_blank', 'my_add_list', 'my_down_up', 'myjust', 'normalize_float_int',
@@ -20,5 +40,6 @@ __all__ = ['check_input',
                     'mydel_pos_type', 'check_position',
                     'fixatoms',
                     'adjust_matrix',
-                    'three_index_to_four_index'             
+                    'three_index_to_four_index',
+                    'my_plot', 'my_plot_brokenaxed'             
 ]

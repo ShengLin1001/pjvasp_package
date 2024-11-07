@@ -1,8 +1,8 @@
 Metadata-Version: 2.1
 Name: mymetal-pkg
-Version: 0.2.0
-Summary: Package_for_Computational_Metallurgy
+Version: 0.3.0
+Summary: A comprehensive package for computational metallurgy, providing tools for material property calculations, structure modeling, and analysis.
 Home-page: https://github.com/ShengLin1001/pjvasp_package.git
 Author: J. Pei
 Author-email: zju_pj@163.com
-License: #
+License: MIT

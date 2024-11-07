@@ -1,3 +1,13 @@
+"""
+find submodule
+
+This submodule contains functions for finding and extracting matched lines from a file.
+
+Functions:
+    - find_line_position: Find the search string in a file.
+    - extract_line_at_position: Extract the line at a certain position in a file.
+"""
+
 from inspect import getargvalues, currentframe, stack
 from mymetal.universial.check.checkinput import check_input
 from mymetal.universial.data.dataadjust import my_down_up

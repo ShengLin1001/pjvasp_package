@@ -1,3 +1,28 @@
+"""
+newmain module
+
+This module provides post-processing utilities for materials simulations and analysis.
+
+Classes:
+    - PostTime: Post-processing for time-related data.
+    - PostData: Post-processing for general data.
+    - PostData2: Post-processing for general data.
+    - PostDiff: Post-processing for differences between files.
+    - PostParam: Post-processing for VASP input parameters.
+    - PostParam2: Post-processing for VASP input parameters.
+    - PostParamSta: Post-processing for VASP input parameters.
+    - PostWarning: Post-processing for warnings.
+    - PostEinplane: Post-processing for in-plane straining of transversely isotropic materials/slabs.
+
+Functions:
+    - myfindall: Find all instances of a pattern in a file.
+    - read_OUTCAR: Read the OUTCAR file.
+    - check_convergence: Check if the simulation has converged.
+    - write_convergence: Write the convergence status to a file.
+    - check_same: Check if the values are the same.
+    - write_check: Write the check results to a file.
+"""
+
 # pre-function
 from re import findall, search, IGNORECASE
 from os import listdir

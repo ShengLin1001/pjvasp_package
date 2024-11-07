@@ -1,3 +1,15 @@
+"""
+delatom submodule
+
+This submodule provides functions for deleting atoms from a structure. It includes functions for deleting atoms based on
+their positions, types, or both. These functions are designed to streamline common tasks in materials science simulations
+and data handling.
+
+Functions:
+    - mydel_pos_type: Delete atoms based on their positions and types.
+    - check_position: Check if an atom is within a specified position range.
+"""
+
 from ase import Atoms
 from numpy import ndarray, array
 from mymetal.universial.print.printafter import print_after_blank
