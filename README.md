@@ -19,6 +19,8 @@ pip uninstall mymetal-pkg
 
 ```shell
 ./mymetal/
+├── build
+│   └── film
 ├── calculate
 │   ├── calenergy
 │   ├── calmath
@@ -55,7 +57,7 @@ pip uninstall mymetal-pkg
     ├── print
     └── search
 
-29 directories, 7 files
+31 directories, 7 files
 ```
 
 Each module and function includes a docstring. If you have any questions, please refer to the source code or use the help() function.

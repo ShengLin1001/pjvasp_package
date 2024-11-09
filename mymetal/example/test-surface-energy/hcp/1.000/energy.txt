@@ -1,0 +1,3 @@
+./bulk  -23.50776959
+./full_relaxed_surface_0001  -46.19564078
+./partial_relaxed_surface_0001  -46.20818248
