@@ -28,6 +28,8 @@ Modules:
 #from mymetal.calculate.calmechanics.stretch import (cal_relative_stretch, cal_stretch)
 #from mymetal.calculate.calmath.matrix import (hermite_normal_form)
 from mymetal.calculate.calenergy.surfenergy import cal_surface_energy
+from mymetal.calculate.electronic_structure.plotter import *
+from mymetal.calculate.electronic_structure.universial import *
 #import mymetal.calqm.kpoints
 __all__ = [
             'compare_atoms', 'cal_atom_num', 'relative_diff', 'cal_mismatch', 'filter_results', 'cal_stretch_lattice',
