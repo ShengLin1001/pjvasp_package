@@ -356,6 +356,11 @@ class BSPlotter:
         uniq_l = []
         temp_ticks = list(zip(ticks["distance"], ticks["label"], strict=True))
         for idx, t in enumerate(temp_ticks):
+            ############################ PJ revised ############################
+            if t[1] in ['GAMMA', 'gamma', 'Gamma']:
+                t = (t[0], r"$\Gamma$")
+            print(t)
+            ####################################################################
             if idx == 0:
                 uniq_d.append(t[0])
                 uniq_l.append(t[1])
@@ -631,7 +636,7 @@ class BSPlotter:
         vbm_min, cbm_max = [], []
         data = []
         one_is_metal = False
-
+        print('1')
         colors = next(iter(plt.rcParams["axes.prop_cycle"].by_key().values()))
         for ibs, bs in enumerate(self._bs):
             # set first bs in the list as ref for rescaling the distances of the other bands
@@ -658,8 +663,10 @@ class BSPlotter:
                 ls = "-" if str(sp) == "1" else "--"
 
                 # else case assumes bs_labels is Sequence[str]
+                print('hello')
+                print(bs_labels)
                 bs_label = f"Band {ibs} {sp.name}" if bs_labels is None else f"{bs_labels[ibs]} {sp.name}"
-
+                print(bs_label)
                 handles.append(mlines.Line2D([], [], lw=2, ls=ls, color=colors[ibs], label=bs_label))
 
                 distances, energies = data["distances"], data["energy"][str(sp)]
