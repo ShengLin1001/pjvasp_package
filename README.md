@@ -26,7 +26,8 @@ pip uninstall mymetal-pkg
 │   ├── calmath
 │   ├── calmechanics
 │   ├── calmismatch
-│   └── calqm
+│   ├── calqm
+│   └── electronic_structure
 ├── example
 │   ├── test-cut
 │   ├── test-generate-bulk
@@ -35,7 +36,8 @@ pip uninstall mymetal-pkg
 │   ├── test-hydroxylated-custom
 │   ├── test-post
 │   ├── test-stack
-│   └── test-stretch
+│   ├── test-stretch
+│   └── test-surface-energy
 ├── io
 │   ├── post
 │   └── vasp.py
@@ -57,7 +59,7 @@ pip uninstall mymetal-pkg
     ├── print
     └── search
 
-31 directories, 7 files
+33 directories, 7 files
 ```
 
 Each module and function includes a docstring. If you have any questions, please refer to the source code or use the help() function.
