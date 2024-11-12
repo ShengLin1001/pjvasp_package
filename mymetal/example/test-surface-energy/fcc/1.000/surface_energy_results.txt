@@ -1,0 +1,2 @@
+Partial Relaxed Surface Energy: 0.0611052275 eV/Å²
+Full Relaxed Surface Energy: 0.0611047153 eV/Å²
