@@ -267,7 +267,8 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
                                 if_tight_layout: bool= False,
                                 vline_list: list= [],
                                 vline_colors: list= [],
-                                save_path: str='./p_post_energy_components.jpg') -> Tuple[Figure, Axes]:
+                                save_path: str='./p_post_energy_components.jpg',
+                                bbox_to_anchor: tuple=(0.5, 0.95)) -> Tuple[Figure, Axes]:
     """
     Generates plots for energy components with polynomial fits and comparisons.
 
@@ -355,7 +356,7 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
             ax2.tick_params(which='minor', direction='in', color = color, length=4, width=3.0, pad = 10)
             ax2.set_zorder(ax.get_zorder() - 1)
             ax.spines['right'].set_visible(False)
-        fig.general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=(0.5, 0.95)))
+        fig.general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=bbox_to_anchor))
         ax.set_title(f'{tag.upper()}', fontsize=28)
         #ax.text(0.4, 0.9, f'{tag.upper()}', transform=ax.transAxes, fontsize=28)
         for i, vline in enumerate(vline_list):
@@ -366,4 +367,5 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
             break
     if if_tight_layout:
         fig.tight_layout()
+    plt.savefig(save_path, dpi=300)
     return fig, axes
