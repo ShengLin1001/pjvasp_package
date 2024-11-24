@@ -266,7 +266,39 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
                                 atoms_number: int = 1,
                                 if_tight_layout: bool= False,
                                 vline_list: list= [],
-                                vline_colors: list= []):
+                                vline_colors: list= [],
+                                save_path: str='./p_post_energy_components.jpg') -> Tuple[Figure, Axes]:
+    """
+    Generates plots for energy components with polynomial fits and comparisons.
+
+    Args:
+        fig_subp (List[int]): Subplot grid dimensions [rows, columns]. Defaults to [4, 4].
+        one_fig_wh (List[float]): Figure width and height in inches. Defaults to [11.72, 8.205].
+        fig_sharex (bool): Whether subplots share the x-axis. Defaults to False.
+        grid (bool): Whether to include a grid in the plots. Defaults to True.
+        labelpad (int): Padding for axis labels. Defaults to 15.
+        tick_pad (int): Padding for tick marks. Defaults to 10.
+        left (float): Left margin of the figure. Defaults to 1.918.
+        top (float): Top margin of the figure. Defaults to 0.9517.
+        axes_height (float): Height of individual axes. Defaults to 5.89.
+        axes_width (float): Width of individual axes. Defaults to 7.31.
+        dic_list (list): List of dictionaries containing data for plotting.
+        label_list (list): List of labels for each dataset in `dic_list`.
+        color_list (list): List of colors for plots. Defaults to a predefined color list.
+        xlabel (str): Label for the x-axis. Defaults to "Directory".
+        poly_fit_e (int): Degree of the polynomial for fitting. Defaults to 3.
+        fit_count (int): Number of points for the fitted curve. Defaults to 100.
+        color (str): Color for the twin y-axis plots. Defaults to 'tab:red'.
+        atoms_number (int): Number of atoms to normalize the data. Defaults to 1.
+        if_tight_layout (bool): Whether to apply `tight_layout` for better spacing. Defaults to False.
+        vline_list (list): List of x-coordinates for vertical lines. Defaults to an empty list.
+        vline_colors (list): List of colors for the vertical lines. Defaults to an empty list.
+        save_path (str): Path to save the plot. Defaults to './p_post_energy_components.jpg'.
+
+    Returns:
+        Tuple[Figure, Axes]: The figure and axes objects for the generated plots.
+
+    """
     fig_subp = fig_subp
     fig, axes = my_plot(one_fig_wh, fig_subp, fig_sharex, grid, labelpad, tick_pad, 
                         left, top, axes_height, axes_width)
