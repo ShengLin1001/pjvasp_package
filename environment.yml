@@ -1,6 +1,6 @@
 # conda env create -f environment.yml
 
-name: myenv_dft
+name: mydft
 channels:
   - conda-forge 
 dependencies:
