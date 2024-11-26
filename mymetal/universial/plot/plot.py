@@ -6,19 +6,19 @@ This submodule contains functions for creating customized plots.
 Functions:
     - my_plot: Creates a customized matplotlib figure with specific layout adjustments.
     - my_plot_brokenaxed: Creates a broken axes plot with customized layout and legend settings.
+    - my_plot_energy_components: Generates plots for energy components with polynomial fits and comparisons.
+    - my_plot_interlayer_distance: Calculates and plots the interlayer distances from the given atomic positions.
 """
 
-
-import matplotlib.pyplot as plt
+from ase import Atoms
 import numpy as np
+import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
-from typing import List, Tuple, Union
-from matplotlib.ticker import MultipleLocator, AutoMinorLocator
-from brokenaxes import brokenaxes
-from matplotlib.ticker import MaxNLocator
 from matplotlib.colors import to_rgb
-
+from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
+from brokenaxes import brokenaxes
+from typing import List, Tuple, Union
 
 def my_plot(
     one_fig_wh: List[float] = [10.72, 8.205],    
@@ -369,3 +369,55 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
         fig.tight_layout()
     plt.savefig(save_path, dpi=300)
     return fig, axes
+
+def my_plot_interlayer_distance(atoms: Atoms= None, if_plot: bool = True, if_save: bool = True, save_plot_path: str = './p_post_inter_distance.jpg', 
+                                save_txt_path: str = './p_post_inter_distance.txt') -> np.ndarray:
+    """
+    Calculates and plots the interlayer distances from the given atomic positions.
+
+    Args:
+        atoms (Atoms): Atomic structure object containing atom positions.
+        if_plot (bool): If True, generates and displays the plot of interlayer distances.
+        if_save (bool): If True, saves the plot and data to specified paths.
+        save_plot_path (str): Path to save the generated plot image.
+        save_txt_path (str): Path to save the interlayer distance data to a text file.
+
+    Returns:
+        np.ndarray: Array of normalized interlayer distances.
+    
+    Notes:
+        - The plot visualizes the interlayer distances with respect to the index of layers.
+        - Data is saved in three sections: original, absolute, and normalized (relative).
+    """
+    atom = atoms.copy()
+    positions = atom.get_positions()
+    zo = positions[:,2]
+    z = np.array(sorted(zo))
+    z = z[1:] - z[:-1]
+    zabs = z.copy()
+    zref = z[len(z)//2]
+    z = z/zref -1
+    if if_plot:
+        fig, ax = my_plot(left=3.0)
+        ax.set_ylabel(rf'$d_i$/$d_{{{len(zo)//2}}}$-1')
+        ax.set_xlabel(r'index $i$ of interlayer distance $d_i$')
+        ax.plot(z, 'o', linestyle='-')
+        ax.margins(x=0.1, y=0.1)
+        if if_save:
+            plt.savefig(save_plot_path, transparent=False)
+    if if_save:
+        with open(save_txt_path, "w") as f:
+            f.write("zoriginal\n")
+            for j, value in enumerate(zo, start=1):  
+                f.write(f"{j:<4}  {value:>12.8f}\n") 
+            f.write("\n")
+            f.write("zabsolute\n")
+            for j, value in enumerate(zabs, start=1):  
+                f.write(f"{j:<4}  {value:>12.8f}\n") 
+            f.write("\n")
+            f.write("zplot\n")
+            for j, value in enumerate(z, start=1):  
+                f.write(f"{j:<4}  {value:>12.8f}\n") 
+            f.write("\n")
+    return zo, zabs, z
+
