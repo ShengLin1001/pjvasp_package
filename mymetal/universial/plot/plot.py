@@ -246,7 +246,7 @@ def my_plot_brokenaxed(
 
     return fig, ax
 
-def my_plot_energy_components(fig_subp: List[int]=[4,4],
+def my_plot_energy_components(fig_subp: List[int]=[4,5],
                                 one_fig_wh: List[float] = [11.72, 8.205],    
                                 fig_sharex: bool = False, 
                                 grid: bool = True, 
@@ -310,7 +310,19 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
     ]
     tags = [tag.lower() for tag in tagsref]
     tags = tags[1:]
-    print(tags)
+
+    for i, dic in enumerate(dic_list):
+        valid = 0
+        valide0 = 0
+        for tag in tags:
+            if tag == 'double':
+                continue
+            valid = valid + dic[tag]
+        valide0 = valid - dic['eentro']
+        dic['valid-toten'] = valid
+        dic['valid-e0'] = valide0
+    tags.insert(1, "valid-toten")
+    tags.insert(2, "valid-e0")
 
     i = 0
     j = 0
@@ -342,7 +354,7 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
             yfit_list.append(yfit)
             ax.plot(xfit, yfit, linestyle='--', color = color_list[i])
         #ax.axvline(x=2.79338179, color=color, linestyle='--', linewidth=3)
-        if len(dic_list) > 1:
+        if len(dic_list) == 2:
             diff = yfit_list[1] - yfit_list[0]
             diff_label = rf"$E_{{\mathrm{{{label_list[1]}}}}}-E_{{{label_list[0]}}}$"
             ax2 = ax.twinx() 
@@ -357,7 +369,73 @@ def my_plot_energy_components(fig_subp: List[int]=[4,4],
             ax2.set_zorder(ax.get_zorder() - 1)
             ax.spines['right'].set_visible(False)
         fig.general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=bbox_to_anchor))
-        ax.set_title(f'{tag.upper()}', fontsize=28)
+        # format title
+        title = tag.upper()
+        ax.set_title(f'{title}', fontsize=28)
+        #ax.text(0.4, 0.9, f'{tag.upper()}', transform=ax.transAxes, fontsize=28)
+        for i, vline in enumerate(vline_list):
+            ax.axvline(x=vline, color=vline_colors[i], linestyle='--', linewidth=3)
+        i=count//fig_subp[1]
+        j=count%fig_subp[1]
+        if count==(fig_subp[1]*fig_subp[0]):
+            break
+    i = 3
+    j = 0
+    for temp in ['ebands', 'pscenc', 'denc', 'xcenc', 'tewen']:
+        count = count + 1
+        ax = axes[i, j]
+        #print(count, i,j, tag)
+
+        coeff_list=[]
+        xmin = []
+        xmax = []
+        for i, dic in enumerate(dic_list):
+            x = dic['directory']
+            xmin.append(min(x))
+            xmax.append(max(x))
+            y = dic[temp]/atoms_number
+            coeff_list.append(np.polyfit(x, y, poly_fit_e))
+            ax.plot(x, y, marker='o', linestyle='', color = color_list[i], label=label_list[i])
+        ax.set_xlabel(f'{xlabel}')
+        ax.set_ylabel(f'{tag.upper()}'+' (eV/atom)')
+        #ax.set_xlim(-0.05, 0.4)
+        ax.grid(True, linestyle='--', linewidth=2)
+        yfit_list=[]
+        xfit = np.linspace(min(xmin), max(xmax), fit_count)
+        for i, coeff in enumerate(coeff_list):
+            poly = np.poly1d(coeff)
+            yfit = poly(xfit)
+            yfit_list.append(yfit)
+            ax.plot(xfit, yfit, linestyle='--', color = color_list[i])
+        #ax.axvline(x=2.79338179, color=color, linestyle='--', linewidth=3)
+        if len(dic_list) == 2:
+            diff = yfit_list[1] - yfit_list[0]
+            diff_label = rf"$E_{{\mathrm{{{label_list[1]}}}}}-E_{{{label_list[0]}}}$"
+            ax2 = ax.twinx() 
+            ax2.set_ylabel(diff_label+' (eV/atom)', color=color, labelpad = 15)
+            ax2.plot(xfit, diff, 'o', color = color, 
+                    label=diff_label, markeredgecolor=color) 
+            ax2.axhline(y=0, color=color, linestyle='--', linewidth=3)
+            ax2.tick_params(axis='y', labelcolor=color, direction='in', color = color)
+            ax2.spines['right'].set_color(color) 
+            ax2.tick_params(which='major', direction='in', color = color, length=8, width=3.0, pad = 10)
+            ax2.tick_params(which='minor', direction='in', color = color, length=4, width=3.0, pad = 10)
+            ax2.set_zorder(ax.get_zorder() - 1)
+            ax.spines['right'].set_visible(False)
+        fig.general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=bbox_to_anchor))
+        # format title
+        title = tag.upper()
+        if temp == 'ebands':
+            title2 = r'$E_{k}: E_{BANDS}$' + '\n' + 'Kinetic energy part of the electronic wavefunction'
+        elif temp == 'pscenc':
+            title2 = r'$E_{e-i}: PSCENC$' + '\n' + 'Coulomb interaction of electrons in the ionic potential field'
+        elif temp == 'denc':
+            title2 = r'$E_{e-e}: DENC$' + '\n' + 'Coulomb interaction between electrons'
+        elif temp == 'xcenc':
+            title2 = r'$E_{xc}: XCENC$' + '\n' + 'Exchange and correlation correction energy'
+        elif temp == 'tewen':
+            title2 = r'$E_{ii}: TEWEN$' + '\n' + 'Electrostatic Coulomb interaction between ion cores'
+        ax.set_title(f'{title2}', fontsize=28)
         #ax.text(0.4, 0.9, f'{tag.upper()}', transform=ax.transAxes, fontsize=28)
         for i, vline in enumerate(vline_list):
             ax.axvline(x=vline, color=vline_colors[i], linestyle='--', linewidth=3)
