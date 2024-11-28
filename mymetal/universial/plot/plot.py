@@ -30,7 +30,8 @@ def my_plot(
     left: float = 1.918, 
     top: float = 0.9517,
     axes_height: float = 5.89,
-    axes_width: float = 7.31
+    axes_width: float = 7.31,
+    grid_linewidth: float = 0.5,
 ) -> Tuple[Figure, List[Axes]]:
     """Creates a customized matplotlib figure with specific layout adjustments.
 
@@ -65,7 +66,7 @@ def my_plot(
     plt.rcParams['axes.linewidth'] = 3
     plt.rcParams['axes.grid'] = grid
     plt.rcParams['grid.linestyle'] = '--'
-    plt.rcParams['grid.linewidth'] = 0.2
+    plt.rcParams['grid.linewidth'] = grid_linewidth
     plt.rcParams["savefig.transparent"] = 'True'
     plt.rcParams['lines.linewidth'] = 3
     plt.rcParams['lines.markersize'] = 20
