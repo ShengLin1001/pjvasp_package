@@ -28,7 +28,7 @@ from mymetal.universial.atom.delatom import mydel_pos_type, check_position
 from mymetal.universial.atom.fixatom import fixatoms
 from mymetal.universial.matrix.adjust import adjust_matrix
 from mymetal.universial.index.indextrans import three_index_to_four_index
-from mymetal.universial.plot.plot import my_plot, my_plot_brokenaxed
+from mymetal.universial.plot.plot import my_plot, my_plot_brokenaxed, my_plot_energy_components, my_plot_interlayer_distance, my_plot_zpositions
 
 __all__ = ['check_input',
            'rm_blank', 'my_add_list', 'my_down_up', 'myjust', 'normalize_float_int',
@@ -41,5 +41,5 @@ __all__ = ['check_input',
                     'fixatoms',
                     'adjust_matrix',
                     'three_index_to_four_index',
-                    'my_plot', 'my_plot_brokenaxed'             
+                    'my_plot', 'my_plot_brokenaxed', 'my_plot_energy_components', 'my_plot_interlayer_distance', 'my_plot_zpositions'      
 ]

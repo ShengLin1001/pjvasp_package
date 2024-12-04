@@ -8,6 +8,7 @@ Functions:
     - my_plot_brokenaxed: Creates a broken axes plot with customized layout and legend settings.
     - my_plot_energy_components: Generates plots for energy components with polynomial fits and comparisons.
     - my_plot_interlayer_distance: Calculates and plots the interlayer distances from the given atomic positions.
+    - my_plot_zpositions: Plot z-positions.
 """
 
 from ase import Atoms
@@ -462,7 +463,7 @@ def my_plot_interlayer_distance(atoms: Atoms= None, if_plot: bool = True, if_sav
         save_txt_path (str): Path to save the interlayer distance data to a text file.
 
     Returns:
-        np.ndarray: Array of normalized interlayer distances.
+        fig, ax: for refined plot
     
     Notes:
         - The plot visualizes the interlayer distances with respect to the index of layers.
@@ -478,9 +479,9 @@ def my_plot_interlayer_distance(atoms: Atoms= None, if_plot: bool = True, if_sav
     z = z/zref -1
     if if_plot:
         fig, ax = my_plot(left=3.0)
-        ax.set_ylabel(rf'$d_i$/$d_{{{len(zo)//2}}}$-1')
+        ax.set_ylabel(rf'$d_i$/$d_{{{len(z)//2+1}}}$-1')
         ax.set_xlabel(r'index $i$ of interlayer distance $d_i$')
-        ax.plot(z, 'o', linestyle='-')
+        ax.plot(np.arange(1, len(z) + 1), z, 'o', linestyle='-')
         ax.margins(x=0.1, y=0.1)
         if if_save:
             plt.savefig(save_plot_path, transparent=False)
@@ -498,5 +499,40 @@ def my_plot_interlayer_distance(atoms: Atoms= None, if_plot: bool = True, if_sav
             for j, value in enumerate(z, start=1):  
                 f.write(f"{j:<4}  {value:>12.8f}\n") 
             f.write("\n")
-    return zo, zabs, z
+    return fig, ax
+
+def my_plot_zpositions(atoms: Atoms=None, xmargins: float = 0.1, ymargins: float = 0.1, if_save: bool=True, save_path: str = './p_post_zpositions.jpg')-> tuple:
+    """
+    Plots the z-positions of atoms and displays the thickness of the material.
+
+    Args:
+        atoms (Atoms, optional): The Atoms object containing the atomic positions. Defaults to None.
+        xmargins (float, optional): The margin space for the x-axis. Defaults to 0.1.
+        ymargins (float, optional): The margin space for the y-axis. Defaults to 0.1.
+        if_save:
+        save_path:
+
+    Returns:
+        tuple: A tuple containing the figure and axes objects of the plot.
+
+    """
+    positions = atoms.get_positions()
+    position = positions[:, 2]
+
+    sorted_position = np.sort(position)
+    thick = float(max(position) - min(position))
+    row_numbers = np.arange(1, len(sorted_position)+1)
+
+    fig, axes = my_plot(left=3.0)
+    ax = axes
+    ax.plot(row_numbers, sorted_position, '-o')
+    ax.set_xlabel(r'index $i$ of z-position $z_i$')
+    ax.set_ylabel(r'$z_i$')
+    ax.margins(x=xmargins, y=ymargins)
+    ax.text(0.05, 0.95, f'Thickness: {thick:.2f} Å', transform=ax.transAxes,
+        verticalalignment='top', horizontalalignment='left',
+        bbox=dict(facecolor='white', edgecolor='black', boxstyle='Square,pad=0.3', linewidth=2.5, alpha=1))
+    if if_save:
+        plt.savefig(save_path, transparent=False)
+    return fig, axes
 

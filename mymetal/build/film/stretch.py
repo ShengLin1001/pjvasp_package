@@ -10,17 +10,23 @@ Functions:
     - file_name: Generates a file name based on the provided directory path, base name, special name, and format type.
     - find_num_per_slab: Finds the number of atoms per slab in a thin film structure.
     - adjust_lattice_for_volume_conservation: Adjusts the lattice vectors to conserve volume after stretching.
+    - generate_bulk_from_film: Generates a bulk structure from a given thin film structure.
 """
+# For version independency, it could be instead by 'from ase.io.vasp import *'
+# The strict has been removed.
+import spglib
 
+import os
+
+import numpy as np
 from numpy import sqrt, ndarray, array
+
 from ase import Atoms
 from ase.build import bulk, surface
-# For version independency, it could be instead by 'from ase.io.vasp import *'
-import spglib
+
 from mymetal.build.film.findprim import my_find_prim
-import os
+from mymetal.build.film.extrfilm import my_extr_thick
 from mymetal.universial.atom.moveatom import move_atoms
-import numpy as np
 
 ####################################################################################################
 # # usage
@@ -348,3 +354,35 @@ def adjust_lattice_for_volume_conservation(lattice_before, lattice_after, change
     
     return adjusted_lattice_after, scaling_factor
 
+def generate_bulk_from_film(film: Atoms=None, if_find_prim: bool = False, vacuum: float=None) -> Atoms:
+    """
+    Generates a bulk structure from a given thin film. The bulk structure is created by reducing z-vacuum layers to the thin film.
+
+    Args:
+        film (Atoms, optional): The Atoms object representing the thin film. Defaults to None.
+        if_find_prim (bool, optional): Whether to find the primitive cell of the bulk structure. Defaults to False.
+
+    Returns:
+        Atoms: A new Atoms object representing the bulk structure.
+
+    Raises:
+        ValueError: If the number of layers in the film is less than or equal to 1.
+        
+    Example:
+        >>> bulk_atoms = generate_bulk_from_film(film_atoms)
+    """
+    atoms = film.copy()
+    num = len(atoms)
+    if num <= 1:
+        raise ValueError("The number of layers in the film must be greater than 1.")
+    thick = my_extr_thick(atoms)
+    if vacuum is not None:
+        vacuum = vacuum
+    else:
+        vacuum = thick/(num-1)/2
+    atoms.center(vacuum=vacuum, axis=2)
+
+    if if_find_prim:
+        atoms = my_find_prim(atoms)
+
+    return atoms
