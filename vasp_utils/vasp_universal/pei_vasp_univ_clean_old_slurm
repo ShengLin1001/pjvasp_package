@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# ====================
+# Check if the working directory exists
+# ====================
+workdir="./y_dir"
+if [ ! -d "$workdir" ]; then
+    echo "==========================================================="
+    echo "Error: Work directory $workdir does not exist!"
+    echo "==========================================================="
+    exit 1
+fi
+
+echo "==> Keeping the latest slurm file based on creation time and deleting the rest"
+
+# ====================
+# Iterate over all subdirectories in y_dir
+# ====================
+find "$workdir" -mindepth 1 -maxdepth 1 -type d | while read -r subdir; do
+    echo "==========================================================="
+    echo "Processing directory: $subdir"
+
+    # Collect all slurm-*.txt files
+    slurm_files=("$subdir"/slurm-*.out)
+
+    if [ ${#slurm_files[@]} -gt 0 ]; then
+        # Find the newest slurm file by modification time
+        newest_file=$(ls -t "$subdir"/slurm-*.out | head -n 1)
+
+        echo "Keeping: $newest_file"
+        
+        # Delete all other slurm files except the newest one
+        for slurm_file in "${slurm_files[@]}"; do
+            if [ "$slurm_file" != "$newest_file" ]; then
+                echo "Deleting: $slurm_file"
+                rm -f "$slurm_file"
+            fi
+        done
+    else
+        echo "No slurm files found in $subdir."
+    fi
+done
+
+echo "==========================================================="
+echo "All old slurm files have been deleted."
+echo "==========================================================="
+

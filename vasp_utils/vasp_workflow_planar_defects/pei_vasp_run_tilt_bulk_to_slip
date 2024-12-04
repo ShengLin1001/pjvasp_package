@@ -1,0 +1,138 @@
+#!/bin/bash
+
+
+if [ -z "$1" ]; then      # empty is true 
+    echo "==>  Please indicate which GSFE to compute. Abort!"
+    exit 
+fi
+
+
+
+srcdir=`pwd`/y_full_relax
+
+a1=`sed -n '3,3p' $srcdir/POSCAR | awk '{printf "%.16f", $1}'`
+
+b2=`sed -n '4,4p' $srcdir/POSCAR | awk '{printf "%.16f", $2}'`
+
+c1=`sed -n '5,5p' $srcdir/POSCAR | awk '{printf "%.16f", $1}'`
+c2=`sed -n '5,5p' $srcdir/POSCAR | awk '{printf "%.16f", $2}'`
+c3=`sed -n '5,5p' $srcdir/POSCAR | awk '{printf "%.16f", $3}'`
+
+echo $a1 
+echo $b2 
+echo $c1 $c2 $c3
+
+
+
+case "$1" in
+    -basal) echo "==> run GSFE for basal: "
+        workdir=y_gsfe_basal_full_relax               
+        N1=1 
+        bp1=-0.5 
+        bp2=`echo "scale=16;  1.0/3.0" | bc`                 
+        ;;
+   
+
+    -prism1w) echo "==> run GSFE for prism1w: "
+        workdir=y_gsfe_prism1w_full_relax
+        N1=1
+        bp1=0.5
+        bp2=0.0 
+        ;;
+
+
+    -pyr1n) echo "==> run GSFE for pyr1n: "
+        workdir=y_gsfe_pyr1n_full_relax
+        N1=1
+        bp1=0.5
+        bp2=-0.11
+        ;;
+
+
+    -pyr1w) echo "==> run GSFE for pyr1w: "
+        workdir=y_gsfe_pyr1w_full_relax
+        N1=1
+        bp1=0.0
+        bp2=0.5
+        ;;
+
+
+    -pyr2) echo "==> run GSFE for pyr2: "
+        workdir=y_gsfe_pyr2_full_relax
+        N1=1
+        bp1=0.0
+        bp2=0.5
+        ;;
+
+
+
+    -a1) echo "==> run GSFE for a1: "
+        workdir=y_gsfe_a1_full_relax
+        N1=1
+        bp1=1.0
+        bp2=0.0
+        ;;
+
+
+ 
+    *)  echo "==>  Option $1 not recognized. Abort!" 
+        exit
+        ;;   
+esac
+
+echo "bp1, bp2:"  $bp1  $bp2
+
+
+#========================
+
+
+da31=`echo "scale=16;  $a1 * $bp1" | bc`
+da32=`echo "scale=16;  $b2 * $bp2" | bc`
+
+
+rm -rI $workdir
+mkdir  $workdir
+cd     $workdir
+
+mkdir  y_dir
+cd     y_dir
+
+
+for ((i1=0; i1<=$N1; i1=i1+1)) ;  do
+    dirn1=`printf "%02d" "$i1"`
+    mkdir $dirn1
+    cd $dirn1
+    
+    echo '====================' $dirn1
+    cp $srcdir/{INCAR,KPOINTS,POSCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+    
+    yin_vasp_univ_find_and_change -isif 3
+    echo -e "356\n0.0 0.0 0.0 0.0 0.0 0.0\n" > Y_* 
+    # 检查POSCAR是否为笛卡尔坐标，否则报错
+    coord_type=$(grep -E -m 1 'Direct|Cartesian' POSCAR | tr -d '[:space:]')
+
+    if [[ "$coord_type" != "Cartesian" ]]; then
+        echo "Error: POSCAR is not in Cartesian coordinates!" >&2
+        exit 1  # 报错并退出程序
+    fi
+
+    c1_new=`echo "scale=16; $c1+ $da31 *($i1/$N1)" | bc`
+    c2_new=`echo "scale=16; $c2+ $da32 *($i1/$N1)" | bc`
+    
+    data1=`printf " %.16f  %.16f  %.16f" "$c1_new" "$c2_new" "$c3"`
+    echo $data1
+    
+    sed '5s/.*/'"$data1"'/' ./POSCAR > ./temp
+    mv temp POSCAR
+    sed -i '/^Selective dynamics/d' POSCAR
+    sed -i 's/[FT]//g' POSCAR
+    
+    echo 'submit dir:' `pwd`
+    sbatch sub.*
+    
+    cd ..
+done
+
+
+
+

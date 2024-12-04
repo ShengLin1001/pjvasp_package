@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# 设置文件路径
+contcar_file="CONTCAR"
+poscar_file="POSCAR"
+
+
+echo "==> copying CONTCAR to POSCAR in cartesian"
+# 检查 CONTCAR 文件是否存在
+if [ ! -f "$contcar_file" ]; then
+    echo "Error: $contcar_file not found!"
+    exit 1
+fi
+
+# 1. 读取 CONTCAR 的第二行并保存为 a0
+a0=$(sed -n '2p' "$contcar_file")
+echo "a0 value from CONTCAR: $a0"
+echo "======old POSCAR======"
+head -n 10 POSCAR
+echo "======CONTCAR======"
+head -n 10 CONTCAR
+echo "==================="
+# 2. 使用 Python 读取 CONTCAR 并生成 POSCAR（Cartesian 坐标）
+#unset PYTHONPATH
+~/opt/bin/python3 -c "
+print('Start python module')
+from ase.io.vasp import read_vasp
+from mymetal.io.vasp import my_write_vasp
+
+# 读取 CONTCAR 文件
+print('Reading CONTCAR')
+atoms = read_vasp('$contcar_file')
+
+# 输出为 POSCAR 文件，格式为 Cartesian 坐标
+print('Writing POSCAR')
+my_write_vasp('$poscar_file', atoms, direct=False, lattice_scale_factor=$a0)
+"
+echo "======new POSCAR======"
+head -n 10 POSCAR
+echo "======================"
+# 检查 POSCAR 是否成功生成
+if [ -f "$poscar_file" ]; then
+    echo "done!"
+else
+    echo "Error: Failed to create POSCAR."
+    exit 1
+fi
+
+
+

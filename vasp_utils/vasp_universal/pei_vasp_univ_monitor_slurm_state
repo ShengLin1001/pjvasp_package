@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# ====================
+# Check if the working directory exists
+# ====================
+workdir="./y_dir"
+if [ ! -d "$workdir" ]; then
+    echo "==========================================================="
+    echo "Error: Work directory $workdir does not exist!"
+    echo "==========================================================="
+    exit 1
+fi
+
+echo "==> Extracting last 5 lines from all slurm files"
+# ====================
+# Iterate over all subdirectories in y_dir
+# ====================
+find "$workdir" -mindepth 1 -maxdepth 1 -type d | while read -r subdir; do
+    if [ -d "$subdir" ]; then
+        echo "==========================================================="
+        echo "Processing directory: $subdir"
+
+        # ====================
+        # Process all slurm files in the current subdirectory
+        # ====================
+        slurm_files=("$subdir"/slurm*)
+        if [ -e "${slurm_files[0]}" ]; then
+            for slurm_file in "${slurm_files[@]}"; do
+                if [ -f "$slurm_file" ]; then
+                    echo "-----------------------------------------------------------"
+                    echo "Last 5 lines of: $slurm_file"
+                    echo "-----------------------------------------------------------"
+                    tail -n 5 "$slurm_file"
+                fi
+            done
+        else
+            echo "No slurm files found in $subdir. Skipping..."
+        fi
+
+    else
+        echo "$subdir is not a directory. Skipping..."
+    fi
+done
+
+echo "==========================================================="
+echo "All slurm files processed."
+echo "==========================================================="
+

@@ -1,0 +1,28 @@
+#!/bin/bash
+# 功能：删除POSCAR文件中的"Selective dynamics"行，并删除所有F和T字符
+
+# 检查POSCAR文件是否存在
+if [[ ! -f POSCAR ]]; then
+    echo "Error: POSCAR file not found!"
+    exit 1
+fi
+
+echo "==> changing POSCAR from normal to selective dynamics"
+# 输出原始POSCAR文件的前10行（用于辨认修改前内容）
+echo "===== 原始 POSCAR 文件的前10行 ====="
+head -n 10 POSCAR
+echo "==================================="
+
+# 在第八行添加 "Selective dynamics"
+sed -i '8i\Selective dynamics' POSCAR
+
+# 找到添加后从第10行开始的位置，并在下一个空行前的每行末尾添加 "F  F  T"
+awk 'NR >= 10 && NF > 0 {print $0, "    F     F    T"} NR < 10 || NF == 0' POSCAR > temp && mv temp POSCAR
+
+# 输出修改后的POSCAR文件的前10行（用于辨认修改后内容）
+echo "===== 修改后 POSCAR 文件的前10行 ====="
+head -n 10 POSCAR
+echo "====================================="
+
+# 提示完成
+echo "done!"

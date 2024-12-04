@@ -1,0 +1,7 @@
+#!/bin/bash
+yin_vasp_univ_find_and_change -isym 1
+yin_vasp_univ_find_and_change -nsw 150
+yin_vasp_univ_find_and_change -algo F
+
+
+

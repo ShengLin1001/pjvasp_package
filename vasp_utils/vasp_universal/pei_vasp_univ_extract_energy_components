@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# ====================
+# Check if work directory exists
+# ====================
+workdir="./y_dir"
+output_file="p_post_energy_components.txt"
+
+if [ ! -d "$workdir" ]; then
+    echo "==========================================================="
+    echo "Error: Work directory $workdir does not exist!"
+    echo "==========================================================="
+    exit 1
+fi
+
+rm $output_file
+# Prepare output file
+col_width=20
+printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
+"Directory" "TOTEN" "PSCENC" "TEWEN" "DENC" "EXHF" "XCENC" "Double1" "Double2" "EENTRO" "EBANDS" "EATOM" "Ediel_sol" > $output_file
+#echo "Directory TOTEN PSCENC TEWEN DENC EXHF XCENC Double counting EENTRO EBANDS EATOM Ediel_sol" > $output_file
+
+echo "==> Extracting energy components from VASP outputs"
+# ====================
+# Loop through all subdirectories in workdir
+# ====================
+find "$workdir" -mindepth 1 -maxdepth 1 -type d | awk -F '/' '{print $NF}' | sort -n | while read -r dirname; do
+    subdir="$workdir/$dirname"
+
+    if [ -d "$subdir" ]; then
+        echo "==========================================================="
+        echo "Processing directory: $subdir"
+
+        cd "$subdir" || continue  # Enter the subdirectory
+
+        # Check if OUTCAR exists
+        if [ -f "OUTCAR" ]; then
+            echo "Extracting data from OUTCAR..."
+
+            # Extract energy components using grep
+            TOTEN=$(grep "TOTEN" OUTCAR | tail -1 | awk '{print $5}')
+            PSCENC=$(grep "PSCENC" OUTCAR| tail -1 | awk '{print $5}')
+            TEWEN=$(grep "TEWEN" OUTCAR | tail -1 | awk '{print $5}')
+            DENC=$(grep "DENC" OUTCAR | tail -1 | awk '{print $5}')
+            EXHF=$(grep "EXHF" OUTCAR | tail -1 | awk '{print $4}')
+            XCENC=$(grep "XCENC" OUTCAR | tail -1 | awk '{print $4}')
+            DOUBLE1=$(grep "PAW double counting" OUTCAR | tail -1 | awk '{print $5}')
+            DOUBLE2=$(grep "PAW double counting" OUTCAR | tail -1 | awk '{print $6}')
+            EENTRO=$(grep "EENTRO" OUTCAR | tail -1 | awk '{print $5}')
+            EBANDS=$(grep "EBANDS" OUTCAR | tail -1 | awk '{print $4}')
+            EATOM=$(grep "EATOM" OUTCAR | tail -1 | awk '{print $5}')
+            EDIEL=$(grep "Ediel_sol" OUTCAR | tail -1 | awk '{print $4}')
+            echo $subdir $TOTEN
+            # Append results to the output file
+            printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
+                "$subdir" "$TOTEN" "$PSCENC" "$TEWEN" "$DENC" "$EXHF" "$XCENC" "$DOUBLE1" \
+                "$DOUBLE2" "$EENTRO" "$EBANDS" "$EATOM" "$EDIEL" >> "../../$output_file"
+            echo "Energy data extracted successfully for $subdir"
+        else
+            echo "OUTCAR not found in $subdir. Skipping..."
+        fi
+
+        # Return to the parent directory
+        cd ../..
+    else
+        echo "$subdir is not a directory. Skipping..."
+    fi    
+done
+
+echo "==========================================================="
+echo "Energy extraction complete. Results saved in $output_file"
+echo "==========================================================="

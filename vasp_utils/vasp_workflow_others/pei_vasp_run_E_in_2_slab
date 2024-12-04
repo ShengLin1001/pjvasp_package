@@ -1,0 +1,137 @@
+#!/bin/bash
+# B. Yin, 2022-03-09
+# Revised by J. Pei, 2024-10-21
+# echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ -d "$srcdir0" ]
+    then
+        sub_run_E_in_2_slab $1
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+
+
+
+
+sub_run_E_in_2_slab(){
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+
+    myfile=./CONTCAR 
+    if [ -f "$myfile" ]; then
+        echo "$myfile exists."
+    else 
+        echo "$myfile does not exist. cp POSCAR CONTCAR "
+        cp POSCAR CONTCAR
+    fi
+
+
+#    yin_vasp_univ_find_and_change  -isym  0 
+    yin_vasp_univ_find_and_change  -isif  2
+
+    yin_slurm_find_and_change  -srpl  H
+
+    #echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_CELL.IN
+    echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+
+    case "$1" in
+        -large) 
+#            yin_vasp_univ_find_and_change  -isym  default
+            yin_slurm_find_and_change  -srpl  L
+            ;;
+        -small) 
+#            yin_vasp_univ_find_and_change  -isym  default
+            yin_slurm_find_and_change  -srpl  L 
+            ;;
+        *)
+            echo "run standard..."
+            ;;
+    esac
+   
+ 
+    cd ..
+
+
+    
+    #--------------------   
+
+    a0=`sed -n '2,2p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    
+    c1=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    c2=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $2}'`
+    c3=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $3}'`
+
+    echo $a0
+    echo $c1 $c2 $c3
+    
+    
+    #=====================
+    
+    dirCij=y_E_in_2_slab
+    
+    rm -rI  $dirCij
+    mkdir   $dirCij
+    cd      $dirCij
+    
+    mkdir y_dir
+    cd    y_dir
+    
+    #=====================
+   
+
+    case "$1" in
+        -large) echo "==> de=0.005 "
+            de=0.005
+            ;;
+        *)      echo "==> de=0.001 "
+            de=0.001
+            ;;
+    esac
+
+
+
+    for i1 in  -3  -2  -1  0  1  2  3  ; do
+
+        el=`echo "scale=16; $i1*$de+1" | bc`  
+
+        dirn=`printf "%.3f" "$el"`
+        echo ================ $dirn
+        mkdir $dirn
+        cd $dirn
+
+        cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+        mv CONTCAR POSCAR
+
+        a0new=`echo "scale=16; $a0*$el" | bc`
+        yin_vasp_univ_find_and_change  -a0  $a0new        
+
+        c3new=`echo "scale=16; $c3/$el" | bc `
+        yin_vasp_univ_find_and_change  -a3  " $c1  $c2  $c3new "
+
+        echo 'submit dir:' `pwd`
+        sbatch sub.*
+        cd ..
+
+    done
+
+
+    rm -rf $srcdir
+}
+
+
+
+main "$@"; exit
+
+
+
+

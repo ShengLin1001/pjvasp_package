@@ -1,0 +1,151 @@
+#!/bin/bash
+# J. Pei, 2024-11-01
+
+
+main(){
+    srcdir0=y_full_relax
+    # bulk y_full_relax
+    if [ -d "$srcdir0" ]
+    then
+        sub_run_surface_energy $1
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+sub_run_surface_energy(){
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+    myfile=./CONTCAR
+    if [ -f "$myfile" ]; then
+        echo "$myfile exists."
+    else
+        echo "$myfile does not exist. cp POSCAR CONTCAR "
+        cp POSCAR CONTCAR
+    fi
+    pei_vasp_univ_cp_contcar_cartesian_poscar > /dev/null
+    cp POSCAR CONTCAR
+
+    yin_vasp_univ_find_and_change  -isym  1 
+    yin_vasp_univ_find_and_change  -isif  2
+   
+   #--------------------
+
+    echo -e "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+    
+    a0=`sed -n '2,2p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+
+    a1=`sed -n '3,3p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    a2=`sed -n '3,3p' $srcdir/CONTCAR | awk '{printf "%.16f", $2}'`
+    a3=`sed -n '3,3p' $srcdir/CONTCAR | awk '{printf "%.16f", $3}'`
+    
+    b1=`sed -n '4,4p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    b2=`sed -n '4,4p' $srcdir/CONTCAR | awk '{printf "%.16f", $2}'`
+    b3=`sed -n '4,4p' $srcdir/CONTCAR | awk '{printf "%.16f", $3}'`
+    
+    c1=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    c2=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $2}'`
+    c3=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $3}'`
+
+    echo $a0
+    echo $a1 $a2 $a3
+    echo $b1 $b2 $b3
+    echo $c1 $c2 $c3
+    cd ..
+
+    #=====================
+    start_line=$(grep -n "Cartesian" "$srcdir/CONTCAR" | cut -d: -f1)
+    if [ -z "$start_line" ]; then
+        echo "Error: Cartesian coordinates not found in POSCAR, maybe you need to run peipath."
+        exit 1
+    fi
+    start_line=$((start_line + 1))
+
+    z_positions=($(awk -v start=$start_line 'NR >= start && NF > 0 \
+                    {print $3} NF == 0 {exit}' "$srcdir/CONTCAR"))
+    min_z=$(printf "%s\n" "${z_positions[@]}" | sort -n | head -n1)
+    max_z=$(printf "%s\n" "${z_positions[@]}" | sort -n | tail -n1)
+    z_range=$(echo "($max_z - $min_z)/11*12*$a0" | bc -l)
+    interlayer=$(echo "$z_range/12" | bc -l)
+
+    echo "thickness: $z_range"
+    echo "evaluate : `echo "$a0 * $c3" | bc -l`"
+
+    #=====================
+
+    dirsurf=y_surface_energy
+
+    rm -rI $dirsurf
+    mkdir  $dirsurf
+    cd     $dirsurf
+
+    mkdir  y_dir
+    cd     y_dir
+
+    for i1 in 0 1 ;  do
+        el=`echo "scale=16; $i1" | bc`  
+
+        dirn=$(printf "%03d" "$el")
+        echo ================ $dirn
+
+        mkdir $dirn
+        cd    $dirn
+
+        cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+        mv CONTCAR POSCAR
+
+        if [ "$i1" -eq 0 ]; then
+            echo "==> bulk $dirn"
+            yin_vasp_univ_find_and_change  -isif  3
+            echo -e "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+        elif [ "$i1" -eq 1 ]; then
+            echo "==> surface $dirn"
+            echo -e "0.0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+	    rm CHGCAR 
+            vacuum=20
+            c3new=$(echo "scale=16; $c3 + ($vacuum - $interlayer) / $a0" | bc)
+
+            lattc=`printf "%.16f  %.16f  %.16f"   "$c1" "$c2" "$c3new"`
+            sed -i '5s/.*/'"    $lattc"'/'   ./POSCAR
+
+            new_positions=()
+            for z in "${z_positions[@]}"; do
+                new_z=$(echo "$z + $vacuum/$a0/2 - $min_z" | bc -l)
+                new_positions+=("$new_z")
+            done
+
+            line_num=1
+            z_index=0
+
+            temp_file="POSCAR.temp"
+            while IFS= read -r line; do 
+                if (( line_num < start_line )); then
+                    echo "$line" >> "$temp_file" 
+                elif [[ line_num -ge start_line && -n "$line" ]]; then
+                    read -r -a fields <<< "$line"
+                    fields[2]=${new_positions[z_index]}
+                    ((z_index++))    
+                    echo "${fields[*]}" >> "$temp_file"
+                elif [[ -z $line ]]; then
+                    echo "$line" >> "$temp_file"
+                    break
+                fi
+                ((line_num++))
+            done < "POSCAR"
+            mv $temp_file "POSCAR"
+            echo "updated POSCAR: add the vacuum $vacuum, move the z-position."
+        fi
+
+        echo 'submit dir:' `pwd`
+        sbatch sub.*
+        cd ..
+    done
+    rm -rf $srcdir
+}
+
+main "$@"; exit

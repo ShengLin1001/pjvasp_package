@@ -1,0 +1,9 @@
+#!/bin/bash
+
+pei_vasp_univ_cp_contcar_cartesian_poscar
+pei_vasp_univ_transfer_selective_to_normal
+yin_vasp_univ_find_and_change -isif 3
+yin_vasp_univ_find_and_change -isym 0
+yin_vasp_univ_find_and_change -algo F
+echo "==> changed Y_CONSTR_LATT"
+echo -e "3\n0.0 0.0 0.0 0.0 0.0 0.0" | tee Y_CONSTR_LATT

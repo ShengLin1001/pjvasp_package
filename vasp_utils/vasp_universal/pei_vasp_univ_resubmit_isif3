@@ -1,0 +1,68 @@
+#!/bin/bash
+
+# ====================
+# 检查工作目录是否存在
+# ====================
+workdir="./y_dir"
+if [ ! -d "$workdir" ]; then
+    echo "==========================================================="
+    echo "Error: Work directory $workdir does not exist!"
+    echo "==========================================================="
+    exit 1
+fi
+
+echo "==> resubmiting isif = 3"
+# ====================
+# 遍历 y_dir 中的所有子目录
+# ====================
+find "$workdir" -mindepth 1 -maxdepth 1 -type d | while read -r subdir; do
+    if [ -d "$subdir" ]; then
+        echo "==========================================================="
+        echo "Processing directory: $subdir"
+
+        cd "$subdir" || continue  # 进入子目录
+
+        # ====================
+        # 修改 INCAR 中的 ISIF 为 0
+        # ====================
+        if [ -f "INCAR" ]; then
+            sed -i '/ISIF/s/.*/   ISIF = 3   # fix: 2-box 3-none 4-volume/' INCAR
+            echo "Updated ISIF to 3 in INCAR"
+        else
+            echo "INCAR not found in $subdir. Skipping..."
+            cd ..
+            continue
+        fi
+
+        # ====================
+        # 将 CONTCAR 复制为 POSCAR
+        # ====================
+        if [ -f "CONTCAR" ]; then
+            cp CONTCAR POSCAR
+            echo "Copied CONTCAR to POSCAR"
+        else
+            echo "CONTCAR not found in $subdir. Skipping..."
+            cd ../..
+            continue
+        fi
+
+        # ====================
+        # 提交计算任务
+        # ====================
+        if sbatch sub.*; then
+            echo "Job submitted successfully for $subdir"
+        else
+            echo "Failed to submit job for $subdir"
+        fi
+
+        # 返回上一级目录
+        cd ../..
+    else
+        echo "$subdir is not a directory. Skipping..."
+    fi    
+done
+
+echo "==========================================================="
+echo "All tasks processed."
+echo "==========================================================="
+

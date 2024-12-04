@@ -1,0 +1,41 @@
+#!/bin/bash
+
+workdir="./y_dir"
+
+if [ ! -d "$workdir" ]; then
+    echo "Error: Work directory $workdir does not exist!"
+    exit 1
+fi
+
+echo "==> cleaning outcar for many nulls at the end"
+echo "you need to run yinpath"
+#yinpath
+find "$workdir" -mindepth 1 -maxdepth 1 -type d | while read -r subdir; do
+    outcar_file="$subdir/OUTCAR"
+    echo "======$subdir======"
+    # 如果 OUTCAR 存在，则清理末尾的 null 字符
+    if [ -f "$outcar_file" ]; then
+        echo "Cleaning end-of-file null characters in OUTCAR for $subdir..."
+        
+        # 使用 Python 删除末尾 null 字符
+        
+	~/opt/bin/python3 -c "
+with open('$outcar_file', 'rb') as f:
+    data = f.read().rstrip(b'\x00')
+with open('$outcar_file.cleaned', 'wb') as f:
+    f.write(data)
+"
+        echo "old OUTCAR lines: $(wc -l < OUTCAR)";
+	echo "null characters: $(tail -n 5 OUTCAR | tr -d '[:print:]\n' | head -c 10 | cat -v)"
+        # 创建备份文件并替换原始 OUTCAR
+        mv "$outcar_file.cleaned" "$outcar_file"
+        echo "Cleaned OUTCAR saved back to original file."
+	echo "new OUTCAR lines: $(wc -l < OUTCAR)";
+        echo "null characters: $(tail -n 5 OUTCAR | tr -d '[:print:]\n' | head -c 10 | cat -v)"
+    else
+        echo "No OUTCAR found in $subdir. Skipping..."
+    fi
+done
+#unset PYTHONPATH
+echo "done!"
+
