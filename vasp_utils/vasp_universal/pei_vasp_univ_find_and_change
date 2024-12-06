@@ -1,0 +1,249 @@
+#!/bin/bash
+# B. Yin
+
+
+if [ -z "$1" ]; then      # empty is true 
+    echo "==>  Please indicate the tag to modify. Abort!"
+    exit 
+fi
+
+
+if [ -z "$2" ]; then      # empty is true
+    echo "==>  Please input the new value. Abort!"
+    exit
+fi
+
+
+
+sub_change(){
+    file1=$1
+    tag1=$2
+    str1=$3
+    echo "==> changing '"$tag1"' in '"$file1"' to '"$str1"': "
+
+    for filen in `find ./ -type f -name $file1`; do
+        #echo $filen
+        j1=`grep -n  $tag1  $filen | head -1 | cut -d ":" -f1`
+        #echo $j1
+        #echo $str1
+        if [ "$j1" = "" ]; then
+            echo "no $tag1 in the file"
+	    else 
+            sed $j1's/.*/'"$str1"'/' $filen > temp
+            mv temp $filen
+        fi
+    done
+}
+
+
+
+
+
+
+
+
+case "$1" in
+
+    -a0) 
+        echo "==> changing a0 in POSCAR to" $2 ": "
+        for filen in ` find ./ -type f -name "POSCAR*" `; do
+            echo $filen 
+            sed '2s/.*/'" $2"'/' $filen > temp
+            mv temp $filen
+        done
+        ;;
+
+
+
+# the lattice a3  
+    -a3) 
+        echo "==> changing a3 in POSCAR to" $2 ": "
+        for filen in ` find ./ -type f -name "POSCAR*" `; do
+            echo $filen 
+            sed '5s/.*/'" $2"'/' $filen > temp
+            mv temp $filen
+        done
+        ;;
+
+
+
+    -a0contcar)
+        echo "==> changing a0 in CONTCAR to" $2 ": "
+        for filen in ` find ./ -type f -name "CONTCAR*" `; do
+            echo $filen
+            sed '2s/.*/'" $2"'/' $filen > temp
+            mv temp $filen
+        done
+        ;;
+
+
+
+    -elem_d)
+        echo "==> deleting element info in POSCAR: "
+        for filen in ` find ./ -type f -name "POSCAR*" `; do
+            echo $filen
+            sed '6,6d' $filen > temp
+            mv temp $filen
+        done
+        ;;
+
+
+
+    -elem_i)
+        echo "==> inserting element info" $2 "in POSCAR: "
+        for filen in ` find ./ -type f -name "POSCAR*" `; do
+            echo $filen
+            sed '6i'" $2" $filen > temp
+            mv temp $filen
+        done
+        ;;
+
+
+
+
+
+
+
+    -cn)
+        echo "==> changing cn in POSCAR to" $2 ": "
+        for filen in ` find ./ -type f -name "POSCAR*" `; do
+            echo $filen
+            sed '6s/.*/'" $2"'/' $filen > temp
+            mv temp $filen
+        done
+        ;;
+
+
+
+
+    -kp)
+        echo "==> changing kp in KPOINTS to" $2 ": "
+        for filen in ` find ./ -type f -name "KPOINTS" `; do
+            echo $filen
+            sed '4s/.*/'" $2"'/' $filen > temp
+            mv temp $filen
+        done
+        ;;
+
+
+
+
+    -ispin) 
+        str=" ISPIN= $2      # 1=non; 2=spin "
+        sub_change  INCAR  "ISPIN"  "$str" 
+        ;;
+
+
+    -isif) 
+        str=" ISIF= $2      # fix: 2=box; 3=none; 4=volume "
+        sub_change  INCAR  "ISIF"  "$str"
+        ;;
+
+
+    -ediffg) 
+        str=" EDIFFG= $2      # -1E-3 "
+        sub_change  INCAR  "EDIFFG"  "$str"
+        ;;
+
+
+    -ediff)
+        str=" EDIFF= $2      # 1E-6 "
+        sub_change  INCAR  "EDIFF"  "$str"
+        ;;
+
+
+    -isym) 
+        if [ $2 == "default" ]; then
+            str="# ISYM= 0 " 
+        else
+            str=" ISYM= $2      # 0=off "
+        fi
+        sub_change  INCAR  "ISYM"  "$str"
+        ;;
+
+
+    -nsw)
+        str=" NSW= $2      # ionic steps, 0=static "
+        sub_change  INCAR  "NSW"  "$str"
+        ;;
+
+
+    -algo)
+        str=" ALGO= $2      # N=Normal, F=Fast "
+        sub_change  INCAR  "ALGO"  "$str"
+        ;;
+
+
+    -ismear)
+        str=" ISMEAR= $2      # 1=1st order MP, -5=tetrahedron "
+        sub_change  INCAR  "ISMEAR"  "$str"
+        ;;
+
+
+    -lreal)
+        str=" LREAL= $2      # F; A=Auto "
+        sub_change  INCAR  "LREAL"  "$str"
+        ;;
+
+
+    -nelm)
+        str=" NELM= $2      # max e-steps "
+        sub_change  INCAR  "NELM"  "$str"
+        ;;
+
+
+    -encut)
+        str=" ENCUT= $2      # plane wave cutoff "
+        sub_change  INCAR  "ENCUT"  "$str"
+        ;;
+
+
+    -sigma)
+        str=" SIGMA= $2      # width of smearing "
+        sub_change  INCAR  "SIGMA"  "$str"
+        ;;
+
+
+    -lorbit)
+        str=" LORBIT= $2      # 10=LDOS  11=PDOS "
+        sub_change  INCAR  "LORBIT"  "$str"
+        ;;
+
+
+    -ibrion)
+        str=" IBRION= $2      # -1=no update  2=CG "
+        sub_change  INCAR  "IBRION"  "$str"
+        ;;
+
+
+    -nedos)
+        str=" NEDOS= $2      # 301=default, 3000=dos, bs"
+        sub_change  INCAR  "NEDOS"  "$str"
+        ;;
+
+
+    -icharg)
+        str=" ICHARG= $2      # 1=file; 11=dos, bs"
+        sub_change  INCAR  "ICHARG"  "$str"
+        ;;
+    
+    -lmaxmix)
+        str=" LMAXMIX= $2      # mix which l-quantum number"
+        sub_change  INCAR  "LMAXMIX"  "$str"
+        ;;
+
+
+    -nbands)
+        str=" NBANDS= $2      # max: 0.5*NELEC+2*NIONS"
+        sub_change  INCAR  "LMAXMIX"  "$str"
+        ;;
+
+
+    *)  echo "==>  Option $1 not recognized. Abort!" 
+        exit
+        ;;   
+esac
+
+
+
+
