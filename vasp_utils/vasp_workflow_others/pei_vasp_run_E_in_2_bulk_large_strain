@@ -86,8 +86,9 @@ sub_run_E_in_2_slab(){
 
         a0new=`echo "scale=16; $num2" | bc`
         yin_vasp_univ_find_and_change  -a0  $a0new  
-
-        c3new=`echo "scale=16; $c3/$el/$el" | bc `
+        # $c3/$el - original c3
+        # /$el/$el - for volume conserving
+        c3new=`echo "scale=16; $c3/$el/$el/$el" | bc `
         yin_vasp_univ_find_and_change  -a3  " $c1  $c2  $c3new "
 
         echo 'submit dir:' `pwd`
