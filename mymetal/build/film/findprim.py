@@ -38,6 +38,7 @@ def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag
         primitive_atoms = check_direction(primitive_atoms, scale_atoms)
     primitive_atoms = move_atoms(primitive_atoms, move_list)
     primitive_atoms = primitive_atoms[primitive_atoms.numbers.argsort()]
+    primitive_atoms.wrap()
     return primitive_atoms
 
 
@@ -73,10 +74,8 @@ def check_direction(atom: Atoms = None, scale_atoms: bool = False, align_row: in
         raise ValueError("Input atom must be a valid ASE Atoms object.")
     if not isinstance(scale_atoms, bool):
         raise TypeError("scale_atoms must be a boolean value.")
-    
     atoms = atom.copy()
     lattice = np.array(atoms.cell.copy())
-    
     # Check and ensure the determinant of the lattice is positive
     determinant = np.linalg.det(lattice)
     if determinant < 0:
@@ -94,14 +93,13 @@ def check_direction(atom: Atoms = None, scale_atoms: bool = False, align_row: in
     b1 = align_to  
     a1 = np.asarray(a1, dtype=float) / np.linalg.norm(a1)
     b1 = np.asarray(b1, dtype=float) / np.linalg.norm(b1)
-    
     # Calculate cross-product to determine rotation axis
     c1 = np.cross(a1, b1)
     if np.linalg.norm(c1) > 1e-10:
         c1 /= np.linalg.norm(c1)
-
         # Rotate the atom structure
-        atom.rotate(np.arccos(np.dot(a1, b1)) / np.pi * 180, c1, rotate_cell=True)
-    
+        # it's important to rotate atoms, not atom
+        atoms.rotate(np.arccos(np.dot(a1, b1)) / np.pi * 180, c1, rotate_cell=True)
+    atoms.wrap()
     return atoms
 
