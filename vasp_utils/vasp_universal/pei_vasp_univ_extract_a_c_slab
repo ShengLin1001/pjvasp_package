@@ -35,7 +35,7 @@ find "$workdir" -mindepth 1 -maxdepth 1 -type d | awk -F '/' '{print $NF}' | sor
 
         energy=$(grep '  without' OUTCAR | tail -n 1 | awk '{print $7}')
         a0=$(sed -n '2,2p' CONTCAR | awk '{printf "%.16f", $1}')
-        read c num c3 <<< $(~/opt/bin/python3 -c "
+        read c num c3 <<< $(python3 -c "
 from ase.io.vasp import read_vasp
 from mymetal.build.film.extrfilm import my_extr_thick
 

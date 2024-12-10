@@ -19,7 +19,7 @@ find "$workdir" -mindepth 1 -maxdepth 1 -type d | while read -r subdir; do
         
         # 使用 Python 删除末尾 null 字符
         
-	~/opt/bin/python3 -c "
+	python3 -c "
 with open('$outcar_file', 'rb') as f:
     data = f.read().rstrip(b'\x00')
 with open('$outcar_file.cleaned', 'wb') as f:

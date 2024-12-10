@@ -22,7 +22,7 @@ head -n 10 CONTCAR
 echo "==================="
 # 2. 使用 Python 读取 CONTCAR 并生成 POSCAR（Cartesian 坐标）
 #unset PYTHONPATH
-~/opt/bin/python3 -c "
+python3 -c "
 print('Start python module')
 from ase.io.vasp import read_vasp
 from mymetal.io.vasp import my_write_vasp

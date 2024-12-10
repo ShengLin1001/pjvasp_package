@@ -10,7 +10,9 @@ This repo contains scripts for various VASP workflows, including job submission 
    https://github.com/BinglunYin/vasp_utils    
    https://github.com/BinglunYin/slurm_utils    
 
-1. create links to `python3` and `pip3` at `$HOME/opt/bin/`.
+1. create links to `python3` and `pip3` at `$HOME/opt/bin/` (do not recommended).
+
+1. Recommended you use python virtual environments. Befor you do post job, source activate the environment.
 
 1. pip install a package:     
    ```shell
