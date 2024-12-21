@@ -4,7 +4,7 @@
 # Check if work directory exists
 # ====================
 workdir="./y_dir"
-output_file="p_post_a_c_slab.txt"
+output_file="p_post_a_c.txt"
 
 if [ ! -d "$workdir" ]; then
     echo "==========================================================="
