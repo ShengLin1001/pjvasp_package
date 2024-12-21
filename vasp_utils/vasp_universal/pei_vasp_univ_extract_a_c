@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# ====================
+# Check if work directory exists
+# ====================
+workdir="./y_dir"
+output_file="p_post_a_c_slab.txt"
+
+if [ ! -d "$workdir" ]; then
+    echo "==========================================================="
+    echo "Error: Work directory $workdir does not exist!"
+    echo "==========================================================="
+    exit 1
+fi
+
+rm $output_file
+# Prepare output file
+col_width=20
+printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
+"Directory" "a(Å)" "c(Å)" "c3(Å)" "energy(eV)" "atoms number"> $output_file
+
+echo "==> Extracting a, c from VASP outputs (OUTCAR, CONTCAR)"
+echo "    strict: a << a0, c << max(positions)-min(positions), c3 << cell(2,2)"
+# ====================
+# Loop through all subdirectories in workdir
+# ====================
+find "$workdir" -mindepth 1 -maxdepth 1 -type d | awk -F '/' '{print $NF}' | sort -n | while read -r dirname; do
+    subdir="$workdir/$dirname"
+
+    if [ -d "$subdir" ]; then
+        echo "==========================================================="
+        echo "Processing directory: $subdir"
+
+        cd "$subdir" || continue  # Enter the subdirectory
+
+        energy=$(grep '  without' OUTCAR | tail -n 1 | awk '{print $7}')
+        a0=$(sed -n '2,2p' CONTCAR | awk '{printf "%.16f", $1}')
+        read c num c3 <<< $(python3 -c "
+from ase.io.vasp import read_vasp
+from mymetal.build.film.extrfilm import my_extr_thick
+
+atoms = read_vasp('CONTCAR')
+num = len(atoms)
+thick = my_extr_thick(atoms)
+print(thick, num, atoms.get_cell()[2,2])
+        ")
+
+        printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s \n" \
+            "$dirname" "$a0" "$c" "$c3" "$energy" "$num">> "../../$output_file"
+
+        # Return to the parent directory
+        cd ../..
+    else
+        echo "$subdir is not a directory. Skipping..."
+    fi    
+done
+
+echo "==========================================================="
+echo "The slab's information was completely extracted. Results saved in $output_file"
+echo "==========================================================="
