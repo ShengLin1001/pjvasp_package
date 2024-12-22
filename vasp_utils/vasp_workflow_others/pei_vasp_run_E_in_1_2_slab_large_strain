@@ -1,0 +1,162 @@
+#!/bin/bash
+# B. Yin, 2022-03-09
+# Revised by J. Pei, 2024-12-20
+# echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+# example: pei_vasp_run_E_in_1_2_slab_large_strain -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ -d "$srcdir0" ]
+    then
+        sub_run_E_in_1_2_slab $@
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+
+sub_run_E_in_1_2_slab(){
+srcdir=`pwd`/y_full_relax_temp
+rm -rf $srcdir
+
+cp -r $srcdir0  $srcdir 
+cd $srcdir
+
+echo "==> uniaxial / biaxial stretch for bulk"
+echo "    Change a1, a2 to two lists, only avail when a1 == a2 in length"
+echo "example: pei_vasp_run_E_in_1_2_bulk_large_strain -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1"
+
+# read -a1 -a2 list, units in Angs
+a1=()
+a2=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -a1)
+      shift
+      while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+        a1+=("$1") 
+        shift
+      done
+      ;;
+    -a2)
+      shift
+      while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+        a2+=("$1")  
+        shift
+      done
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
+  esac
+done
+
+echo "a1 = ${a1[@]}"
+echo "a2 = ${a2[@]}"
+
+# for val in "${a2[@]}"; do
+#     echo "$val"
+# done
+
+
+myfile=./CONTCAR 
+if [ -f "$myfile" ]; then
+    echo "$myfile exists."
+else 
+    echo "$myfile does not exist. cp POSCAR CONTCAR "
+    cp POSCAR CONTCAR
+fi
+
+yin_vasp_univ_find_and_change  -isif  3
+echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+
+cd ..
+
+
+#=====================
+
+dirCij=y_E_in_1_2_bulk_large_strain
+
+rm -rI  $dirCij
+mkdir   $dirCij
+cd      $dirCij
+
+mkdir y_dir
+cd    y_dir
+
+#=====================
+for val1 in "${a1[@]}"; do
+    for val2 in "${a2[@]}"; do
+        val1=`printf "%.8f" "$val1"`
+        val2=`printf "%.8f" "$val2"`
+        
+        dirn=`printf "a1-$val1-a2-$val2"`
+        #echo $dirn
+
+        echo ================ $dirn
+        printf "a1:%12.8f   a2:%12.8f\n" "$val1" "$val2"
+        mkdir $dirn
+        cd $dirn
+
+        cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+        mv CONTCAR POSCAR
+        a0=$(sed -n '2p' "POSCAR")
+
+        python -c "
+from ase.io.vasp import read_vasp 
+from mymetal.io.vasp import my_write_vasp
+import numpy as np
+
+atoms = read_vasp('./POSCAR')
+atoms_cell = np.array(atoms.get_cell().copy())
+volume = atoms.get_volume()
+print(f'{volume}')
+a1 = atoms_cell[0]
+a2 = atoms_cell[1]
+a3 = atoms_cell[2]
+
+# confirm a1==a2
+if abs(np.linalg.norm(a1)-np.linalg.norm(a2))>1e-5:
+    print('a1!=a2')
+    exit()
+else:
+    aref=np.linalg.norm(a1)
+    print('aref:',aref)
+strainx = $val1/aref
+strainy = $val2/aref
+#print('strainx:',strainx)
+#print('strainy:',strainy)
+
+for temp in atoms_cell:
+    temp[0] *= strainx
+    temp[1] *= strainy
+    temp[2] /= (strainx*strainy)
+atoms.set_cell(atoms_cell, scale_atoms=True)
+volume2 = atoms.get_volume()
+print(f'{volume2}')
+
+atoms.center(axis=2, vacuum=10)
+my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0, label = f'aref:{aref}  val1:$val1  val2:$val2')
+"
+
+        echo 'submit dir:' `pwd`
+        #sbatch sub.*
+
+        cd ..
+    done
+done
+
+rm -rf $srcdir
+}
+
+
+
+main "$@"; exit
+
+
+
+
