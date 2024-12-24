@@ -21,6 +21,249 @@ from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
 from brokenaxes import brokenaxes
 from typing import List, Tuple, Union
 
+
+def general_modify_ploted_figure(axes: plt.Axes,
+                                 grid: bool = True,
+                                 grid_linewidth: float = 0.5,
+                                ###########################
+                                one_fig_wh: list = [10.72, 8.205],
+                                fig_subp: List[int] = [1, 1],
+                                axes_height: float = 5.89,
+                                axes_width: float = 7.31,
+                                left: float = 1.918,
+                                top: float = 0.9517,
+                                ###########################
+                                labelpad: int = 15, 
+                                tick_pad: int = 10, 
+                                xlabel: str = 'Energies (eV)', 
+                                ylabel: str = 'Density of States (a.u.)',
+                                xlim: list = [-15, 10],
+                                ylim: list = [0, 8],
+                                ###########################
+                                loc: str = 'upper right',
+                                bbox_to_anchor: tuple = (0.95, 0.95),
+                                ncol: int = 1,
+                                ###########################
+                                y_margin = 0.1, 
+                                y_nbins = 3,
+                                x_margin = 0.1, 
+                                x_nbins = 4, 
+                                prune = 'both',
+                                if_autoscale = True,
+                                ###########################
+                                remove_dashed_line: bool = True,
+                                change_margin: bool = False,
+                                ###########################
+                                if_save: bool = True,
+                                save_path: str = './dos.jpg'
+                                )  -> tuple:
+    """
+    Modifies the appearance of a plotted figure, including axes, legend, grid, margins, and saves the plot.
+
+    Args:
+        axes (plt.Axes): The axes to modify.
+        grid (bool): Whether to display grid. Default is True.
+        grid_linewidth (float): Line width for the grid. Default is 0.5.
+        one_fig_wh (list): The figure's width and height in inches. Default is [10.72, 8.205].
+        fig_subp (List[int]): Number of subplots in rows and columns. Default is [1, 1].
+        axes_height (float): Height of the axes in inches. Default is 5.89.
+        axes_width (float): Width of the axes in inches. Default is 7.31.
+        left (float): Left margin in inches. Default is 1.918.
+        top (float): Top margin in inches. Default is 0.9517.
+        labelpad (int): Padding for axis labels. Default is 15.
+        tick_pad (int): Padding for axis ticks. Default is 10.
+        xlabel (str): Label for the x-axis. Default is 'Energies (eV)'.
+        ylabel (str): Label for the y-axis. Default is 'Density of States (a.u.)'.
+        xlim (list): x-axis limits. Default is [-15, 10].
+        ylim (list): y-axis limits. Default is [0, 8].
+        loc (str): Location for the legend. Default is 'upper right'.
+        bbox_to_anchor (tuple): Bounding box for legend. Default is (0.95, 0.95).
+        y_margin (float): y-axis margin. Default is 0.1.
+        y_nbins (int): Number of bins for y-axis. Default is 3.
+        x_margin (float): x-axis margin. Default is 0.1.
+        x_nbins (int): Number of bins for x-axis. Default is 4.
+        prune (str): Whether to prune axis ticks. Default is 'both'.
+        if_autoscale (bool): Whether to autoscale the axes. Default is True.
+        remove_dashed_line (bool): Whether to remove dashed lines. Default is True.
+        change_margin (bool): Whether to change the axis margins. Default is False.
+        if_save (bool): Whether to save the figure. Default is True.
+        save_path (str): Path to save the figure. Default is './dos.jpg'.
+
+    Returns:
+        tuple: The modified figure and axes.
+    """
+
+    general_font(grid, grid_linewidth)
+    ax = axes
+    fig  = ax.get_figure()
+    fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
+    fig.set_size_inches(fig_wh)
+    general_subplots_adjust(fig, one_fig_wh, fig_subp, axes_height, axes_width, left, top)
+    general_axes(ax, labelpad, tick_pad,xlabel, ylabel, xlim, ylim)
+    ax.legend().remove()
+    general_modify_legend(ax.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, ncol=ncol))
+    if change_margin:
+        general_margin_bin(ax, y_margin, y_nbins, x_margin, x_nbins, prune, if_autoscale)
+    if remove_dashed_line:
+        for line in ax.get_lines():
+            if line.get_linestyle() == '--':
+                line.set_visible(False)
+    if if_save:
+        plt.savefig(save_path, dpi=300)
+    return fig, ax
+
+def general_modify_legend(legend):
+    """
+    Customizes the appearance of a legend.
+
+    Args:
+        legend: The legend object to modify.
+
+    Returns:
+        None
+    """
+    legend.get_frame().set_boxstyle("Square", pad=0.5)
+    legend.get_frame().set_linewidth(2.5)
+    legend.get_frame().set_edgecolor('black')
+    legend.get_frame().set_facecolor('white')
+    legend.get_frame().set_alpha(1)
+    
+def general_margin_bin(axis,
+                        y_margin = 0.1, 
+                        y_nbins = 3,
+                        x_margin = 0.1, 
+                        x_nbins = 4, 
+                        prune = 'both',
+                        if_autoscale = True):
+    """
+    Adjusts the margins and binning for the x and y axes.
+
+    Args:
+        axis: The axis object to modify.
+        y_margin (float): The y-axis margin. Default is 0.1.
+        y_nbins (int): Number of bins for the y-axis. Default is 3.
+        x_margin (float): The x-axis margin. Default is 0.1.
+        x_nbins (int): Number of bins for the x-axis. Default is 4.
+        prune (str): Prune setting for axis ticks. Default is 'both'.
+        if_autoscale (bool): Whether to autoscale the axis. Default is True.
+
+    Returns:
+        None
+    """
+    axis.margins(x=x_margin, y=y_margin)
+    axis.yaxis.set_major_locator(MaxNLocator(nbins=y_nbins, prune=prune))
+    axis.xaxis.set_major_locator(MaxNLocator(nbins=x_nbins, prune=prune))
+    if if_autoscale:
+        # Force axis limits to update based on the new margins
+        axis.autoscale(enable=True, axis='both', tight=False)
+
+def general_font( grid: bool = True, grid_linewidth: float = 0.5):
+    """
+    Sets global font and plot settings for consistency across figures.
+
+    Args:
+        grid (bool): Whether to show grid lines. Default is True.
+        grid_linewidth (float): Line width for the grid. Default is 0.5.
+
+    Returns:
+        None
+    """
+    plt.rcParams['font.family'] = 'Arial'
+    plt.rcParams['font.size'] = 28
+    plt.rcParams['axes.linewidth'] = 3
+    plt.rcParams['axes.grid'] = grid
+    plt.rcParams['grid.linestyle'] = '--'
+    plt.rcParams['grid.linewidth'] = grid_linewidth
+    plt.rcParams["savefig.transparent"] = 'True'
+    plt.rcParams['lines.linewidth'] = 3
+    plt.rcParams['lines.markersize'] = 20
+    plt.rcParams['lines.markeredgewidth'] = 3
+    plt.rcParams['lines.markerfacecolor'] = 'white'
+
+    # 图例相关全局参数
+    plt.rcParams['legend.loc'] = 'upper right'
+    plt.rcParams['legend.fontsize'] = 24
+    plt.rcParams['legend.frameon'] = True
+    plt.rcParams['legend.borderpad'] = 0.0
+    plt.rcParams['legend.labelspacing'] = 0.5
+    plt.rcParams['legend.columnspacing'] = 0.5
+
+def general_axes(ax,
+                labelpad: int = 15, 
+                tick_pad: int = 10, 
+                xlabel: str = 'X-axis Label',
+                ylabel: str = 'Y-axis Label',
+                xlim: Union[List[float], None] = None,
+                ylim: Union[List[float], None] = None):
+    """
+    Modifies axis properties like ticks, labels, and limits.
+
+    Args:
+        ax: The axis object to modify.
+        labelpad (int): Padding for axis labels. Default is 15.
+        tick_pad (int): Padding for axis ticks. Default is 10.
+        xlabel (str): Label for the x-axis. Default is 'X-axis Label'.
+        ylabel (str): Label for the y-axis. Default is 'Y-axis Label'.
+        xlim (Union[List[float], None]): x-axis limits. Default is None.
+        ylim (Union[List[float], None]): y-axis limits. Default is None.
+
+    Returns:
+        None
+    """
+    if isinstance(ax, np.ndarray):
+        axes = ax.flatten()
+    else:  
+        axes = [ax]
+
+    for axis in axes:
+        axis.minorticks_on()
+        axis.xaxis.set_minor_locator(AutoMinorLocator(2))
+        axis.yaxis.set_minor_locator(AutoMinorLocator(2))
+        axis.tick_params(which='major', direction='in', length=8, width=3.0, pad = tick_pad)
+        axis.tick_params(which='minor', direction='in', length=4, width=3.0, pad = tick_pad)
+
+        axis.set_xlabel(xlabel, labelpad=labelpad)
+        axis.set_ylabel(ylabel, labelpad=labelpad)
+
+        axis.set_xlim(xlim)
+        axis.set_ylim(ylim)
+
+def general_subplots_adjust(fig: Figure,
+                            one_fig_wh: List[float] = [10.72, 8.205], 
+                            fig_subp: List[int] = [1, 1],   
+                            axes_height: float = 5.89,
+                            axes_width: float = 7.31,
+                            left: float = 1.918, 
+                            top: float = 0.9517,
+                            ):
+    """
+    Adjusts the figure's subplots, size, and spacing.
+
+    Args:
+        fig: The figure object to adjust.
+        one_fig_wh (List[float]): Width and height of one figure. Default is [10.72, 8.205].
+        fig_subp (List[int]): Number of subplots. Default is [1, 1].
+        axes_height (float): Height of the axes. Default is 5.89.
+        axes_width (float): Width of the axes. Default is 7.31.
+        left (float): Left margin. Default is 1.918.
+        top (float): Top margin. Default is 0.9517.
+
+    Returns:
+        None
+    """
+    fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
+    # inch 10.72* 8.205 is one figsize
+    left = left
+    right = one_fig_wh[0]-left-axes_width
+    top = top
+    bottom = one_fig_wh[1]-top-axes_height
+    wspace = (left+right)/axes_width  # axes_width 7.31 inch
+    hspace = (top+bottom)/axes_height  # axes_height 5.89 inch
+
+    fig.subplots_adjust(left=left/fig_wh[0], right=(fig_wh[0]-right)/fig_wh[0], 
+                        top=(fig_wh[1]-top)/fig_wh[1], bottom=(bottom)/fig_wh[1],
+                        hspace= (hspace), wspace=(wspace))
+
 def my_plot(
     one_fig_wh: List[float] = [10.72, 8.205],    
     fig_subp: List[int] = [1, 1], 
