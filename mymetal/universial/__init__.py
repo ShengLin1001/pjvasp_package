@@ -29,6 +29,9 @@ from mymetal.universial.atom.fixatom import fixatoms
 from mymetal.universial.matrix.adjust import adjust_matrix
 from mymetal.universial.index.indextrans import three_index_to_four_index
 from mymetal.universial.plot.plot import my_plot, my_plot_brokenaxed, my_plot_energy_components, my_plot_interlayer_distance, my_plot_zpositions
+from mymetal.universial.plot.oldplotdos import my_plot_orientation, my_plot_complete_dos, my_plot_horizontal_vertical, my_plot_complete_dos, my_plot_idos
+from mymetal.universial.math.operations import get_integration
+
 
 __all__ = ['check_input',
            'rm_blank', 'my_add_list', 'my_down_up', 'myjust', 'normalize_float_int',
@@ -42,4 +45,6 @@ __all__ = ['check_input',
                     'adjust_matrix',
                     'three_index_to_four_index',
                     'my_plot', 'my_plot_brokenaxed', 'my_plot_energy_components', 'my_plot_interlayer_distance', 'my_plot_zpositions'      
+                    'my_plot_orientation', 'my_plot_complete_dos', 'my_plot_horizontal_vertical', 'my_plot_complete_dos', 'my_plot_idos'
+                    'get_integration'
 ]
