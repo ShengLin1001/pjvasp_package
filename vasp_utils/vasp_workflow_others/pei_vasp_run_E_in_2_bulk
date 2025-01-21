@@ -1,7 +1,7 @@
 #!/bin/bash
 # B. Yin, 2022-03-09
-# Revised by J. Pei, 2024-10-21
-# echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+# Revised by J. Pei, 2025-01-20
+# echo -e  "356\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 # for volume conserving, the POSCAR should use direct coordinate.
 
 main(){
@@ -9,7 +9,7 @@ main(){
 
     if [ -d "$srcdir0" ]
     then
-        sub_run_E_in_2_slab $1
+        sub_run_E_in_2_bulk $1
     else
         echo "==> no $srcdir0 found! Abort!"
         exit
@@ -20,7 +20,7 @@ main(){
 
 
 
-sub_run_E_in_2_slab(){
+sub_run_E_in_2_bulk(){
     srcdir=`pwd`/y_full_relax_temp
     rm -rf $srcdir
 
@@ -38,27 +38,9 @@ sub_run_E_in_2_slab(){
 
 
 #    yin_vasp_univ_find_and_change  -isym  0 
-    yin_vasp_univ_find_and_change  -isif  2
+    yin_vasp_univ_find_and_change  -isif  3
 
     yin_slurm_find_and_change  -srpl  H
-
-    #echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_CELL.IN
-    echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
-
-    case "$1" in
-        -large) 
-#            yin_vasp_univ_find_and_change  -isym  default
-            yin_slurm_find_and_change  -srpl  L
-            ;;
-        -small) 
-#            yin_vasp_univ_find_and_change  -isym  default
-            yin_slurm_find_and_change  -srpl  L 
-            ;;
-        *)
-            echo "run standard..."
-            ;;
-    esac
-   
  
     cd ..
 
@@ -78,7 +60,7 @@ sub_run_E_in_2_slab(){
     
     #=====================
     
-    dirCij=y_E_in_2_slab
+    dirCij=y_E_in_2_bulk
     
     rm -rI  $dirCij
     mkdir   $dirCij
@@ -118,10 +100,13 @@ sub_run_E_in_2_slab(){
 
         # $c3/$el - original c3
         # /$el/$el - for volume conserving
-        # revised by Jun. P
+        # added by Jun. P
         c3new=`echo "scale=16; $c3/$el/$el/$el" | bc `
-        #####################
         yin_vasp_univ_find_and_change  -a3  " $c1  $c2  $c3new "
+        #####################
+
+        echo -e "356\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_CELL.IN
+
 
         echo 'submit dir:' `pwd`
         sbatch sub.*
