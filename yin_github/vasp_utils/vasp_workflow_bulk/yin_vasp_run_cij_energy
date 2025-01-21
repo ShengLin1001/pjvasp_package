@@ -1,0 +1,216 @@
+#!/bin/bash
+# B. Yin, 2021-09-16
+
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ -d "$srcdir0" ]
+    then
+        sub_run_Cij_energy $1
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+
+
+
+
+sub_run_Cij_energy(){
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+
+    myfile=./CONTCAR
+    if [ -f "$myfile" ]; then
+        echo "$myfile exists."
+    else
+        echo "$myfile does not exist. cp POSCAR CONTCAR "
+        cp POSCAR CONTCAR
+    fi
+
+
+    yin_vasp_univ_find_and_change  -isym  0 
+    yin_vasp_univ_find_and_change  -isif  2
+
+    yin_slurm_find_and_change  -srpl  H
+
+    echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_CELL.IN
+
+
+    case "$1" in
+        -elem) echo "==> run Cij for elements "
+            yin_slurm_find_and_change  -time  2          
+            yin_slurm_find_and_change  -partition  default 
+            ;;
+        
+        *) echo "==> run Cij for supercell " 
+            ;;   
+    esac
+    
+    cd ..
+
+    
+    #--------------------   
+ 
+    a1=`sed -n '3,3p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    a2=`sed -n '3,3p' $srcdir/CONTCAR | awk '{printf "%.16f", $2}'`
+    a3=`sed -n '3,3p' $srcdir/CONTCAR | awk '{printf "%.16f", $3}'`
+    
+    b1=`sed -n '4,4p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    b2=`sed -n '4,4p' $srcdir/CONTCAR | awk '{printf "%.16f", $2}'`
+    b3=`sed -n '4,4p' $srcdir/CONTCAR | awk '{printf "%.16f", $3}'`
+    
+    c1=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+    c2=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $2}'`
+    c3=`sed -n '5,5p' $srcdir/CONTCAR | awk '{printf "%.16f", $3}'`
+    
+    echo $a1 $a2 $a3
+    echo $b1 $b2 $b3
+    echo $c1 $c2 $c3
+    
+    
+    #=====================
+    
+    dirCij=y_cij_energy
+
+    rm -rI  $dirCij
+    mkdir   $dirCij
+    cd      $dirCij
+
+    #=====================
+        
+    dirlist="
+    y_cij_energy_c11
+    y_cij_energy_c12
+    y_cij_energy_c13
+    y_cij_energy_c33
+    y_cij_energy_c44
+    "
+
+
+    #=====================
+
+    for i1 in $dirlist;  do
+    
+        dirn=$i1
+        echo ================ $dirn
+        
+        mkdir   $dirn
+        cd      $dirn
+        
+        mkdir y_dir
+        cd    y_dir
+    
+
+        #=====================
+    
+        for e in  -0.003  -0.002  -0.001  0.000  0.001  0.002  0.003 ;  do
+            el=`echo "scale=16; $e+1" | bc`
+            dirn2=`printf "%.3f" "$el"`
+            echo ================ $dirn2
+
+            mkdir $dirn2
+            cd $dirn2
+    
+            cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+            mv CONTCAR POSCAR
+        
+
+        
+            if [ "$dirn" == "y_cij_energy_c11" ]; then
+                a11=`echo "scale=16; $a1+ $a1*$e" | bc`
+                b11=`echo "scale=16; $b1+ $b1*$e" | bc`
+                c11=`echo "scale=16; $c1+ $c1*$e" | bc`
+    
+                latta=`printf "%.16f  %.16f  %.16f"   "$a11" "$a2" "$a3"`
+                lattb=`printf "%.16f  %.16f  %.16f"   "$b11" "$b2" "$b3"`
+                lattc=`printf "%.16f  %.16f  %.16f"   "$c11" "$c2" "$c3"`
+    
+
+
+            elif [ "$dirn" == "y_cij_energy_c12" ]; then
+                a11=`echo "scale=16; $a1+ $a1*$e" | bc`
+                b11=`echo "scale=16; $b1+ $b1*$e" | bc`
+                c11=`echo "scale=16; $c1+ $c1*$e" | bc`
+            
+                a22=`echo "scale=16; $a2+ $a2*$e" | bc`
+                b22=`echo "scale=16; $b2+ $b2*$e" | bc`
+                c22=`echo "scale=16; $c2+ $c2*$e" | bc`
+            
+                latta=`printf "%.16f  %.16f  %.16f"   "$a11" "$a22" "$a3"`
+                lattb=`printf "%.16f  %.16f  %.16f"   "$b11" "$b22" "$b3"`
+                lattc=`printf "%.16f  %.16f  %.16f"   "$c11" "$c22" "$c3"`
+            
+
+
+            elif [ "$dirn" == "y_cij_energy_c13" ]; then
+                a11=`echo "scale=16; $a1+ $a1*$e" | bc`
+                b11=`echo "scale=16; $b1+ $b1*$e" | bc`
+                c11=`echo "scale=16; $c1+ $c1*$e" | bc`
+                
+                a33=`echo "scale=16; $a3+ $a3*$e" | bc`
+                b33=`echo "scale=16; $b3+ $b3*$e" | bc`
+                c33=`echo "scale=16; $c3+ $c3*$e" | bc`
+                
+                latta=`printf "%.16f  %.16f  %.16f"   "$a11" "$a2" "$a33"`
+                lattb=`printf "%.16f  %.16f  %.16f"   "$b11" "$b2" "$b33"`
+                lattc=`printf "%.16f  %.16f  %.16f"   "$c11" "$c2" "$c33"`
+
+
+
+            elif [ "$dirn" == "y_cij_energy_c33" ]; then
+                a33=`echo "scale=16; $a3+ $a3*$e" | bc`
+                b33=`echo "scale=16; $b3+ $b3*$e" | bc`
+                c33=`echo "scale=16; $c3+ $c3*$e" | bc`
+                
+                latta=`printf "%.16f  %.16f  %.16f"   "$a1" "$a2" "$a33"`
+                lattb=`printf "%.16f  %.16f  %.16f"   "$b1" "$b2" "$b33"`
+                lattc=`printf "%.16f  %.16f  %.16f"   "$c1" "$c2" "$c33"`
+
+
+
+            elif [ "$dirn" == "y_cij_energy_c44" ]; then
+                a33=`echo "scale=16; $a3+ $a2*$e" | bc`
+                b33=`echo "scale=16; $b3+ $b2*$e" | bc`
+                c33=`echo "scale=16; $c3+ $c2*$e" | bc`
+                
+                latta=`printf "%.16f  %.16f  %.16f"   "$a1" "$a2" "$a33"`
+                lattb=`printf "%.16f  %.16f  %.16f"   "$b1" "$b2" "$b33"`
+                lattc=`printf "%.16f  %.16f  %.16f"   "$c1" "$c2" "$c33"`
+
+            fi 
+
+
+            echo -e " "$latta "\n" $lattb "\n" $lattc
+    
+            sed '3s/.*/'"$latta"'/' ./POSCAR > ./temp1
+            sed '4s/.*/'"$lattb"'/' ./temp1 > ./temp2
+            sed '5s/.*/'"$lattc"'/' ./temp2 > ./POSCAR
+            rm ./temp*
+    
+    
+            echo 'submit dir:' `pwd`
+            sbatch sub.*
+            cd ..
+        done
+
+        cd ..
+        cd ..
+    done
+
+
+    rm -rf $srcdir
+}
+
+
+
+main "$@"; exit
+
+
+

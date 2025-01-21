@@ -1,0 +1,24 @@
+#!/bin/bash
+
+
+echo -e   "SLURM_JOBID        =" $SLURM_JOBID
+echo -e   "SLURM_JOB_NODELIST =" $SLURM_JOB_NODELIST
+echo -e   "SLURM_NNODES       =" $SLURM_NNODES
+echo -e   "SLURM_SUBMIT_DIR   =" $SLURM_SUBMIT_DIR "\n"
+
+echo -e "pwd :\n"`pwd` "\n"
+echo -e "bash --version :\n"`bash --version` "\n"
+echo -e "uname -a :\n"`uname -a` "\n"
+echo -e "cat /etc/system-release :\n"`cat /etc/system-release` "\n"
+
+
+#echo -e "which -a ifort :\n"`which -a ifort` "\n"
+#echo -e "ifort --version :\n"`ifort --version` "\n"
+#echo -e "which -a ftn :\n"`which -a ftn` "\n"
+
+
+
+
+
+
+

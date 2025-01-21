@@ -1,0 +1,32 @@
+#!/bin/bash
+# B. Yin
+
+srcdir=`pwd`/y_src   # source dir
+workdir=./y_dir      # work dir, comment it to be safe
+
+rm -rI $workdir
+mkdir  $workdir
+cd     $workdir
+
+#=====================
+# loop
+#=====================
+
+for i1 in `ls $srcdir/poscars2`
+do
+mkdir $i1
+cd $i1
+
+echo '====================' $i1
+
+cp $srcdir/* ./
+cp $srcdir/poscars2/$i1 ./POSCAR
+
+
+echo 'dir for submit:' `pwd`
+#yin_vasp_univ_adjust_NPAR
+sbatch sub.*
+
+cd ..
+done
+

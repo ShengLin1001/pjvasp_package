@@ -1,0 +1,46 @@
+#!/bin/bash
+# B. Yin, 2020-07-28
+
+
+workdir=y_dir
+
+flatdir=`pwd`/flat_hierarchy
+echo   $flatdir 
+rm -rf $flatdir
+mkdir  $flatdir
+
+d0=`pwd`
+lend0=`echo $d0 | wc -c`
+echo $lend0
+
+
+# use y_dir to collect completed jobs only 
+mylist=`find ./ -type d -name $workdir`
+
+for dirn in $mylist; do
+    cd $dirn
+        
+    str1=`pwd`
+    str1=`echo "${str1:$lend0}"`
+    echo $str1
+
+    str2=`echo "$str1" | tr / -`
+    echo $str2
+
+    for i1 in `ls` ; do
+        str22=$str2-$i1
+        cp -r $i1  $flatdir/$str22
+    done
+
+    cd $d0
+    done
+
+
+
+cd $flatdir
+find ./ -name Y_*    -delete
+cd ..
+
+
+
+

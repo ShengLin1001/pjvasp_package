@@ -1,0 +1,76 @@
+#!/bin/bash
+# B. Yin, 2020-01-30
+
+
+my_adjust_input(){
+
+pwd
+
+j1=`grep -n "NCORE" ./INCAR | cut -d ":" -f1`
+sed $j1"s/.*/ NCORE = $1/" ./INCAR > ./temp
+mv ./temp ./INCAR
+
+
+j1=`grep -n "nodes=" ./sub.* | cut -d ":" -f1`
+sed $j1"s/.*/#SBATCH --nodes=$2/" ./sub.* > ./temp
+mv ./temp ./sub.*
+
+j1=`grep -n "mem=" ./sub.* | cut -d ":" -f1`
+sed $j1"s/.*/#SBATCH --mem=$3/" ./sub.* > ./temp
+mv ./temp ./sub.*
+
+j1=`grep -n "ntasks-per-node=" ./sub.* | cut -d ":" -f1`
+sed $j1"s/.*/#SBATCH --ntasks-per-node=$4/" ./sub.* > ./temp
+mv ./temp ./sub.*
+
+}
+
+
+
+
+#=======================
+
+if [ -z "$1" ]; then      # empty $1 is true 
+    echo "==>  Please indicate the name of the cluster. Abort!"
+    exit 
+fi
+
+
+
+#=======================
+
+case "$1" in
+
+    -deneb) echo "==>  adjusting to Deneb" 
+        ncore=16
+        nodes=16
+        mem=0
+        ntasks=16
+        ;;
+
+    -fidis) echo "==>  adjusting to Fidis"
+        ncore=14
+        nodes=8
+        mem=0
+        ntasks=28
+        ;;
+   
+    -helve) echo "==>  adjusting to Helve"
+        ncore=18
+        nodes=8
+        mem=0
+        ntasks=36
+        ;;
+
+
+    *)  echo "==>  Option $1 not recognized. Abort!" 
+        exit
+        ;;   
+
+esac
+
+
+my_adjust_input  $ncore  $nodes  $mem  $ntasks
+
+
+

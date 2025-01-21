@@ -1,0 +1,45 @@
+#!/bin/bash
+
+
+mybin=$1
+Rlevel=$2  # RL, etc
+Rnotes=$3  # y_RL_notes, etc
+
+
+#========================
+
+echo -e "\n#--------------------------"
+echo -e "# Enter Relax Stage: " $Rlevel
+echo -e "#--------------------------\n"
+
+
+cp POSCAR CONTCAR   
+
+Rstep=0
+relaxed=`grep 'reached required accuracy' POSCAR`
+
+while [  "$relaxed" = "" ]; do
+    let Rstep=Rstep+1
+    
+    echo -e "\n"`date` "\n steps:" $Rlevel $Rstep "\n"
+    
+    cp CONTCAR POSCAR
+    yin_vasp_univ_update_MAGMOM
+    srun $mybin
+    
+    relaxed=`grep 'reached required accuracy' OUTCAR`
+done
+
+cat INCAR   >  $Rnotes; echo -e "\n" >> $Rnotes
+cat KPOINTS >> $Rnotes; echo -e "\n" >> $Rnotes
+cat CONTCAR >> $Rnotes; echo -e "\n" >> $Rnotes
+cat OUTCAR  >> $Rnotes
+
+cp CONTCAR POSCAR
+
+
+echo -e "\n#--------------------------"
+echo -e "#" $Rlevel "done!"
+echo -e "#--------------------------\n"
+
+

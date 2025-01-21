@@ -1,0 +1,261 @@
+#!/bin/bash
+# B. Yin, 2016-11-30
+# for vasp.5.3.5
+
+
+main(){
+
+
+    y_post_data=y_post_data.txt
+    y_post_data_2=y_post_data_2.txt  
+    y_post_time=y_post_time.txt  
+    y_post_param=y_post_param.txt  
+    y_post_param_2=y_post_param_2.txt  
+    y_post_diff=y_post_diff.txt
+    y_post_warning=y_post_warning.txt  
+
+ 
+    #--------------------
+
+    workdir=y_dir
+    d0=`pwd`
+   
+    # dir count
+    dc=`find ./ -type d -name $workdir  -print | wc -l`  
+    echo "==> Number of $workdir: $dc "
+    
+    if [ $dc -gt 10 ]; then
+        echo "==> Too many ($dc) dir found. Continue? [y or n] "
+        read icont
+      
+        if [ "$icont" == "n" ]; then
+        echo "==> Abort!"
+        exit
+        fi
+    fi
+    
+    mylist=`find ./ -type d -name $workdir`
+    for dirn in $mylist; do
+        cd $dirn
+        cd ..
+        echo -e "\n==> post in the following dir:"
+        pwd
+   
+        sub_post 
+
+        case "$1" in
+            -v) 
+                echo "==> verbose: "
+                python3  $YIN_GITHUB/vasp_utils/vasp_universal/yin_vasp_plot_mag.py
+                python3  $YIN_GITHUB/vasp_utils/vasp_universal/yin_vasp_plot_dos.py
+                python3  $YIN_GITHUB/vasp_utils/vasp_universal/yin_vasp_plot_statistics.py
+                python3  $YIN_GITHUB/vasp_utils/vasp_universal/yin_vasp_plot_param_statistics.py
+                ;;
+        esac
+
+        cd $d0
+        unset dirn
+    done
+
+    echo -e "\n==> post summary: "
+    for dirn in $mylist; do
+        echo -e "\n$dirn"
+        cat $dirn/../$y_post_time
+        grep "Your highest band" $dirn/../$y_post_warning
+    done
+    echo " "
+}
+
+
+
+
+
+sub_post(){
+    echo 'i1   energy(sigma->0)(eV)   EENTRO(eV)   -stress(kB)' > ./$y_post_data
+    echo 'i1   volume   pressure(kB)   Fmax'                    > ./$y_post_data_2
+    
+    echo 'i1   job state: relaxed? time? CPUs? memory?'         > ./$y_post_time
+    echo 'i1   input parameters'                                > ./$y_post_param
+    echo 'i1   input parameters 2'                              > ./$y_post_param_2
+    echo 'i1   diff INCAR KPOINTS POTCAR sub.*'                 > ./$y_post_diff
+    echo 'i1   WARNING'                                         > ./$y_post_warning 
+   
+    
+    refdir=`ls -d -- $workdir/*/  |   head -1`
+    echo -e "refdir:" $refdir "\n"
+ 
+    declare -a arr=(
+    "INCAR"
+    "KPOINTS"
+    "POTCAR"
+    "sub.vasp"
+    "Y_CONSTR_CELL.IN"
+    )
+
+ 
+    uf=0
+    ut=0
+    ur=0
+   
+
+ 
+    #===================
+    # loop
+    #===================
+   
+    for i1 in `ls $workdir` ; do
+    
+        resdir=$workdir/$i1
+
+        ut=$[$ut+1]
+
+        if [ ! -f $resdir/OUTCAR ] ; then
+            # echo -e "    no OUTCAR, continue. "  
+            ur=$[$ur+1]
+            uf=$[$uf+1]
+            continue
+        fi
+
+        echo "resdir:" $resdir 
+
+
+        #--------------------
+        
+        j1=`grep 'energy  without entropy' $resdir/OUTCAR | tail -1`
+        j11=`echo $j1 | awk '{printf "%16.8f", $7}'`
+        
+        j2=`grep 'EENTRO' $resdir/OUTCAR  | tail -1`
+        j22=`echo $j2 | awk '{printf "%16.8f", $5}'`
+        
+        j3=`grep 'in kB' $resdir/OUTCAR | tail -1`
+        
+        echo -e $i1"\t"$j11"\t"$j22"\t"$j3 >> ./$y_post_data
+
+        
+        #--------------------
+ 
+        jv=`grep "volume of cell"     $resdir/OUTCAR                 | tail -1 | awk '{printf $5}'`
+        jp=`grep "external pressure"  $resdir/OUTCAR                 | tail -1 | awk '{printf $4}'`
+    
+        if [ -f $resdir/y_force_to_relax.out ] ; then
+            jF=`grep -A1 norm         $resdir/y_force_to_relax.out   | tail -1 | awk '{printf $2}'`        
+        else 
+            jF="0"
+        fi 
+                
+        echo -e $i1"\t"$jv"\t"$jp"\t"$jF >> ./$y_post_data_2
+        
+        
+        #--------------------
+        
+        k1=`grep -e '-- Iteration'   $resdir/OUTCAR | tail -1 | awk '{printf $2" "$3$4}'`
+        k2=`grep 'reached required'  $resdir/OUTCAR | awk '{printf $1$2$3}'`
+        k3=`grep 'Elapsed time'      $resdir/OUTCAR | awk '{printf $1$2" "$4}'`
+        k4=`grep 'distr:'            $resdir/OUTCAR | awk '{printf $6$7$8$9}'`
+        k5=`grep 'Maximum memory'    $resdir/OUTCAR | awk '{printf $2" "$5}'`
+        k6=`grep 'LOOP'              $resdir/OUTCAR | head -1 | awk '{printf $1$7}'`
+        
+
+        
+        if [ "$k2" = "" ]; then
+            ur=$[$ur+1]
+        fi
+        
+        if [ "$k3" = "" ]; then
+            uf=$[$uf+1]
+        fi
+        
+        echo -e $i1"\t"$k1"\t"$k2"\t"$k3"\t"$k4"\t"$k5"\t"$k6 >> ./$y_post_time
+
+        
+        #--------------------
+        
+        k31=`grep 'ENCUT'             $resdir/OUTCAR  | awk '{printf "ENCUT="$3}'`
+        k32=`grep 'SIGMA'             $resdir/OUTCAR  | head -1 | awk '{printf "ISMEAR="$3$6}'`
+        k33=`grep 'EDIFF '            $resdir/OUTCAR  | head -1 | awk '{printf "EDIFF="$3}'`
+        k34=`grep 'ISIF'              $resdir/OUTCAR  | awk '{printf $3}'`
+        k35=`grep 'EDIFFG'            $resdir/OUTCAR  | awk '{printf $3}'`
+
+        k36=`grep 'LREAL'             $resdir/OUTCAR  | tail -1 | awk '{printf $1$2$3}'`
+        k37=`grep 'has the point symmetry' $resdir/OUTCAR  | head -1 | awk '{printf $8}'`        
+        
+        if [ -f $resdir/KPOINTS ] ; then
+            k38=`sed -n '4,4p'        $resdir/KPOINTS | awk '{printf "KP="$1}'`
+        else 
+            k38="KP=0"
+        fi 
+        
+        k39=`grep 'generate k-points' $resdir/OUTCAR  | awk '{printf $4"*"$5"*"$6}'`
+        k40=`grep 'NBANDS='           $resdir/OUTCAR  | head -1 | awk '{printf $2$3$4" "$14$15}'`
+
+        echo -e $i1"\t"$k31" "$k32" "$k33" "$k34" "$k35" "$k36" "$k38" "$k39" "$k40" "$k37 >> ./$y_post_param
+       
+ 
+
+
+
+        #--------------------
+        
+        k41=`grep 'ISTART'           $resdir/OUTCAR  | awk '{printf "ISTART="$3}'`
+        k42=`grep 'ICHARG'           $resdir/OUTCAR  | awk '{printf "ICHARG="$3}'`
+        
+        k43=`grep 'PREC'             $resdir/OUTCAR  | awk '{printf "PREC="$3}'`
+        k44=`grep 'ISPIN'            $resdir/OUTCAR  | awk '{printf "ISPIN="$3}'`
+        k45=`grep 'VOSKOWN'          $resdir/OUTCAR  | head -1 | awk '{printf "VOSKOWN="$2}'`
+        k46=`grep 'RWIGS'            $resdir/OUTCAR  | head -1 | awk '{printf "RWIGS="$3}'`
+        k47=`grep 'ALGO'             $resdir/OUTCAR  | awk '{printf "IALGO="$3}'`
+
+        k48=`grep -B2 'support grid'   $resdir/OUTCAR  | head -1 | awk '{printf "NGX="$5}'`
+        k49=`grep -B1 'support grid'   $resdir/OUTCAR  | head -1 | awk '{printf $4}'`
+        k50=`grep     'support grid'   $resdir/OUTCAR  | awk '{printf $4}'`
+
+
+        echo -e $i1"\t"$k41" "$k42" "$k43" "$k44" "$k45" "$k46" "$k47" "$k48" "$k49" "$k50 >> ./$y_post_param_2
+       
+
+
+
+        #--------------------
+        
+        echo -e "\n==================\n "$i1"\n==================\n " >> ./$y_post_warning
+        
+        grep       "WARNING"                                    $resdir/OUTCAR  >> ./$y_post_warning
+        grep -A 10 "W    W  A    A  R    R  N    N  II  N    N" $resdir/OUTCAR  >> ./$y_post_warning
+       
+ 
+        #--------------------
+
+        echo -e "\n==================\n "$i1"\n==================\n " >> ./$y_post_diff
+        
+        for j1 in "${arr[@]}" ; do
+
+            if [ -f $refdir/$j1 ] && [ -f $resdir/$j1 ]  ; then
+                echo -e "\n$j1:\n"                >> ./$y_post_diff  
+                diff $refdir/$j1   $resdir/$j1    >> ./$y_post_diff            
+            fi             
+        done
+        
+    
+    done
+    #===================
+    # loop end
+    #===================    
+    
+ 
+    echo -e "\n----------------------------------"   >> ./$y_post_time
+    echo "|  total number of jobs: " $ut             >> ./$y_post_time
+    echo "|      un-finished jobs: " $uf             >> ./$y_post_time
+    echo "|       un-relaxed jobs: " $ur             >> ./$y_post_time
+    echo -e "----------------------------------\n"   >> ./$y_post_time
+    
+    
+    ls -lshG $workdir/*/slurm-*
+    echo -e " "
+}
+
+
+
+main "$@"; exit
+
+
+

@@ -1,0 +1,55 @@
+#!/bin/bash
+
+outfile=y_post_diff_input.txt
+
+find ./ -name $outfile    -delete
+
+p_diff=`pwd`/$outfile
+echo 'DIFF'  >   $p_diff
+
+
+mylist=`find ./   -type d -name 'y_src'   -o   -type d -name 'y_full_relax' `
+
+refdir=`find ./   -type d -name 'y_src'   -o   -type d -name 'y_full_relax' | head -1 `
+echo -e "refdir:" $refdir "\n"
+
+
+declare -a arr=(
+"INCAR"
+"KPOINTS"
+"sub.vasp"
+"Y_CONSTR_CELL.IN"
+)
+
+
+#===================
+# loop
+#===================
+
+for i1 in $mylist; do
+
+    echo -e "==>" $i1
+    
+    echo -e "\n==================\n "$i1"\n================== " >> $p_diff
+
+    
+    for j1 in "${arr[@]}" ; do
+        echo -e "\n$j1:\n"             >> $p_diff  
+        diff $refdir/$j1      $i1/$j1  >> $p_diff
+    done
+
+    
+    echo -e "\nPOTCAR:\n"          >> $p_diff
+    diffpot=`diff  $refdir/POTCAR  $i1/POTCAR`
+    if [ -z "$diffpot" ] ; then
+        echo $diffpot              >> $p_diff 
+    else
+        grep TITEL $refdir/POTCAR  >> $p_diff    
+        grep TITEL $i1/POTCAR      >> $p_diff
+    fi
+
+done
+
+echo " "
+
+

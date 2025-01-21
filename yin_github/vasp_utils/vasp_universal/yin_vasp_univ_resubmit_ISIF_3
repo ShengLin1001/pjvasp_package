@@ -1,0 +1,54 @@
+#!/bin/bash
+# B. Yin
+
+workdir=./y_dir      # work dir, comment it to be safe
+
+cd $workdir
+
+
+#=====================
+# loop
+#=====================
+
+for i1 in `ls .`
+do
+
+cd $i1
+echo '====================' $i1
+
+
+j1=`grep -n 'ISIF'  INCAR | cut -d ":" -f1`
+sed $j1's/.*/ ISIF = 3/' INCAR > temp
+mv temp INCAR
+
+
+j2=`grep -n 'SRPL='  sub.vasp | cut -d ":" -f1`
+sed $j2's/.*/SRPL=L/' sub.vasp > temp
+mv temp sub.vasp
+
+
+
+
+file=CONTCAR
+minimumsize=0
+actualsize=$(wc -c <"$file")
+if [ $actualsize -gt $minimumsize ]; then
+    echo size of $file is greater than $minimumsize bytes, copying...
+    cp CONTCAR POSCAR
+else
+    echo size of $file is $minimumsize bytes
+fi
+
+
+yin_vasp_univ_update_MAGMOM
+
+
+echo 'dir for submit:' `pwd`
+sbatch sub.*
+
+
+cd ..
+
+done
+
+

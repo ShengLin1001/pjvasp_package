@@ -1,0 +1,139 @@
+#!/bin/bash
+# B. Yin, 2021-10-23
+
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ -d "$srcdir0" ]
+    then
+        sub_run_convergence 
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+
+
+
+
+sub_run_convergence(){
+
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+    yin_vasp_univ_find_and_change  -nsw  0 
+    
+    cd ..
+
+
+
+    #=====================
+
+    dircon=y_convergence 
+
+    rm -rI  $dircon
+    mkdir   $dircon
+    cd      $dircon
+
+    #=====================
+
+    dirlist="
+    y_convergence_encut 
+    y_convergence_kp
+    y_convergence_sigma
+    "    
+
+    #=====================
+
+
+    for i1 in $dirlist;  do
+    
+        dirn=$i1
+        echo ================ $dirn
+        
+        mkdir   $dirn
+        cd      $dirn
+        
+        mkdir y_dir
+        cd    y_dir
+
+        #=====================
+    
+        if [ "$dirn" == "y_convergence_encut" ]; then
+       
+            for j in $(seq 100 50 1000); do
+                
+                dirn2=`printf "%04d" "$j"`
+                echo ================ $dirn2
+                mkdir $dirn2
+                cd $dirn2 
+                cp $srcdir/{INCAR,KPOINTS,POSCAR,POTCAR,Y_*,sub.*} ./
+
+                yin_vasp_univ_find_and_change  -encut  $j 
+
+                echo 'submit dir:' `pwd`
+                sbatch sub.*
+                cd ..
+            done
+
+
+        elif [ "$dirn" == "y_convergence_kp" ]; then
+
+            for j in $(seq 10 10 150); do 
+
+                dirn2=`printf "%03d" "$j"`
+                echo ================ $dirn2
+                mkdir $dirn2
+                cd $dirn2
+                cp $srcdir/{INCAR,KPOINTS,POSCAR,POTCAR,Y_*,sub.*} ./
+
+                yin_vasp_univ_find_and_change  -kp  $j
+
+                echo 'submit dir:' `pwd`
+                sbatch sub.*
+                cd ..
+            done
+
+
+        elif [ "$dirn" == "y_convergence_sigma" ]; then
+
+            for j in $(seq 0.05 0.05 0.50); do
+
+                dirn2=`printf "%.2f" "$j"`
+                echo ================ $dirn2
+                mkdir $dirn2
+                cd $dirn2
+                cp $srcdir/{INCAR,KPOINTS,POSCAR,POTCAR,Y_*,sub.*} ./
+
+                yin_vasp_univ_find_and_change  -sigma  $j
+
+                echo 'submit dir:' `pwd`
+                sbatch sub.*
+                cd ..
+            done
+        fi 
+
+
+        cd ..
+        cd ..
+    done
+
+
+    rm -rf $srcdir
+}
+
+
+
+main "$@"; exit
+
+
+
+
+
+
+

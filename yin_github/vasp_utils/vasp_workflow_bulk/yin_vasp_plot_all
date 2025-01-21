@@ -1,0 +1,153 @@
+#!/bin/bash
+
+
+if [ -z "$1" ]; then      # empty is true 
+    echo "==>  Please indicate what to plot. Abort!"
+    exit 
+fi
+
+
+d0=`pwd`
+
+sub_plot_all(){
+    workdir="$1"
+    mycmd=$2
+    echo "==> workdir: "  "$workdir"
+    echo "==> mycmd: "     $mycmd
+
+    mylist=`find ./ -type d -name "$workdir"`
+
+    for dirn in $mylist ; do
+        cd $dirn
+        echo -e "\n==>" `pwd`
+    
+        yin_vasp_univ_post 
+        python3  $mycmd
+    
+        cd $d0
+    done
+
+
+    echo -e "\n==> ${FUNCNAME[0]} summary: "
+    for dirn in $mylist ; do
+        echo -e "\n$dirn"
+        cat $dirn/y_post_time.txt
+        grep "Your highest band" $dirn/y_post_warning.txt
+    done
+    echo " "
+
+}
+
+
+
+
+case "$1" in
+
+
+    -convergence) 
+        workdir=y_convergence 
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_convergence.py
+	    sub_plot_all  $workdir  $mycmd 
+        ;;
+
+
+
+
+    -eos) 
+        workdir=y_eos
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_eos.py
+	    sub_plot_all  $workdir  $mycmd 
+        ;;
+
+	
+    -cohesive) 
+        workdir=y_cohesive
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_cohesive.py
+	    sub_plot_all  $workdir  $mycmd 
+        ;;
+
+    -cij_stress) 
+        workdir=y_cij_stress
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_cij_stress.py
+	    sub_plot_all  $workdir  $mycmd 
+        ;;
+
+
+    -cij_energy) 
+        workdir=y_cij_energy 
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_cij_energy.py
+	    sub_plot_all  $workdir  $mycmd 
+        ;;
+
+
+
+
+
+
+
+    -planar)
+        workdir=y_planar_relaxed_*
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_planar_defects/yin_vasp_plot_planar_relaxed.py
+        sub_plot_all  "$workdir"  $mycmd
+        ;;
+
+    -gsfe)
+        workdir=y_gsfe_*
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_planar_defects/yin_vasp_plot_gsfe.py
+        sub_plot_all  "$workdir"  $mycmd
+        ;;
+
+    -decohesion)
+        workdir=y_decohesion
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_planar_defects/yin_vasp_plot_decohesion.py
+        sub_plot_all  "$workdir"  $mycmd
+        ;;
+
+    
+
+
+
+
+    -E_in_2_bulk)
+        workdir=y_E_in_2_bulk
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_2_bulk.py
+            sub_plot_all  $workdir  $mycmd
+        ;;
+
+
+    -E_in_2_slab)
+        workdir=y_E_in_2_slab
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_2_slab.py
+            sub_plot_all  $workdir  $mycmd
+        ;;
+
+
+
+    -E_in_1_bulk)
+        workdir=y_E_in_1_bulk
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_1_bulk.py
+            sub_plot_all  $workdir  $mycmd
+        ;;
+
+
+    -E_in_1_slab)
+        workdir=y_E_in_1_slab
+        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_1_slab.py
+            sub_plot_all  $workdir  $mycmd
+        ;;
+
+
+
+
+
+
+
+    *) 
+        echo "==>  Option $1 not recognized. Abort!" 
+        exit
+        ;;   
+esac
+
+
+
+

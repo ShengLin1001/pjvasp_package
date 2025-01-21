@@ -1,0 +1,73 @@
+#!/bin/bash
+# B. Yin
+
+
+if [ -z "$1" ]; then      # empty is true 
+    echo "==>  Please indicate the tag to modify. Abort!"
+    exit 
+fi
+
+
+if [ -z "$2" ]; then      # empty is true
+    echo "==>  Please input the new value. Abort!"
+    exit
+fi
+
+
+sub_change(){
+    file1=$1
+    tag1=$2
+    str1=$3
+    echo "==> changing '"$2"' in '"$1"' to '"$3"': "
+
+    for filen in `find ./ -type f -name $file1`; do
+        echo $filen
+        j1=`grep -n  $tag1  $filen | head -1 | cut -d ":" -f1`
+
+        if [ "$j1" = "" ]; then
+            echo "no $tag1 in the file"
+	else 
+            sed $j1's/.*/'"$str1"'/' $filen > temp
+            mv temp $filen
+        fi
+    done
+}
+
+
+
+case "$1" in
+
+    -time) 
+        str="#SBATCH --time=$2:00:00 "
+        subf=`ls sub.* | head -1`
+        sub_change  $subf  'time='  "$str" 
+        ;;
+
+
+    -partition)
+        if [ $2 == "default" ]; then
+            str="#  #SBATCH --partition=   " 
+        else
+            str="#SBATCH --partition=$2 "
+        fi
+
+        subf=`ls sub.* | head -1`
+        sub_change  $subf  'partition='  "$str"
+        ;;
+
+
+    -srpl)
+        str="SRPL=$2 "
+        subf=sub.vasp
+        sub_change  $subf  'SRPL='  "$str"
+        ;;
+
+
+    *)  echo "==>  Option $1 not recognized. Abort!" 
+        exit
+        ;;   
+esac
+
+
+
+

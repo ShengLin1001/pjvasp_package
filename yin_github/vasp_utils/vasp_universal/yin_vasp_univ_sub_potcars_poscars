@@ -1,0 +1,39 @@
+#!/bin/bash
+# B. Yin
+
+srcdir=`pwd`/y_src   
+workdir=./y_dir     
+ 
+rm -rI $workdir
+mkdir  $workdir
+cd     $workdir
+
+#=====================
+# loop
+#=====================
+
+for i1 in `ls $srcdir/potcars`
+do
+
+for i2 in `ls $srcdir/poscars`
+do
+
+
+mkdir $i1'_'$i2
+cd    $i1'_'$i2
+
+echo '====================' $i1'_'$i2
+
+cp $srcdir/* ./
+cp $srcdir/potcars/$i1/* ./
+cp $srcdir/poscars/$i2/* ./
+
+
+echo 'dir for submit:' `pwd`
+sbatch sub.*
+
+cd ..
+
+done
+done
+

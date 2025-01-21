@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# yin_pbs_vasp_static  "$mycmd"  $mylog
+
+
+mycmd=$1
+mylog=$2
+
+
+
+#==============================
+
+echo -e "\n#--------------------------"   >> $mylog
+echo -e "# Enter Static:              "   >> $mylog
+echo -e "#--------------------------\n"   >> $mylog
+
+
+
+yin_vasp_univ_find_and_change  -nsw      0  >> $mylog
+yin_vasp_univ_find_and_change  -isym     0  >> $mylog
+yin_vasp_univ_find_and_change  -nelm   200  >> $mylog
+
+
+    
+echo -e "\n"`date`       "\n STEP Static \n"                  >> $mylog
+echo -e "\n---------------\n STEP Static \n---------------\n" >> y_oszicar
+echo -e "\n---------------\n STEP Static \n---------------\n" >> y_outcar
+echo -e "\n---------------\n STEP Static \n---------------\n" >> y_poscar
+
+
+cp CONTCAR POSCAR
+cat POSCAR >> y_poscar
+   
+yin_vasp_univ_update_MAGMOM  >>  $mylog  2>&1
+eval $mycmd
+
+cat OSZICAR >> y_oszicar
+cat OUTCAR >> y_outcar
+
+
+
+echo -e "\n#--------------------------"   >> $mylog
+echo -e "# Static done!               "   >> $mylog
+echo -e "#--------------------------\n"   >> $mylog
+
+date     >>  $mylog
+echo " " >>  $mylog
+
+
+

@@ -1,0 +1,86 @@
+#!/bin/bash
+#
+# update the MAGMOM info in INCAR for rerun
+# LIMIT: put MAGMOM at the end of INCAR
+# 
+# by B. Yin, 2018.10.24
+
+
+
+echo "yin_vasp_univ_update_MAGMOM:"
+
+
+
+out1=OUTCAR_magnetization
+out2=OUTCAR_MAGMOM
+
+
+#================================
+
+
+natoms=`grep "NION" OUTCAR | awk '{printf "%10d \n", $12 }'`
+
+
+LineNum=`grep -n "magnetization (x)" OUTCAR | tail -1 | awk -F: '{print $1}'` 
+
+
+if [ "$LineNum" = "" ]; then
+echo "no magnetization info"
+
+
+else
+LineS=$[$LineNum+4] 
+LineE=$[$LineS+$natoms-1]
+
+Linetot=`wc -l < OUTCAR`
+
+if [ "$LineE" -ge "$Linetot" ]; then
+echo "truncated OUTCAR"
+
+
+else
+echo "update MAGMOM in INCAR"
+
+
+sed -n "$LineS,$LineE p" OUTCAR | awk '{printf "%8.3f\n", $5 }' > $out1
+
+
+echo " MAGMOM = \ " > $out2
+
+for ((i=1;i<=$natoms;i++))
+do
+
+AtomMag=`sed -n "$i p" $out1`
+printf " $AtomMag" >> $out2
+
+modi=$(($i%5))
+if [ $modi -eq 0 ]; then
+printf "   \   \n" >> $out2
+fi
+
+done
+
+printf " \n \n" >> $out2
+
+
+
+
+#================================
+
+j1=`grep -n 'MAGMOM' INCAR | cut -d ":" -f1`
+
+j2=$[$j1-1]
+
+
+head -$j2 INCAR > temp
+mv temp INCAR
+
+cat $out2 >> INCAR
+
+
+rm $out1
+rm $out2
+
+fi
+fi
+

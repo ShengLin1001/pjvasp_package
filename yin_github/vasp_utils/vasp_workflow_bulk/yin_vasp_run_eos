@@ -1,0 +1,102 @@
+#!/bin/bash
+# B. Yin, 2020-04-03
+
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ ! -d "$srcdir0" ]; then
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+
+    sub_run_eos $1
+}
+
+
+
+sub_run_eos(){
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+
+    myfile=./CONTCAR
+    if [ -f "$myfile" ]; then
+        echo "$myfile exists."
+    else
+        echo "$myfile does not exist. cp POSCAR CONTCAR "
+        cp POSCAR CONTCAR
+    fi
+
+
+    yin_vasp_univ_find_and_change  -isym  0 
+    yin_vasp_univ_find_and_change  -isif  4
+    
+    yin_slurm_find_and_change  -srpl  H
+
+    echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_CELL.IN
+
+
+    case "$1" in
+        -elem) echo "==> run eos for elements "
+            yin_slurm_find_and_change  -time  2          
+            yin_slurm_find_and_change  -partition  default
+            ;;
+        
+        *) echo "==> run eos for supercell " 
+            ;;   
+    esac
+    
+    cd ..
+
+
+    #-----------------
+
+    a0=`sed -n '2,2p' $srcdir/POSCAR | awk '{printf "%.16f", $1}'`
+    echo 'a0' $a0
+
+    #=====================
+
+    rm -rI y_eos
+    mkdir  y_eos
+    cd     y_eos
+
+    mkdir y_dir
+    cd    y_dir
+
+    #=====================
+
+    for vel in $(seq 0.94 0.02 1.06) ; do
+
+        dirn=`printf "%.3f" "$vel"`
+        echo ================ $dirn
+        mkdir $dirn
+        cd $dirn
+
+        cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+        mv CONTCAR POSCAR
+        
+        el=`echo $vel | awk '{ printf "%.16f",  ($1)^(1/3); }'`
+        echo 'el' $el
+
+        a0new=`echo "scale=16; $a0*$el" | bc`
+
+        yin_vasp_univ_find_and_change  -a0  $a0new        
+
+        echo 'submit dir:' `pwd`
+        sbatch sub.*
+        cd ..
+    
+    done
+
+    rm -rf $srcdir
+}
+
+
+main "$@"; exit
+
+
+

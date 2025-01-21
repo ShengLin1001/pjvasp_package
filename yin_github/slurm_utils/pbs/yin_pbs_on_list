@@ -1,0 +1,64 @@
+#!/bin/bash
+# B. Yin, 2021-10-24
+
+
+
+my_on_list(){
+
+local mycmd ids ide i
+
+
+mycmd=$*
+echo $mycmd
+
+echo "==>  Type the fisrt JobID, [ENTER]:"
+read ids    # id start
+
+echo "==>  Type the last JobID, [ENTER]:"
+read ide    # id end
+
+echo "==>  working on jobs from" $ids "to" $ide
+
+
+for ((i=$ids; i<=$ide; i=i+1))
+do
+
+echo $i
+$mycmd $i     # cmd
+
+done
+}
+
+
+
+
+#=======================
+
+if [ -z "$1" ]; then      # empty $1 is true 
+    echo "==>  Please indicate action. Abort!"
+    exit 
+fi
+
+
+
+#=======================
+
+case "$1" in
+
+    -d) mycmd="qdel"  ;;
+
+    -h) mycmd="qhold"  ;;
+
+    -r) mycmd="qrls"  ;;
+
+
+   
+    *)  echo "==>  Option $1 not recognized. Abort!" 
+        exit
+        ;;   
+esac
+
+
+my_on_list  $mycmd
+
+

@@ -1,0 +1,26 @@
+#!/bin/bash
+# B. Yin, 2023-04-05
+
+file1=`ls | head -1`
+
+a33=`sed -n '5,5p' $file1 | awk '{printf "%.16f", $3}'`
+
+
+case "$1" in
+    -fcc_partial) 
+        echo "==> fcc partial slip "
+        yin_vasp_univ_find_and_change  -a3  " 0.3535533905932738    0.2041241452319315    $a33 "  > tilt.log
+        ;;
+    
+    -fcc_full) 
+        echo "==> fcc full slip "
+        yin_vasp_univ_find_and_change  -a3  " 0.7071067811865475    0.0                   $a33 "  > tilt.log
+        ;;
+    
+    
+    *) 
+        echo "Wrong input." 
+        ;;   
+esac
+
+

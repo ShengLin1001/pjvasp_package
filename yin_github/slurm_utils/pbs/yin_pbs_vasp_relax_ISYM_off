@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# yin_pbs_vasp_relax_ISYM_off  "$mycmd"  $nstep  $mylog
+
+
+
+mycmd=$1
+nstep=$2
+mylog=$3
+
+
+
+cp  CHGCAR   CHGCAR_SYM
+cp  CONTCAR  CONTCAR_SYM
+
+echo -e "\n\n==> enter Relax High, with ISYM turned off \n"    >>   $mylog
+
+cp  CONTCAR  POSCAR
+
+yin_vasp_univ_find_and_change  -isym     0      >> $mylog
+#yin_vasp_univ_find_and_change  -ediffg  -0.001  >> $mylog
+
+yin_pbs_vasp_relax_for  "$mycmd"  $nstep  $mylog
+
+
+date >> $mylog
+yin_pbs_job_echo_time  $SECONDS  $mylog
+
+
+
+

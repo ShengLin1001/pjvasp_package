@@ -1,0 +1,15 @@
+#!/bin/bash
+
+
+duration=$1
+mylog=$2
+
+
+echo -e "\nelapsed time (second):" $duration     >>  $mylog
+
+h1=`echo $(( $duration / 3600 ))`           
+m1=`echo $(( ($duration % 3600) / 60 ))`    
+s1=`echo $(( ($duration % 3600) % 60 ))`    
+
+echo -e "$h1 h : $m1 m : $s1 s \n"               >>  $mylog
+

@@ -1,0 +1,86 @@
+#!/bin/bash
+
+
+date
+SECONDS=0
+
+mycmd=$1 ;   SRPL=$2
+
+FtolRL=$3 ;  KPRL=$4
+FtolRM=$5 ;  KPRM=$6
+FtolRH=$7 ;  KPRH=$8 ;  LREALRH=$9 
+
+nstep=${10} ; mylog=${11}
+
+
+#==============================
+
+echo -e "\n\n==> enter setup \n"                        >> $mylog  
+
+echo -e "mycmd :\n"$mycmd                               >> $mylog
+echo -e "SRPL:" $SRPL                                   >> $mylog
+echo -e "Low:"  $FtolRL $KPRL                           >> $mylog
+echo -e "Med:"  $FtolRM $KPRM                           >> $mylog
+echo -e "High:" $FtolRH $KPRH $LREALRH   $nstep "\n"    >> $mylog
+
+yin_pbs_job_echo_info   $mylog 
+
+
+echo -e "\n"`date`"\n" >   y_oszicar
+echo -e "\n"`date`"\n" >   y_outcar
+echo -e "\n"`date`"\n" >>  y_poscar
+
+echo -e "\n"`date`"\n initial inputs: \n" >> y_initial
+cat INCAR   >> y_initial
+cat KPOINTS >> y_initial
+cat POSCAR  >> y_initial
+
+
+if   [ "$SRPL" = "L" ] ; then
+    flagL=1  ; flagM=1;
+elif [ "$SRPL" = "M" ] ; then
+    flagL=0  ; flagM=1;
+elif [ "$SRPL" = "H" ] ; then
+    flagL=0  ; flagM=0;
+fi
+
+
+#==============================
+if [ "$flagL" = "1" ] ; then
+    echo -e "\n\n==> enter Relax Low \n"     >> $mylog 
+
+    yin_vasp_univ_find_and_change  -lreal    A           >> $mylog
+    yin_vasp_univ_find_and_change  -ediffg   $FtolRL     >> $mylog
+    yin_vasp_univ_find_and_change  -kp       $KPRL       >> $mylog
+    
+    yin_pbs_vasp_relax_while  "$mycmd"  "RL"  "y_RL_notes"  $mylog  
+
+    yin_vasp_univ_find_and_change  -lreal    A           >> $mylog
+    yin_vasp_univ_find_and_change  -ediffg   $FtolRM     >> $mylog
+    yin_vasp_univ_find_and_change  -kp       $KPRM       >> $mylog
+fi
+
+
+#==============================
+if [ "$flagM" = "1" ] ; then
+    echo -e "\n\n==> enter Relax Med \n"     >> $mylog
+
+    yin_pbs_vasp_relax_while  "$mycmd"  "RM"  "y_RM_notes"  $mylog 
+
+    yin_vasp_univ_find_and_change  -lreal    $LREALRH    >> $mylog
+    yin_vasp_univ_find_and_change  -ediffg   $FtolRH     >> $mylog
+    yin_vasp_univ_find_and_change  -kp       $KPRH       >> $mylog
+fi
+
+
+#==============================
+echo -e "\n\n==> enter Relax High \n"        >> $mylog
+yin_pbs_vasp_relax_for  "$mycmd"  $nstep  $mylog  
+
+
+#==============================
+date >> $mylog
+yin_pbs_job_echo_time  $SECONDS  $mylog  
+
+
+

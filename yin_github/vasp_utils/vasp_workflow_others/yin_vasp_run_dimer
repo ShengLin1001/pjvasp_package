@@ -1,0 +1,65 @@
+#!/bin/sh
+# by B. Yin
+
+srcdir=`pwd`/y_src   
+workdir="./y_dir"    # comment it to be safe!!!
+
+
+rm -rI $workdir
+mkdir  $workdir
+cd     $workdir
+
+
+a0=`sed -n '2,2p' $srcdir/POSCAR | awk '{printf "%.16f", $1}'`
+
+echo $a0
+
+
+#=====================
+# loop
+#=====================
+
+N1=39
+echo "N1: " $N1
+
+
+
+for ((i1=0; i1<=$N1; i1=i1+1))
+do
+n1=20
+
+if [ "$i1" -le "$n1" ]; then
+    k=`echo "scale=16; 1.0+$i1*(0.2)" | bc`
+else
+    k=`echo "scale=16; 5.0+($i1-$n1)*0.4" | bc`
+fi
+
+kk=`echo "scale=16; $k/$a0/sqrt(3)" | bc`
+
+
+
+
+
+dirn1=`printf "%04.1f" "$k"`
+mkdir $dirn1
+cd $dirn1
+
+echo $dirn1 '===================='
+
+
+cp $srcdir/*  ./
+
+newx=`echo "scale=16; $kk" | bc`
+
+data1=`printf " %.16f  %.16f  %.16f   T T T " "$newx" "$newx" "$newx"`
+echo $data1
+
+sed '10s/.*/'"$data1"'/' $srcdir/POSCAR > ./POSCAR
+
+
+echo 'dir for submit:' `pwd`
+sbatch sub.*
+
+cd ..
+done
+

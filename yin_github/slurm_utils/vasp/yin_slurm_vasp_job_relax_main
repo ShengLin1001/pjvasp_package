@@ -1,0 +1,83 @@
+#!/bin/bash
+
+
+date
+SECONDS=0
+
+mybin=$1 ;   SRPL=$2
+
+FtolRL=$3 ;  KPRL=$4
+FtolRM=$5 ;  KPRM=$6
+FtolRH=$7 ;  KPRH=$8 ;  LREALRH=$9 ;  nstep=${10}
+
+
+#==============================
+echo -e "\n\n==> enter setup \n"
+
+echo -e "mybin :\n"$mybin 
+echo -e "SRPL:" $SRPL 
+echo -e "Low:"  $FtolRL $KPRL 
+echo -e "Med:"  $FtolRM $KPRM 
+echo -e "High:" $FtolRH $KPRH $LREALRH   $nstep "\n" 
+
+yin_slurm_vasp_job_echo_info
+
+
+echo -e "\n"`date`"\n" >   y_oszicar
+echo -e "\n"`date`"\n" >   y_outcar
+echo -e "\n"`date`"\n" >>  y_poscar
+
+echo -e "\n"`date`"\n initial inputs: \n" >> y_initial
+cat INCAR   >> y_initial
+cat KPOINTS >> y_initial
+cat POSCAR  >> y_initial
+
+
+if   [ "$SRPL" = "L" ] ; then
+    flagL=1  ; flagM=1;
+elif [ "$SRPL" = "M" ] ; then
+    flagL=0  ; flagM=1;
+elif [ "$SRPL" = "H" ] ; then
+    flagL=0  ; flagM=0;
+fi
+
+
+#==============================
+if [ "$flagL" = "1" ] ; then
+    echo -e "\n\n==> enter Relax Low \n"
+
+    yin_vasp_univ_find_and_change  -lreal    A  
+    yin_vasp_univ_find_and_change  -ediffg   $FtolRL 
+    yin_vasp_univ_find_and_change  -kp       $KPRL
+    
+    yin_slurm_vasp_job_relax_while  $mybin  "RL"  "y_RL_notes" 
+
+    yin_vasp_univ_find_and_change  -lreal    A  
+    yin_vasp_univ_find_and_change  -ediffg   $FtolRM
+    yin_vasp_univ_find_and_change  -kp       $KPRM
+fi
+
+
+#==============================
+if [ "$flagM" = "1" ] ; then
+    echo -e "\n\n==> enter Relax Med \n"
+
+    yin_slurm_vasp_job_relax_while  $mybin  "RM"  "y_RM_notes" 
+
+    yin_vasp_univ_find_and_change  -lreal    $LREALRH 
+    yin_vasp_univ_find_and_change  -ediffg   $FtolRH
+    yin_vasp_univ_find_and_change  -kp       $KPRH
+fi
+
+
+#==============================
+echo -e "\n\n==> enter Relax High \n"
+yin_slurm_vasp_job_relax_for  $mybin  $nstep  
+
+
+#==============================
+date
+yin_slurm_vasp_job_echo_time $SECONDS
+
+
+

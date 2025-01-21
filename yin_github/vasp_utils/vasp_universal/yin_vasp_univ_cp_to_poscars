@@ -1,0 +1,34 @@
+#!/bin/bash
+# B. Yin
+
+
+
+if [ -z "$1" ]; then      # empty $1 is true 
+    echo "==>  Please indicate the y_dir to be copied to poscars. Abort!"
+    exit 
+fi
+
+
+#=======================
+ 
+echo "==>  copying $1 "
+
+
+dirpos=poscars
+rm -rf $dirpos
+mkdir  $dirpos
+
+dirjobPATH=`pwd`/$1
+dirposPATH=`pwd`/$dirpos
+
+echo $dirjobPATH 
+echo $dirposPATH
+
+
+#=======================
+
+rsync -am  --include={CONTCAR,CHGCAR}   \
+    --include="*/"  --exclude="*"  "${dirjobPATH}/"  "${dirposPATH}/" 
+
+
+

@@ -1,0 +1,49 @@
+#!/bin/bash
+
+mycmd=$1
+nstep=$2
+mylog=$3
+
+Rlevel="RH"
+
+
+#==============================
+
+echo -e "\n#--------------------------"   >> $mylog
+echo -e "# Enter Relax Stage: " $Rlevel   >> $mylog
+echo -e "#--------------------------\n"   >> $mylog
+
+
+cp POSCAR CONTCAR
+
+for ((i=1; i<=$nstep; i=i+1)) ; do
+    
+    echo -e "\n"`date`       "\n STEP" $i"/"$nstep "\n"                  >> $mylog
+    echo -e "\n---------------\n STEP" $i"/"$nstep "\n---------------\n" >> y_oszicar
+    echo -e "\n---------------\n STEP" $i"/"$nstep "\n---------------\n" >> y_outcar
+    echo -e "\n---------------\n STEP" $i"/"$nstep "\n---------------\n" >> y_poscar
+ 
+    cp CONTCAR POSCAR
+    cat POSCAR >> y_poscar
+   
+    yin_vasp_univ_update_MAGMOM  >>  $mylog  2>&1
+    eval $mycmd
+    
+    cat OSZICAR >> y_oszicar
+    cat OUTCAR >> y_outcar
+  
+
+    OSZI=`grep F= OSZICAR | tail -1 | awk '{printf $1}'`
+    echo -e "\nionic steps in OSZICAR:" $OSZI              >>  $mylog
+    if [ $OSZI -eq 1 ] ; then
+        echo -e "\n==================================="    >>  $mylog
+        echo -e " STEP" $i"/"$nstep                        >>  $mylog
+        echo -e " relaxed after 1 ionic step, break"       >>  $mylog
+        echo -e "===================================\n"    >>  $mylog
+        break
+    fi
+
+done
+  
+
+

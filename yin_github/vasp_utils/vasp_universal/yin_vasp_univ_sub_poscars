@@ -1,0 +1,44 @@
+#!/bin/bash
+# B. Yin
+
+srcdir=`pwd`/y_src   # source dir
+workdir=./y_dir      # work dir, comment it to be safe
+
+rm -rI $workdir
+mkdir  $workdir
+cd     $workdir
+
+#=====================
+# loop
+#=====================
+
+for i1 in $srcdir/poscars/*/ ;  do
+    i1=$(basename $i1)
+    echo '====================' $i1
+    mkdir $i1
+    cd $i1
+    
+    cp $srcdir/*  ./
+    
+
+    case "$1" in
+        -contcar)
+            echo "==> copy CONTCAR: "
+            cp $srcdir/poscars/$i1/CONTCAR  ./POSCAR
+            cp $srcdir/poscars/$i1/CHG*     .
+            ;;
+
+        *)  
+            echo "==> copy POSCAR and others: "            
+            cp $srcdir/poscars/$i1/*  ./
+            ;;   
+    esac
+    
+    
+    echo 'dir for submit:' `pwd`
+    sbatch sub.*
+    cd ..
+done
+
+
+

@@ -1,0 +1,64 @@
+#!/bin/bash
+# B. Yin
+
+
+
+if [ -z "$1" ]; then      # empty $1 is true 
+    echo "==>  Please indicate the vasp job folder to archive. Abort!"
+    exit 
+fi
+
+
+#=======================
+ 
+echo "==>  archiving $1 "
+
+
+dirjob=$1;
+dirjob=${dirjob%/};         # to remove /
+
+# make dir_least name
+dirlst=${dirjob}_least      # must use {} due to _ 
+
+echo $dirjob
+echo $dirlst
+
+
+#=======================
+
+rm -rf $dirlst
+mkdir  $dirlst
+
+dirjobPATH=`pwd`/$dirjob
+dirlstPATH=`pwd`/$dirlst
+
+echo $dirjobPATH 
+echo $dirlstPATH
+
+
+#=======================
+
+rsync -am  --include={INCAR,KPOINTS,CONTCAR,OUTCAR,Y_*,y_post_*,POSCAR*}   \
+    --include="*/"  --exclude="*"  "${dirjobPATH}/"  "${dirlstPATH}/" 
+
+
+#=======================
+
+echo "==>  compressing"
+
+tar -cJf  $dirlst.tar.xz  $dirlst
+rtrn_code=$?
+
+rm -r $dirlst
+
+echo "return code of tar:" $rtrn_code 
+
+if [ $rtrn_code == 0 ]; then
+    echo "==>  done!"
+else
+    echo "==>  tar fails. Abort!" 
+    exit
+fi
+
+    
+

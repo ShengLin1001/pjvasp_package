@@ -1,0 +1,34 @@
+#!/bin/bash
+
+
+mylog=$1
+
+
+echo -e "PBS_O_HOST:    " $PBS_O_HOST    >>  $mylog   
+echo -e "PBE_O_HOME:    " $PBS_O_HOME    >>  $mylog  
+echo -e "PBS_O_WORKDIR: " $PBS_O_WORKDIR >>  $mylog   
+echo -e "PBS_JOBID:     " $PBS_JOBID     >>  $mylog  
+echo -e "PBS_JOBNAME:   " $PBS_JOBNAME   >>  $mylog  
+echo -e "PBS_NODEFILE:  " $PBS_NODEFILE  >>  $mylog 
+echo -e "PBS_NP:        " $PBS_NP        >>  $mylog 
+echo -e "PBS_NUM_NODES: " $PBS_NUM_NODES >>  $mylog  
+echo -e "PBS_NUM_PPN:   " $PBS_NUM_PPN   >>  $mylog 
+
+
+temp=`head -1 $PBS_NODEFILE` 
+echo -e "run on node:   " $temp          >>  $mylog
+
+cat  $PBS_NODEFILE > $PBS_O_WORKDIR/pbs.nodefile
+
+
+
+echo -e "pwd :\n"`pwd` "\n"                                           >>  $mylog
+echo -e "bash --version :\n"`bash --version` "\n"                     >>  $mylog
+echo -e "uname -a :\n"`uname -a` "\n"                                 >>  $mylog
+echo -e "cat /etc/system-release :\n"`cat /etc/system-release` "\n"   >>  $mylog
+
+
+
+
+
+
