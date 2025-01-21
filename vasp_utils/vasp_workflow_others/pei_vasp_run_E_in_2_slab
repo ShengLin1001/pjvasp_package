@@ -122,6 +122,32 @@ sub_run_E_in_2_slab(){
         c3new=`echo "scale=16; $c3/$el/$el/$el" | bc `
         #####################
         yin_vasp_univ_find_and_change  -a3  " $c1  $c2  $c3new "
+        # TODO: make sure $a3 same
+        python -c "
+from ase.io.vasp import read_vasp 
+from mymetal.io.vasp import my_write_vasp
+import numpy as np
+
+atoms = read_vasp('./POSCAR')
+atoms_cell = np.array(atoms.get_cell().copy())
+volume = atoms.get_volume()
+a1 = atoms_cell[0]
+a2 = atoms_cell[1]
+a3 = atoms_cell[2]
+a3old = 
+
+for temp in atoms_cell:
+    temp[0] *= strainx
+    temp[1] *= strainy
+    temp[2] /= (strainx*strainy)
+atoms.set_cell(atoms_cell, scale_atoms=True)
+volume2 = atoms.get_volume()
+print(f'{volume2}')
+
+my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0new)
+"
+
+
 
         echo 'submit dir:' `pwd`
         sbatch sub.*
