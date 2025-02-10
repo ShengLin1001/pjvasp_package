@@ -188,13 +188,18 @@ def general_font( grid: bool = True, grid_linewidth: float = 0.5):
     plt.rcParams['legend.labelspacing'] = 0.5
     plt.rcParams['legend.columnspacing'] = 0.5
 
+    # 设置数学字体
+    plt.rcParams['mathtext.fontset'] = 'custom'
+    plt.rcParams['mathtext.rm'] = 'Arial'  # 设置数学字体为 Arial
+
 def general_axes(ax,
                 labelpad: int = 15, 
                 tick_pad: int = 10, 
                 xlabel: str = 'X-axis Label',
                 ylabel: str = 'Y-axis Label',
                 xlim: Union[List[float], None] = None,
-                ylim: Union[List[float], None] = None):
+                ylim: Union[List[float], None] = None,
+                if_set_lim: bool = True):
     """
     Modifies axis properties like ticks, labels, and limits.
 
@@ -225,8 +230,9 @@ def general_axes(ax,
         axis.set_xlabel(xlabel, labelpad=labelpad)
         axis.set_ylabel(ylabel, labelpad=labelpad)
 
-        axis.set_xlim(xlim)
-        axis.set_ylim(ylim)
+        if if_set_lim:
+            axis.set_xlim(xlim)
+            axis.set_ylim(ylim)
 
 def general_subplots_adjust(fig: Figure,
                             one_fig_wh: List[float] = [10.72, 8.205], 
@@ -305,83 +311,15 @@ def my_plot(
             - axes (List[Axes]): A list of axes objects for the subplots. 
               If there's only one subplot, it returns a list with one item.
     """
-    plt.rcParams['font.family'] = 'Arial'
-    plt.rcParams['font.size'] = 28
-    plt.rcParams['axes.linewidth'] = 3
-    plt.rcParams['axes.grid'] = grid
-    plt.rcParams['grid.linestyle'] = '--'
-    plt.rcParams['grid.linewidth'] = grid_linewidth
-    plt.rcParams["savefig.transparent"] = 'True'
-    plt.rcParams['lines.linewidth'] = 3
-    plt.rcParams['lines.markersize'] = 20
-    plt.rcParams['lines.markeredgewidth'] = 3
-    plt.rcParams['lines.markerfacecolor'] = 'white'
 
-    # 图例相关全局参数
-    plt.rcParams['legend.loc'] = 'upper right'
-    plt.rcParams['legend.fontsize'] = 24
-    plt.rcParams['legend.frameon'] = True
-    plt.rcParams['legend.borderpad'] = 0.0
-    plt.rcParams['legend.labelspacing'] = 0.5
-    plt.rcParams['legend.columnspacing'] = 0.5
+    general_font(grid, grid_linewidth)
 
     fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
     fig, ax = plt.subplots(nrows=fig_subp[0], ncols=fig_subp[1], 
                            sharex=fig_sharex, figsize=(fig_wh[0], fig_wh[1]))
-    # inch 10.72* 8.205 is one figsize
-    left = left
-    right = one_fig_wh[0]-left-axes_width
-    top = top
-    bottom = one_fig_wh[1]-top-axes_height
-    wspace = (left+right)/axes_width  # axes_width 7.31 inch
-    hspace = (top+bottom)/axes_height  # axes_height 5.89 inch
-
-    fig.subplots_adjust(left=left/fig_wh[0], right=(fig_wh[0]-right)/fig_wh[0], 
-                        top=(fig_wh[1]-top)/fig_wh[1], bottom=(bottom)/fig_wh[1],
-                        hspace= (hspace), wspace=(wspace))
-
-
-    if isinstance(ax, np.ndarray):  # 多子图情况
-        axes = ax.flatten()
-    else:  # 单子图情况
-        axes = [ax]
-
-    for axis in axes:
-        # 启用副刻度
-        axis.minorticks_on()
-        axis.xaxis.set_minor_locator(AutoMinorLocator(2))
-        axis.yaxis.set_minor_locator(AutoMinorLocator(2))
-        axis.tick_params(which='major', direction='in', length=8, width=3.0, pad = tick_pad)
-        axis.tick_params(which='minor', direction='in', length=4, width=3.0, pad = tick_pad)
-
-        # 设置轴标签，并调整与刻度的距离
-        axis.set_xlabel('X-axis Label', labelpad=labelpad)
-        axis.set_ylabel('Y-axis Label', labelpad=labelpad)
-
-    def general_modify_legend(legend):
-        legend.get_frame().set_boxstyle("Square", pad=0.5)
-        legend.get_frame().set_linewidth(2.5)
-        legend.get_frame().set_edgecolor('black')
-        legend.get_frame().set_facecolor('white')
-        legend.get_frame().set_alpha(1)
-        
-    def general_margin_bin(axis,
-                            y_margin = 0.1, 
-                            y_nbins = 3,
-                            x_margin = 0.1, 
-                            x_nbins = 4, 
-                            prune = 'both',
-                            if_autoscale = True):
-        axis.margins(x=x_margin, y=y_margin)
-        axis.yaxis.set_major_locator(MaxNLocator(nbins=y_nbins, prune=prune))
-        axis.xaxis.set_major_locator(MaxNLocator(nbins=x_nbins, prune=prune))
-        if if_autoscale:
-            # Force axis limits to update based on the new margins
-            axis.autoscale(enable=True, axis='both', tight=False)
-    
-    # 将修改图例函数绑定到 fig 对象，方便调用
-    fig.general_modify_legend = general_modify_legend
-    fig.general_margin_bin = general_margin_bin
+    general_subplots_adjust(fig, one_fig_wh, fig_subp, axes_height, axes_width, left, top)
+    # can't set xlim/ylim before drawing the figure
+    general_axes(ax, labelpad, tick_pad, if_set_lim=False)
 
     return fig, ax
 
@@ -441,6 +379,10 @@ def my_plot_brokenaxed(
     plt.rcParams['legend.borderpad'] = 0.0
     plt.rcParams['legend.labelspacing'] = 0.5
     plt.rcParams['legend.columnspacing'] = 0.5
+
+    # 设置数学字体
+    plt.rcParams['mathtext.fontset'] = 'custom'
+    plt.rcParams['mathtext.rm'] = 'Arial'
 
     fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
     # inch 10.72* 8.205 is one figsize
@@ -667,7 +609,7 @@ def my_plot_energy_components(fig_subp: List[int]=[4,5],
             ax2.tick_params(which='minor', direction='in', color = color, length=4, width=3.0, pad = 10)
             ax2.set_zorder(ax.get_zorder() - 1)
             ax.spines['right'].set_visible(False)
-        fig.general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=bbox_to_anchor))
+        general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=bbox_to_anchor))
         # format title
         title = tag.upper()
         if temp == 'ebands':
