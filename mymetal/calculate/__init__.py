@@ -18,6 +18,9 @@ Modules:
       Hermite normal form.
     - calqm: Contains functions for quantum mechanics calculations, such as 
       generating k-points for QM calculations.
+    - electronic_structure: Contains functions for plotting electronic structure
+      data and other universal electronic structure-related functions.
+    - material_science: Contains functions for material science calculations,
 """
 
 
@@ -30,6 +33,7 @@ Modules:
 from mymetal.calculate.calenergy.surfenergy import cal_surface_energy
 from mymetal.calculate.electronic_structure.plotter import *
 from mymetal.calculate.electronic_structure.universial import *
+from mymetal.calculate.material_science.schmid import *
 #import mymetal.calqm.kpoints
 __all__ = [
             'compare_atoms', 'cal_atom_num', 'relative_diff', 'cal_mismatch', 'filter_results', 'cal_stretch_lattice',
@@ -38,10 +42,12 @@ __all__ = [
             'cal_principal_and_shear_strain', 'cal_principal_and_shear_strain_root', 
             'cal_strain_matrix', 'cal_strain_matrix_root', 'cal_von_mises_strain',
 
-            'cal_stretch', 'cal_relative_stretch'
+            'cal_stretch', 'cal_relative_stretch',
 
-            'hermite_normal_form'
+            'hermite_normal_form',
 
-            'cal_surface_energy'
+            'cal_surface_energy',
+
+            'cal_fcc_schmid_factors',
 
 ]

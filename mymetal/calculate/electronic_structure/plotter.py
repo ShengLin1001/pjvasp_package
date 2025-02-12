@@ -1,4 +1,6 @@
-"""This module implements plotter for DOS and band structure. (Taken from pymatgen 2024.10.29). Small revise"""
+"""This module implements plotter for DOS and band structure. (Taken from pymatgen 2024.10.29). Small revise.
+Now I don't use that to change the drawing style of the band structure plot.
+I will use `mymetal.universial.plot.plot.general_modify_ploted_figure()`."""
 
 #from __future__ import annotations
 
