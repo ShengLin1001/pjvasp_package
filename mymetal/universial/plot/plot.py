@@ -23,6 +23,28 @@ from typing import List, Tuple, Union
 import matplotlib.colors as mcolors
 from itertools import cycle
 
+import matplotlib.pyplot as plt
+
+def check_font_size(ax: plt.Axes):
+    x_label_fontsize = ax.xaxis.get_label().get_fontsize()
+    y_label_fontsize = ax.yaxis.get_label().get_fontsize()
+    print(f"Font size of x-axis label: {x_label_fontsize}")
+    print(f"Font size of y-axis label: {y_label_fontsize}")
+
+    x_tick_labels = ax.get_xticklabels()
+    y_tick_labels = ax.get_yticklabels()
+
+    if x_tick_labels:
+        x_tick_font = x_tick_labels[0].get_fontproperties()
+        print(f"Font name of the first major tick label on the x-axis: {x_tick_font.get_name()}")
+        print(f"Font size of the first major tick label on the x-axis: {x_tick_font.get_size()}")
+
+    if y_tick_labels:
+        y_tick_font = y_tick_labels[0].get_fontproperties()
+        print(f"Font name of the first major tick label on the y-axis: {y_tick_font.get_name()}")
+        print(f"Font size of the first major tick label on the y-axis: {y_tick_font.get_size()}")
+
+
 def get_ploted_figure():
     fig = plt.gcf()
     ax = plt.gca()
@@ -172,7 +194,7 @@ def general_modify_ploted_figure(axes: plt.Axes,
         tuple: The modified figure and axes.
     """
 
-    general_font(grid, grid_linewidth)
+    general_font(grid, grid_linewidth, if_ploted=True)
     ax = axes
     # pyplot
     fig, ax, xlim0, ylim0 = get_ploted_figure()
@@ -242,7 +264,10 @@ def general_margin_bin(axis,
         # Force axis limits to update based on the new margins
         axis.autoscale(enable=True, axis='both', tight=False)
 
-def general_font( grid: bool = True, grid_linewidth: float = 0.5):
+def general_font( grid: bool = True, grid_linewidth: float = 0.5, if_ploted: bool = False,
+                  fontsize: int = 28, markersize: int = 20, linewidth: int = 3, 
+                  markeredgewidth: int = 3, legend_fontsize: int = 24, 
+                  markerfacecolor: str = 'white'):
     """
     Sets global font and plot settings for consistency across figures.
 
@@ -254,20 +279,20 @@ def general_font( grid: bool = True, grid_linewidth: float = 0.5):
         None
     """
     plt.rcParams['font.family'] = 'Arial'
-    plt.rcParams['font.size'] = 28
-    plt.rcParams['axes.linewidth'] = 3
+    plt.rcParams['font.size'] = fontsize
+    plt.rcParams['axes.linewidth'] = linewidth
     plt.rcParams['axes.grid'] = grid
     plt.rcParams['grid.linestyle'] = '--'
     plt.rcParams['grid.linewidth'] = grid_linewidth
     plt.rcParams["savefig.transparent"] = 'True'
-    plt.rcParams['lines.linewidth'] = 3
-    plt.rcParams['lines.markersize'] = 20
-    plt.rcParams['lines.markeredgewidth'] = 3
-    plt.rcParams['lines.markerfacecolor'] = 'white'
+    plt.rcParams['lines.linewidth'] = linewidth
+    plt.rcParams['lines.markersize'] = markersize
+    plt.rcParams['lines.markeredgewidth'] = markeredgewidth
+    plt.rcParams['lines.markerfacecolor'] = markerfacecolor
 
     # 图例相关全局参数
     plt.rcParams['legend.loc'] = 'upper right'
-    plt.rcParams['legend.fontsize'] = 24
+    plt.rcParams['legend.fontsize'] = legend_fontsize
     plt.rcParams['legend.frameon'] = True
     plt.rcParams['legend.borderpad'] = 0.0
     plt.rcParams['legend.labelspacing'] = 0.5
@@ -276,6 +301,17 @@ def general_font( grid: bool = True, grid_linewidth: float = 0.5):
     # 设置数学字体
     plt.rcParams['mathtext.fontset'] = 'custom'
     plt.rcParams['mathtext.rm'] = 'Arial'  # 设置数学字体为 Arial
+
+    if if_ploted:
+        fig = plt.gcf()
+        ax = plt.gca()
+        plt.xticks(fontsize=fontsize)
+        plt.yticks(fontsize=fontsize)
+        ax.set_title(ax.get_title(), size=fontsize)
+        ax.set_xlabel(ax.get_xlabel(), size=fontsize)
+        ax.set_ylabel(ax.get_ylabel(), size=fontsize)
+
+
 
 def general_axes(ax,
                 labelpad: int = 15, 
