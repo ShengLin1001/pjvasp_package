@@ -20,48 +20,127 @@ from matplotlib.colors import to_rgb
 from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
 from brokenaxes import brokenaxes
 from typing import List, Tuple, Union
+import matplotlib.colors as mcolors
+from itertools import cycle
+
+def get_ploted_figure():
+    fig = plt.gcf()
+    ax = plt.gca()
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    return fig, ax, xlim, ylim
+
+def general_modify_band_plot(ax: plt.Axes) -> plt.Axes:
+    xticks = ax.get_xticks()
+    xticklabels = ax.get_xticklabels()
+    xlabels = ax.get_xlabel()
+    ax.tick_params(axis='x', which='both', bottom=False)
+    for xtick in xticks:
+        ax.axvline(x=xtick, color='gray', linestyle='--')
+    return ax
+
+def generate_gradient_colors(start_color, end_color, num_colors):
+    cmap = mcolors.LinearSegmentedColormap.from_list("gradient", [start_color, end_color])
+    gradient_colors = [cmap(i / (num_colors - 1)) for i in range(num_colors)]
+    return gradient_colors
+
+def general_modify_line(ax: plt.Axes,
+                    remove_dashed_line: bool = True,
+                    remove_line_style: list = ['--', ':'],
+                    color_list: list = ['black', 'red', 'blue', 'green', 'orange', 'purple', 
+                                        'brown', 'pink', 'gray', 'olive', 'cyan', 'lime', 
+                                        'teal', 'lavender', 'tan', 'salmon', 'gold', 'lightcoral', 
+                                        'skyblue', 'darkblue', 'darkred', 'darkgreen', 'darkorange', 
+                                        ],
+                    if_gradient_color: bool = False,
+                    gradient_colors: list=['red', 'blue'],
+                    if_cmap_color: bool = False,
+                    cmap_color: str = 'coolwarm',
+                    if_change_color: bool = False,
+                    ):
+    all_lines = ax.get_lines()
+    all_index = [index for index, line in enumerate(all_lines)]
+    removed_index = []
+    after_removed_lines = []
+    if remove_dashed_line:
+        for index, line in enumerate(all_lines):
+            if line.get_linestyle() in remove_line_style:
+                line.set_visible(False)
+                removed_index.append(index)
+            else:
+                after_removed_lines.append(line)
+    if if_gradient_color:
+        color_list = generate_gradient_colors(gradient_colors[0], gradient_colors[1], len(after_removed_lines))
+    elif if_cmap_color:
+        cmap = plt.get_cmap(cmap_color)
+        values = np.linspace(0, 1, len(after_removed_lines))
+        color_list = cmap(values)
+    color_cycle = cycle(color_list)
+    if if_change_color:
+        for index, line in enumerate(after_removed_lines):
+            line.set_color(next(color_cycle))
+    return ax
 
 
 def general_modify_ploted_figure(axes: plt.Axes,
                                  grid: bool = True,
                                  grid_linewidth: float = 0.5,
-                                ###########################
+                                ########################### Figure size
                                 one_fig_wh: list = [10.72, 8.205],
                                 fig_subp: List[int] = [1, 1],
                                 axes_height: float = 5.89,
                                 axes_width: float = 7.31,
                                 left: float = 1.918,
                                 top: float = 0.9517,
-                                ###########################
+                                ########################### axes
                                 labelpad: int = 15, 
                                 tick_pad: int = 10, 
                                 xlabel: str = 'Energies (eV)', 
                                 ylabel: str = 'Density of States (a.u.)',
                                 xlim: list = [-15, 10],
                                 ylim: list = [0, 8],
-                                ###########################
+                                if_show_right_top_tick: bool = False,
+                                ########################### legend
                                 loc: str = 'upper right',
                                 bbox_to_anchor: tuple = (0.95, 0.95),
                                 ncol: int = 1,
-                                ###########################
+                                if_show_legend: bool = True,
+                                ########################### tick
                                 y_margin = 0.1, 
                                 y_nbins = 3,
                                 x_margin = 0.1, 
                                 x_nbins = 4, 
                                 prune = 'both',
                                 if_autoscale = True,
-                                ###########################
-                                remove_dashed_line: bool = True,
                                 change_margin: bool = False,
-                                ###########################
+                                ########################### line, color
+                                remove_dashed_line: bool = True,
+                                remove_line_style: list = ['--', ':'],
+                                color_list: list = ['black', 'red', 'blue', 'green', 'orange', 'purple', 
+                                                    'brown', 'pink', 'gray', 'olive', 'cyan', 'lime', 
+                                                    'teal', 'lavender', 'tan', 'salmon', 'gold', 'lightcoral', 
+                                                    'skyblue', 'darkblue', 'darkred', 'darkgreen', 'darkorange', 
+                                                    ],
+                                if_gradient_color: bool = False,
+                                gradient_colors: list=['red', 'blue'],
+                                if_cmap_color: bool = False,
+                                cmap_color: str = 'coolwarm',
+                                if_change_color: bool = False,
+                                ########################### plot type
+                                if_band_plot: bool = False,
+                                ########################### save
                                 if_save: bool = True,
                                 save_path: str = './dos.jpg'
                                 )  -> tuple:
     """
     Modifies the appearance of a plotted figure, including axes, legend, grid, margins, and saves the plot.
 
+    Notes:
+        Please before you draw the figure, you should use the function `general_font(grid, gridwidth)` to predefine some value.
+        Because the change after drawing can't influence the figure.
+    
     Args:
-        axes (plt.Axes): The axes to modify.
+        axes (plt.Axes): The axes to modify. Now it don't used, so you don't need to assign it.
         grid (bool): Whether to display grid. Default is True.
         grid_linewidth (float): Line width for the grid. Default is 0.5.
         one_fig_wh (list): The figure's width and height in inches. Default is [10.72, 8.205].
@@ -95,19 +174,25 @@ def general_modify_ploted_figure(axes: plt.Axes,
 
     general_font(grid, grid_linewidth)
     ax = axes
-    fig  = ax.get_figure()
+    # pyplot
+    fig, ax, xlim0, ylim0 = get_ploted_figure()
+    print('The type(ax) is: ',type(ax))
     fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
     fig.set_size_inches(fig_wh)
     general_subplots_adjust(fig, one_fig_wh, fig_subp, axes_height, axes_width, left, top)
-    general_axes(ax, labelpad, tick_pad,xlabel, ylabel, xlim, ylim)
-    ax.legend().remove()
-    general_modify_legend(ax.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, ncol=ncol))
+    if xlim == None or ylim == None:
+        xlim = xlim0
+        ylim = ylim0
+    general_axes(ax, labelpad, tick_pad,xlabel, ylabel, xlim, ylim, True, if_show_right_top_tick)
     if change_margin:
         general_margin_bin(ax, y_margin, y_nbins, x_margin, x_nbins, prune, if_autoscale)
-    if remove_dashed_line:
-        for line in ax.get_lines():
-            if line.get_linestyle() == '--':
-                line.set_visible(False)
+    general_modify_line(ax, remove_dashed_line, remove_line_style, color_list, if_gradient_color, gradient_colors, if_cmap_color, cmap_color, if_change_color)
+    if if_band_plot:
+        general_modify_band_plot(ax)
+    ax.legend().remove()
+    if if_show_legend:
+        general_modify_legend(ax.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, ncol=ncol))
+
     if if_save:
         plt.savefig(save_path, dpi=300)
     return fig, ax
@@ -199,7 +284,8 @@ def general_axes(ax,
                 ylabel: str = 'Y-axis Label',
                 xlim: Union[List[float], None] = None,
                 ylim: Union[List[float], None] = None,
-                if_set_lim: bool = True):
+                if_set_lim: bool = True,
+                if_show_right_top_tick: bool = True):
     """
     Modifies axis properties like ticks, labels, and limits.
 
@@ -230,9 +316,14 @@ def general_axes(ax,
         axis.set_xlabel(xlabel, labelpad=labelpad)
         axis.set_ylabel(ylabel, labelpad=labelpad)
 
+        if if_show_right_top_tick == False:
+            axis.tick_params(axis='y', which='both', right=False)
+            axis.tick_params(axis='x', which='both', top=False)
+
         if if_set_lim:
             axis.set_xlim(xlim)
             axis.set_ylim(ylim)
+        
 
 def general_subplots_adjust(fig: Figure,
                             one_fig_wh: List[float] = [10.72, 8.205], 

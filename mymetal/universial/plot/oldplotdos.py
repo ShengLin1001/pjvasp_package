@@ -204,7 +204,7 @@ def my_plot_complete_dos(file:str = "./vasprun.xml", xlim: list=None, ylim:list=
             my_plot_orientation(ax, orientation, energies, density, color_list[count], label_list[i], if_fill, if_show_nbands_nelect, 
                                 nbands, nelect, marker, linestyle)
             count += 1
-    fig.general_modify_legend(ax.legend(loc='upper right', bbox_to_anchor= bbox_to_anchor))
+    general_modify_legend(ax.legend(loc='upper right', bbox_to_anchor= bbox_to_anchor))
     if if_save:
         plt.savefig(save_path, dpi=300)
     return fig, axes
@@ -259,7 +259,7 @@ def my_plot_idos(file: str = None, xlim: list=None, ylim:list=None, label:str="I
     fig, axes = my_plot_horizontal_vertical(xlim, ylim, one_fig_wh, grid,  left, top, orientation, xlabel= r'$E - E_{f}$ (eV)', ylabel = 'Integrated Density of States (e)')
     ax = axes
     my_plot_orientation(ax, orientation, x, y, color, label, if_fill, if_show_nbands_nelect, nbands, nelect, marker='', linestyle='-')
-    fig.general_modify_legend(ax.legend(loc='lower right', bbox_to_anchor=bbox_to_anchor))
+    general_modify_legend(ax.legend(loc='lower right', bbox_to_anchor=bbox_to_anchor))
     if if_save:
         plt.savefig(save_path, dpi=300)
     return fig, axes
