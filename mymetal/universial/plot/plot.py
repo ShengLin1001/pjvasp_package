@@ -9,6 +9,7 @@ Functions:
     - my_plot_energy_components: Generates plots for energy components with polynomial fits and comparisons.
     - my_plot_interlayer_distance: Calculates and plots the interlayer distances from the given atomic positions.
     - my_plot_zpositions: Plot z-positions.
+    
 """
 
 from ase import Atoms
