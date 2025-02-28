@@ -45,7 +45,6 @@ def check_font_size(ax: plt.Axes):
         print(f"Font name of the first major tick label on the y-axis: {y_tick_font.get_name()}")
         print(f"Font size of the first major tick label on the y-axis: {y_tick_font.get_size()}")
 
-
 def get_ploted_figure():
     fig = plt.gcf()
     ax = plt.gca()
@@ -58,8 +57,7 @@ def general_modify_band_plot(ax: plt.Axes) -> plt.Axes:
     xticklabels = ax.get_xticklabels()
     xlabels = ax.get_xlabel()
     ax.tick_params(axis='x', which='both', bottom=False)
-    for xtick in xticks:
-        ax.axvline(x=xtick, color='gray', linestyle='--')
+    general_add_vlines_hlines(ax, xticks)
     return ax
 
 def generate_gradient_colors(start_color, end_color, num_colors):
@@ -104,6 +102,23 @@ def general_modify_line(ax: plt.Axes,
             line.set_color(next(color_cycle))
     return ax
 
+def general_add_vlines_hlines(  ax: plt.Axes,
+                                vlines: list = [],
+                                hlines: list = [],
+                                vlines_colors: list = ['gray'],
+                                hlines_colors: list = ['gray'],
+                                zorder_vlines: list = [-1],
+                                zorder_hlines: list = [-1],
+                                linestyle: str='--'):
+    # add vlines, hlines
+    color_cycle = cycle(vlines_colors)
+    zorder_cycles=cycle(zorder_vlines)
+    for vline in vlines:
+        ax.axvline(x=vline, color=next(color_cycle), zorder=next(zorder_cycles), linestyle= linestyle)
+    color_cycle = cycle(hlines_colors)
+    zorder_cycles=cycle(zorder_hlines)
+    for hline in hlines:
+        ax.axhline(y=hline, color=next(color_cycle), zorder=next(zorder_cycles),  linestyle= linestyle)
 
 def general_modify_ploted_figure(axes: plt.Axes,
                                  grid: bool = True,
@@ -120,9 +135,9 @@ def general_modify_ploted_figure(axes: plt.Axes,
                                 tick_pad: int = 10, 
                                 xlabel: str = 'Energies (eV)', 
                                 ylabel: str = 'Density of States (a.u.)',
-                                xlim: list = [-15, 10],
-                                ylim: list = [0, 8],
-                                if_show_right_top_tick: bool = False,
+                                xlim: list = None, #[-15, 10],
+                                ylim: list = None, #[0, 8],
+                                if_close_right_top_tick: bool = True,
                                 ########################### legend
                                 loc: str = 'upper right',
                                 bbox_to_anchor: tuple = (0.95, 0.95),
@@ -153,69 +168,107 @@ def general_modify_ploted_figure(axes: plt.Axes,
                                 if_band_plot: bool = False,
                                 ########################### save
                                 if_save: bool = True,
-                                save_path: str = './dos.jpg'
+                                save_path: str = './dos.jpg',
+                                ########################### add vlines, hlines
+                                vlines: list = [],
+                                hlines: list = [],
+                                vlines_colors: list = ['gray'],
+                                hlines_colors: list = ['gray'],
+                                zorder_vlines: list = [-1],
+                                zorder_hlines: list = [-1],
+                                 linestyle: str = '--'
                                 )  -> tuple:
     """
-    Modifies the appearance of a plotted figure, including axes, legend, grid, margins, and saves the plot.
+    Modify and customize the appearance of a plotted figure. This function allows for configuring various 
+    plot properties such as figure size, axis labels, tick settings, line styles, colors, legends, and more.
 
-    Notes:
-        Please before you draw the figure, you should use the function `general_font(grid, gridwidth)` to predefine some value.
-        Because the change after drawing can't influence the figure.
-    
     Args:
-        axes (plt.Axes): The axes to modify. Now it don't used, so you don't need to assign it.
-        grid (bool): Whether to display grid. Default is True.
-        grid_linewidth (float): Line width for the grid. Default is 0.5.
-        one_fig_wh (list): The figure's width and height in inches. Default is [10.72, 8.205].
-        fig_subp (List[int]): Number of subplots in rows and columns. Default is [1, 1].
-        axes_height (float): Height of the axes in inches. Default is 5.89.
-        axes_width (float): Width of the axes in inches. Default is 7.31.
-        left (float): Left margin in inches. Default is 1.918.
-        top (float): Top margin in inches. Default is 0.9517.
-        labelpad (int): Padding for axis labels. Default is 15.
-        tick_pad (int): Padding for axis ticks. Default is 10.
-        xlabel (str): Label for the x-axis. Default is 'Energies (eV)'.
-        ylabel (str): Label for the y-axis. Default is 'Density of States (a.u.)'.
-        xlim (list): x-axis limits. Default is [-15, 10].
-        ylim (list): y-axis limits. Default is [0, 8].
-        loc (str): Location for the legend. Default is 'upper right'.
-        bbox_to_anchor (tuple): Bounding box for legend. Default is (0.95, 0.95).
-        y_margin (float): y-axis margin. Default is 0.1.
-        y_nbins (int): Number of bins for y-axis. Default is 3.
-        x_margin (float): x-axis margin. Default is 0.1.
-        x_nbins (int): Number of bins for x-axis. Default is 4.
-        prune (str): Whether to prune axis ticks. Default is 'both'.
-        if_autoscale (bool): Whether to autoscale the axes. Default is True.
-        remove_dashed_line (bool): Whether to remove dashed lines. Default is True.
-        change_margin (bool): Whether to change the axis margins. Default is False.
-        if_save (bool): Whether to save the figure. Default is True.
-        save_path (str): Path to save the figure. Default is './dos.jpg'.
+        axes (plt.Axes): The axes of the figure to modify.
+        grid (bool, optional): Whether to display a grid on the plot. Default is True.
+        grid_linewidth (float, optional): Line width of the grid lines. Default is 0.5.
+        one_fig_wh (list, optional): Size of one figure [width, height]. Default is [10.72, 8.205].
+        fig_subp (List[int], optional): Subplot configuration [rows, columns]. Default is [1, 1].
+        axes_height (float, optional): Height of each axis. Default is 5.89.
+        axes_width (float, optional): Width of each axis. Default is 7.31.
+        left (float, optional): Left margin of the subplot. Default is 1.918.
+        top (float, optional): Top margin of the subplot. Default is 0.9517.
+        labelpad (int, optional): Padding for axis labels. Default is 15.
+        tick_pad (int, optional): Padding for axis ticks. Default is 10.
+        xlabel (str, optional): Label for the x-axis. Default is 'Energies (eV)'.
+        ylabel (str, optional): Label for the y-axis. Default is 'Density of States (a.u.)'.
+        xlim (list, optional): Limits for the x-axis. Default is None.
+        ylim (list, optional): Limits for the y-axis. Default is None.
+        if_close_right_top_tick (bool, optional): Whether to display the right and top ticks. Default is True.
+        loc (str, optional): Location of the legend. Default is 'upper right'.
+        bbox_to_anchor (tuple, optional): Bounding box to anchor the legend. Default is (0.95, 0.95).
+        ncol (int, optional): Number of columns in the legend. Default is 1.
+        if_show_legend (bool, optional): Whether to display the legend. Default is True.
+        y_margin (float, optional): Margin for the y-axis. Default is 0.1.
+        y_nbins (int, optional): Number of bins for the y-axis. Default is 3.
+        x_margin (float, optional): Margin for the x-axis. Default is 0.1.
+        x_nbins (int, optional): Number of bins for the x-axis. Default is 4.
+        prune (str, optional): Which axis to prune. Default is 'both'.
+        if_autoscale (bool, optional): Whether to autoscale the plot. Default is True.
+        change_margin (bool, optional): Whether to modify the margin. Default is False.
+        remove_dashed_line (bool, optional): Whether to remove dashed lines from the plot. Default is True.
+        remove_line_style (list, optional): List of line styles to remove (e.g., ['--', ':']). Default is ['--', ':'].
+        color_list (list, optional): List of colors for the plot. Default is a predefined list of colors.
+        if_gradient_color (bool, optional): Whether to apply gradient coloring. Default is False.
+        gradient_colors (list, optional): List of colors for the gradient. Default is ['red', 'blue'].
+        if_cmap_color (bool, optional): Whether to use colormap coloring. Default is False.
+        cmap_color (str, optional): Colormap to use. Default is 'coolwarm'.
+        if_change_color (bool, optional): Whether to change the plot color. Default is False.
+        if_band_plot (bool, optional): Whether to display a band plot. Default is False.
+        if_save (bool, optional): Whether to save the plot to a file. Default is True.
+        save_path (str, optional): Path to save the figure. Default is './dos.jpg'.
 
     Returns:
-        tuple: The modified figure and axes.
-    """
+        tuple: A tuple containing the modified figure and axes objects (fig, ax).
 
+    Example:
+        >>> fig, ax = general_modify_ploted_figure(axes, xlabel="Energy", ylabel="DOS", if_save=True, save_path="dos_plot.jpg")
+    """
+    # some pre-define value; change the fontsize, fontname, linewidth one by one
     general_font(grid, grid_linewidth, if_ploted=True)
+    # useless
     ax = axes
     # pyplot
     fig, ax, xlim0, ylim0 = get_ploted_figure()
+    # The type of figure
     print('The type(ax) is: ',type(ax))
+    # change figsize, always well done!
     fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
     fig.set_size_inches(fig_wh)
     general_subplots_adjust(fig, one_fig_wh, fig_subp, axes_height, axes_width, left, top)
+
+    # change the tick setting and label content
     if xlim == None or ylim == None:
         xlim = xlim0
         ylim = ylim0
-    general_axes(ax, labelpad, tick_pad,xlabel, ylabel, xlim, ylim, True, if_show_right_top_tick)
+    general_axes(ax, labelpad, tick_pad,xlabel, ylabel, xlim, ylim, True, if_close_right_top_tick)
+
+    # change xlim and ylim to look better
     if change_margin:
         general_margin_bin(ax, y_margin, y_nbins, x_margin, x_nbins, prune, if_autoscale)
+    # change the line color and remove the dashed line
     general_modify_line(ax, remove_dashed_line, remove_line_style, color_list, if_gradient_color, gradient_colors, if_cmap_color, cmap_color, if_change_color)
+    # For band plot, add the vline
     if if_band_plot:
         general_modify_band_plot(ax)
+    # add vlines, hlines
+    general_add_vlines_hlines(ax, vlines, hlines, vlines_colors, hlines_colors, zorder_vlines, zorder_hlines, linestyle)
+    # re-generate the legend
+    current_legend = ax.get_legend()
     ax.legend().remove()
-    if if_show_legend:
-        general_modify_legend(ax.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, ncol=ncol))
 
+    if if_show_legend:
+        if current_legend != None:
+            labels = [text.get_text() for text in current_legend.get_texts()]
+            general_modify_legend(ax.legend(labels, loc=loc, bbox_to_anchor=bbox_to_anchor, ncol=ncol))
+        else:
+            general_modify_legend(ax.legend(loc=loc, bbox_to_anchor=bbox_to_anchor, ncol=ncol))
+
+    # save figure
     if if_save:
         plt.savefig(save_path, dpi=300)
     return fig, ax
@@ -265,55 +318,93 @@ def general_margin_bin(axis,
         # Force axis limits to update based on the new margins
         axis.autoscale(enable=True, axis='both', tight=False)
 
-def general_font( grid: bool = True, grid_linewidth: float = 0.5, if_ploted: bool = False,
+def general_font( grid: bool = True, grid_linewidth: float = 0.5, grid_linestyle = '--',
+                 if_ploted: bool = False,
                   fontsize: int = 28, markersize: int = 20, linewidth: int = 3, 
                   markeredgewidth: int = 3, legend_fontsize: int = 24, 
-                  markerfacecolor: str = 'white'):
+                  markerfacecolor: str = 'white', fontname: str = 'Arial',
+                  loc: str = 'upper right', frameon: bool = True, 
+                  borderpad: float=0.0, labelspacing: float=0.5, columnspacing:float=0.5) -> None:
     """
-    Sets global font and plot settings for consistency across figures.
+    Customize global plotting settings for Matplotlib, including font styles, line properties, 
+    grid appearance, and legend settings. Optionally, apply these settings to an existing plot.
 
     Args:
-        grid (bool): Whether to show grid lines. Default is True.
-        grid_linewidth (float): Line width for the grid. Default is 0.5.
+        grid (bool, optional): Whether to display grid lines on the plot. Default is True.
+        grid_linewidth (float, optional): Line width for grid lines. Default is 0.5.
+        grid_linestyle (str, optional): Style of grid lines (e.g., '--', '-'). Default is '--'.
+        if_ploted (bool, optional): Whether to apply the settings to the current plot if one exists. Default is False.
+        fontsize (int, optional): Font size for text elements such as labels, title, and ticks. Default is 28.
+        markersize (int, optional): Size of markers in the plot. Default is 20.
+        linewidth (int, optional): Width of plot lines. Default is 3.
+        markeredgewidth (int, optional): Width of marker edges. Default is 3.
+        legend_fontsize (int, optional): Font size for the legend text. Default is 24.
+        markerfacecolor (str, optional): Color of the marker face. Default is 'white'.
+        fontname (str, optional): Name of the font to use for text elements. Default is 'Arial'.
+        loc (str, optional): Location of the legend on the plot. Default is 'upper right'.
+        frameon (bool, optional): Whether to display a frame around the legend. Default is True.
+        borderpad (float, optional): Padding around the legend. Default is 0.0.
+        labelspacing (float, optional): Spacing between legend labels. Default is 0.5.
+        columnspacing (float, optional): Spacing between legend columns. Default is 0.5.
 
     Returns:
-        None
+        None: This function modifies the global plotting settings and optionally the current plot.
+
+    Example:
+        >>> general_font(fontsize=20, legend_fontsize=18, if_ploted=True)
     """
-    plt.rcParams['font.family'] = 'Arial'
-    plt.rcParams['font.size'] = fontsize
-    plt.rcParams['axes.linewidth'] = linewidth
-    plt.rcParams['axes.grid'] = grid
-    plt.rcParams['grid.linestyle'] = '--'
-    plt.rcParams['grid.linewidth'] = grid_linewidth
-    plt.rcParams["savefig.transparent"] = 'True'
-    plt.rcParams['lines.linewidth'] = linewidth
-    plt.rcParams['lines.markersize'] = markersize
-    plt.rcParams['lines.markeredgewidth'] = markeredgewidth
-    plt.rcParams['lines.markerfacecolor'] = markerfacecolor
+    plt.rcParams['font.family'] = fontname                 #
+    plt.rcParams['font.size'] = fontsize                   #
+    plt.rcParams['axes.linewidth'] = linewidth             #
+    plt.rcParams['axes.grid'] = grid                       #
+    plt.rcParams['grid.linestyle'] = grid_linestyle        #
+    plt.rcParams['grid.linewidth'] = grid_linewidth        #
+    plt.rcParams["savefig.transparent"] = 'True'           # don't need change
+    plt.rcParams['lines.linewidth'] = linewidth            #
+    plt.rcParams['lines.markersize'] = markersize          #
+    plt.rcParams['lines.markeredgewidth'] = markeredgewidth #
+    plt.rcParams['lines.markerfacecolor'] = markerfacecolor #
 
-    # 图例相关全局参数
-    plt.rcParams['legend.loc'] = 'upper right'
+    # legend     will done, because the legend will be re-drawed
+    plt.rcParams['legend.loc'] = loc
     plt.rcParams['legend.fontsize'] = legend_fontsize
-    plt.rcParams['legend.frameon'] = True
-    plt.rcParams['legend.borderpad'] = 0.0
-    plt.rcParams['legend.labelspacing'] = 0.5
-    plt.rcParams['legend.columnspacing'] = 0.5
+    plt.rcParams['legend.frameon'] = frameon
+    plt.rcParams['legend.borderpad'] = borderpad
+    plt.rcParams['legend.labelspacing'] = labelspacing
+    plt.rcParams['legend.columnspacing'] = columnspacing
 
-    # 设置数学字体
+    # Math
     plt.rcParams['mathtext.fontset'] = 'custom'
     plt.rcParams['mathtext.rm'] = 'Arial'  # 设置数学字体为 Arial
 
     if if_ploted:
         fig = plt.gcf()
-        ax = plt.gca()
-        plt.xticks(fontsize=fontsize)
-        plt.yticks(fontsize=fontsize)
-        ax.set_title(ax.get_title(), size=fontsize)
-        ax.set_xlabel(ax.get_xlabel(), size=fontsize)
-        ax.set_ylabel(ax.get_ylabel(), size=fontsize)
-
-
-
+        axis = plt.gca()
+        if isinstance(axis, np.ndarray):
+            axes = axis.flatten()
+        else:  
+            axes = [axis]
+        for ax in axes:
+            # change the font in tick_params
+            plt.xticks(fontsize=fontsize, fontname= fontname)
+            plt.yticks(fontsize=fontsize, fontname= fontname)
+            # change grid
+            ax.grid(linewidth=grid_linewidth, linestyle = grid_linestyle)
+            ax.grid(grid)
+            # re-generate title/xlabel/ylabel about fontsize, fontname
+            ax.set_title(ax.get_title(), size=fontsize, fontname=fontname)
+            ax.set_xlabel(ax.get_xlabel(), size=fontsize, fontname=fontname)
+            ax.set_ylabel(ax.get_ylabel(), size=fontsize, fontname=fontname)
+            # change the linewidth in ax.
+            for temp in ['top', 'bottom', 'right', 'left']:
+                ax.spines[temp].set_linewidth(linewidth) 
+            # change line setting
+            for line in ax.get_lines():
+                line.set_linewidth(linewidth)
+                line.set_markersize(markersize)
+                line.set_markeredgewidth(markeredgewidth)
+                line.set_markerfacecolor(markerfacecolor)
+        
 def general_axes(ax,
                 labelpad: int = 15, 
                 tick_pad: int = 10, 
@@ -322,7 +413,7 @@ def general_axes(ax,
                 xlim: Union[List[float], None] = None,
                 ylim: Union[List[float], None] = None,
                 if_set_lim: bool = True,
-                if_show_right_top_tick: bool = True):
+                if_close_right_top_tick: bool = False):
     """
     Modifies axis properties like ticks, labels, and limits.
 
@@ -343,6 +434,7 @@ def general_axes(ax,
     else:  
         axes = [ax]
 
+    # change the top/bottom/top/right linewidth in general_font() function.
     for axis in axes:
         axis.minorticks_on()
         axis.xaxis.set_minor_locator(AutoMinorLocator(2))
@@ -353,7 +445,7 @@ def general_axes(ax,
         axis.set_xlabel(xlabel, labelpad=labelpad)
         axis.set_ylabel(ylabel, labelpad=labelpad)
 
-        if if_show_right_top_tick == False:
+        if if_close_right_top_tick:
             axis.tick_params(axis='y', which='both', right=False)
             axis.tick_params(axis='x', which='both', top=False)
 
@@ -361,7 +453,6 @@ def general_axes(ax,
             axis.set_xlim(xlim)
             axis.set_ylim(ylim)
         
-
 def general_subplots_adjust(fig: Figure,
                             one_fig_wh: List[float] = [10.72, 8.205], 
                             fig_subp: List[int] = [1, 1],   
