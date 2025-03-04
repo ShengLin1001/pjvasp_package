@@ -413,7 +413,9 @@ def general_axes(ax,
                 xlim: Union[List[float], None] = None,
                 ylim: Union[List[float], None] = None,
                 if_set_lim: bool = True,
-                if_close_right_top_tick: bool = False):
+                if_close_right_top_tick: bool = False,
+                if_ax2: bool = False,
+                color: str = 'black',):
     """
     Modifies axis properties like ticks, labels, and limits.
 
@@ -453,6 +455,12 @@ def general_axes(ax,
             axis.set_xlim(xlim)
             axis.set_ylim(ylim)
         
+        if if_ax2:
+            axis.set_ylabel(ylabel, color=color, labelpad = labelpad)
+            axis.tick_params(axis='y', labelcolor=color, direction='in', color = color)
+            axis.spines['right'].set_color(color) 
+            axis.tick_params(axis='y', which='both', color = color)
+
 def general_subplots_adjust(fig: Figure,
                             one_fig_wh: List[float] = [10.72, 8.205], 
                             fig_subp: List[int] = [1, 1],   
