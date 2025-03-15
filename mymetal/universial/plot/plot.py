@@ -655,7 +655,7 @@ def my_plot_brokenaxed(
             axis.autoscale(enable=True, axis='both', tight=False)
     
     # 将修改图例函数绑定到 fig 对象，方便调用
-    fig.general_modify_legend = general_modify_legend
+    general_modify_legend = general_modify_legend
     fig.general_margin_bin = general_margin_bin
 
     return fig, ax
@@ -782,7 +782,7 @@ def my_plot_energy_components(fig_subp: List[int]=[4,5],
             ax2.tick_params(which='minor', direction='in', color = color, length=4, width=3.0, pad = 10)
             ax2.set_zorder(ax.get_zorder() - 1)
             ax.spines['right'].set_visible(False)
-        fig.general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=bbox_to_anchor))
+        general_modify_legend(ax.legend(loc='upper center', bbox_to_anchor=bbox_to_anchor))
         # format title
         title = tag.upper()
         ax.set_title(f'{title}', fontsize=28)
