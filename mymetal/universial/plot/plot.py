@@ -862,7 +862,10 @@ def my_plot_energy_components(fig_subp: List[int]=[4,5],
     plt.savefig(save_path, dpi=300)
     return fig, axes
 
-def my_plot_interlayer_distance(atoms: Atoms= None, if_plot: bool = True, if_save: bool = True, save_plot_path: str = './p_post_inter_distance.jpg', 
+def my_plot_interlayer_distance(atoms: Atoms= None, if_plot: bool = True, 
+                                if_save: bool = True, 
+                                if_save_txt: bool = True,
+                                save_plot_path: str = './p_post_inter_distance.jpg', 
                                 save_txt_path: str = './p_post_inter_distance.txt') -> np.ndarray:
     """
     Calculates and plots the interlayer distances from the given atomic positions.
@@ -897,7 +900,7 @@ def my_plot_interlayer_distance(atoms: Atoms= None, if_plot: bool = True, if_sav
         ax.margins(x=0.1, y=0.1)
         if if_save:
             plt.savefig(save_plot_path, transparent=False)
-    if if_save:
+    if if_save_txt:
         with open(save_txt_path, "w") as f:
             f.write("zoriginal\n")
             for j, value in enumerate(zo, start=1):  
