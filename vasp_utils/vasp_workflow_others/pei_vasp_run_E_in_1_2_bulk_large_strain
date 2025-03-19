@@ -25,7 +25,7 @@ cp -r $srcdir0  $srcdir
 cd $srcdir
 
 echo "==> uniaxial / biaxial stretch for bulk"
-echo "    Change a1, a2 to two lists, only avail when a1 == a2 in length"
+echo "    Change a1, a2 to two lists, $ a0 is aref"
 echo "example: pei_vasp_run_E_in_1_2_bulk_large_strain -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1"
 
 # read -a1 -a2 list, units in Angs
@@ -119,15 +119,16 @@ a1 = atoms_cell[0]
 a2 = atoms_cell[1]
 a3 = atoms_cell[2]
 
-# confirm a1==a2
-if abs(np.linalg.norm(a1)-np.linalg.norm(a2))>1e-5:
-    print('a1!=a2')
-    exit()
-else:
-    aref=np.linalg.norm(a1)
-    print('aref:',aref)
-strainx = $val1/aref
-strainy = $val2/aref
+# initial ratio for a1 != a2
+iratiox = np.linalg.norm(a1)/$a0
+iratioy = np.linalg.norm(a2)/$a0
+
+aref1=np.linalg.norm(a1)/iratiox
+aref2=np.linalg.norm(a2)/iratioy
+print('aref1:',aref1)
+print('aref2:',aref2)
+strainx = $val1/aref1
+strainy = $val2/aref2
 #print('strainx:',strainx)
 #print('strainy:',strainy)
 
@@ -139,7 +140,7 @@ atoms.set_cell(atoms_cell, scale_atoms=True)
 volume2 = atoms.get_volume()
 #print(f'{volume2}')
 
-my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0, label = f'aref:{aref}  val1:$val1  val2:$val2')
+my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0, label = f'aref1:{aref1} aref1:{aref2} strainx:{strainx} strainy:{strainy} val1:$val1  val2:$val2')
 "
 
         echo 'submit dir:' `pwd`
