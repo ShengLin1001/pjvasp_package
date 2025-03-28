@@ -468,6 +468,7 @@ def general_subplots_adjust(fig: Figure,
                             axes_width: float = 7.31,
                             left: float = 1.918, 
                             top: float = 0.9517,
+                            constrained_layout: bool = False
                             ):
     """
     Adjusts the figure's subplots, size, and spacing.
@@ -484,7 +485,7 @@ def general_subplots_adjust(fig: Figure,
     Returns:
         None
     """
-    fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
+    fig_wh = [fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]]
     # inch 10.72* 8.205 is one figsize
     left = left
     right = one_fig_wh[0]-left-axes_width
@@ -495,7 +496,9 @@ def general_subplots_adjust(fig: Figure,
 
     fig.subplots_adjust(left=left/fig_wh[0], right=(fig_wh[0]-right)/fig_wh[0], 
                         top=(fig_wh[1]-top)/fig_wh[1], bottom=(bottom)/fig_wh[1],
-                        hspace= (hspace), wspace=(wspace))
+                        hspace= (hspace), wspace=(wspace),
+                        constrained_layout=constrained_layout)
+    
 
 def my_plot(
     one_fig_wh: List[float] = [10.72, 8.205],    
@@ -509,6 +512,7 @@ def my_plot(
     axes_height: float = 5.89,
     axes_width: float = 7.31,
     grid_linewidth: float = 0.5,
+    constrained_layout: bool = False
 ) -> Tuple[Figure, List[Axes]]:
     """Creates a customized matplotlib figure with specific layout adjustments.
 
@@ -531,6 +535,7 @@ def my_plot(
         top (float): Top margin in inches (default: 0.9517).
         axes_height (float): Height of each subplot in inches (default: 5.89).
         axes_width (float): Width of each subplot in inches (default: 7.31).
+        constrained_layout (bool): Whether to use constrained layout (default: False).
 
     Returns:
         Tuple[Figure, List[Axes]]: A tuple containing:
@@ -544,7 +549,8 @@ def my_plot(
     fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
     fig, ax = plt.subplots(nrows=fig_subp[0], ncols=fig_subp[1], 
                            sharex=fig_sharex, figsize=(fig_wh[0], fig_wh[1]))
-    general_subplots_adjust(fig, one_fig_wh, fig_subp, axes_height, axes_width, left, top)
+    general_subplots_adjust(fig, one_fig_wh, fig_subp, axes_height, axes_width, left, top,
+                            constrained_layout)
     # can't set xlim/ylim before drawing the figure
     general_axes(ax, labelpad, tick_pad, if_set_lim=False)
 
