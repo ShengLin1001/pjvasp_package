@@ -8,6 +8,7 @@ Functions:
     - check_axes_size: Check the size of axes in a plot.
     - check_all_rcParams: Check all Matplotlib rcParams settings.
     - get_ploted_figure: Get the current figure and axis objects.
+    - add_color_band: Add semi-transparent color band to axes.
     - general_modify_band_plot: Modify the appearance of a band structure plot.
     - generate_gradient_colors: Generate a list of gradient colors.
     - general_modify_line: Modify the appearance of lines in a plot.
@@ -81,6 +82,52 @@ def get_ploted_figure():
     ylim = ax.get_ylim()
     return fig, ax, xlim, ylim
 
+def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, cmap: str = 'coolwarm', alpha: float = 0.5, origin: str='lower') -> None:
+    """Adds a colored gradient band to an existing matplotlib Axes object.
+
+    This function creates a semi-transparent color band on the specified axes using
+    the given gradient colors or colormap. The band's position and size are determined
+    by the extent parameter.
+
+    Args:
+        ax (Axes, optional): Matplotlib Axes object to add the color band to. 
+            If None, uses current axes. Defaults to None.
+        extent (list, optional): List of [xmin, xmax, ymin, ymax] specifying the 
+            bounds of the color band in data coordinates. Defaults to None.
+        gradient (list, optional): Array of color values for the gradient. 
+            If None, uses the specified cmap. Defaults to None.
+        cmap (str, optional): Matplotlib colormap name to use if gradient is None. 
+            Defaults to 'coolwarm'.
+        alpha (float, optional): Transparency of the color band (0-1). 
+            Defaults to 0.5.
+        origin (str, optional): Origin of the gradient image. Matches matplotlib's 
+            imshow origin parameter. Defaults to 'lower'.
+
+    Returns:
+        None: The function modifies the Axes object in place.
+
+    Example:
+        >>> import matplotlib.pyplot as plt
+        >>> fig, ax = plt.subplots()
+        >>> ax.plot([0, 1], [0, 1])  # Some example plot
+        >>> xmin, xmax = ax.get_xlim()
+        >>> ymin, ymax = ax.get_ylim()
+        >>> extent = [1/13, 1/11, ymin, ymax]
+        >>> gradient_colors = generate_gradient_colors(if_cmap_color=True, 
+        ...                                          if_reshape=True, 
+        ...                                          reshape_M_N_L=[1, 1000, 4], 
+        ...                                          if_reverse=True)
+        >>> add_color_band(ax=ax, extent=extent, gradient=gradient_colors, alpha=0.5)
+        >>> plt.show()
+
+    Note:
+        The function requires either a predefined gradient array or a valid cmap name.
+        The gradient array should be shaped appropriately for matplotlib's imshow.
+    """
+    # Fill the gradient region
+    ax.imshow(X=gradient, extent=extent, aspect='auto',
+            cmap=cmap, origin=origin, alpha=alpha)
+
 def general_modify_band_plot(ax: plt.Axes) -> plt.Axes:
     xticks = ax.get_xticks()
     xticklabels = ax.get_xticklabels()
@@ -90,7 +137,65 @@ def general_modify_band_plot(ax: plt.Axes) -> plt.Axes:
     return ax
 
 def generate_gradient_colors(start_color: str = 'red', end_color: str = 'blue', num_colors: int = 2,
-                             if_cmap_color: bool = False, cmap_color: str = 'coolwarm'):
+                             if_cmap_color: bool = False, cmap_color: str = 'coolwarm', if_reshape: bool = False, reshape_M_N_L: list = [1, 1000, 4],
+                             if_reverse: bool = False) -> list:
+    """Generates a list of colors forming a gradient between two colors or using a colormap.
+
+    This function can create either a simple linear gradient between two colors or
+    sample colors from a matplotlib colormap. The output can be reshaped into a
+    multi-dimensional array and optionally reversed.
+
+    Args:
+        start_color (str, optional): Starting color for the gradient (named color or hex).
+            Defaults to 'red'.
+        end_color (str, optional): Ending color for the gradient (named color or hex).
+            Defaults to 'blue'.
+        num_colors (int, optional): Number of colors to generate in the gradient.
+            Defaults to 2.
+        if_cmap_color (bool, optional): If True, uses a colormap instead of start/end colors.
+            Defaults to False.
+        cmap_color (str, optional): Name of matplotlib colormap to use if if_cmap_color is True.
+            Defaults to 'coolwarm'.
+        if_reshape (bool, optional): If True, reshapes output array according to reshape_M_N_L.
+            Defaults to False.
+        reshape_M_N_L (list, optional): Dimensions for reshaping output as [M, N, L].
+            Defaults to [1, 1000, 4].
+        if_reverse (bool, optional): If True, reverses the order of colors in the gradient.
+            Defaults to False.
+
+    Returns:
+        list: Array of RGBA color values. Shape depends on if_reshape parameter:
+            - If not reshaped: (num_colors, 4)
+            - If reshaped: (M, N, L) as specified
+
+    Example:
+        >>> # Simple two-color gradient
+        >>> colors = generate_gradient_colors('red', 'blue', 5)
+        >>> 
+        >>> # Using a colormap with 100 colors
+        >>> colors = generate_gradient_colors(if_cmap_color=True, cmap_color='viridis', num_colors=100)
+        >>>
+        >>> # Reshaped gradient for use with imshow
+        >>> gradient = generate_gradient_colors(
+        ...     if_cmap_color=True,
+        ...     cmap_color='coolwarm',
+        ...     if_reshape=True,
+        ...     reshape_M_N_L=[1, 100, 4],
+        ...     if_reverse=True
+        ... )
+        >>> plt.imshow(gradient, aspect='auto')
+        >>> plt.show()
+
+    Note:
+        When if_reshape=True, the product of M*N must equal num_colors (or the default
+        num_colors value if if_reshape is True but num_colors wasn't specified).
+        The L dimension should typically be 4 (for RGBA values).
+    """
+    if if_reshape:
+        M = reshape_M_N_L[0]
+        N = reshape_M_N_L[1]
+        L = reshape_M_N_L[2]
+        num_colors = M * N
     if if_cmap_color:
         cmap = plt.get_cmap(cmap_color)
         values = np.linspace(0, 1, num_colors)
@@ -98,6 +203,12 @@ def generate_gradient_colors(start_color: str = 'red', end_color: str = 'blue', 
     else:
         cmap = mcolors.LinearSegmentedColormap.from_list("gradient", [start_color, end_color])
         color_list = [cmap(i / (num_colors - 1)) for i in range(num_colors)]
+    if if_reverse:
+        temp_color_list = color_list.copy()
+        color_list = temp_color_list[::-1]
+    if if_reshape:
+        temp_color_list = np.array(color_list.copy())
+        color_list = temp_color_list.reshape(M, N, L)
     return color_list
 
 def general_modify_line(ax: plt.Axes,
@@ -152,7 +263,9 @@ def general_add_vlines_hlines(  ax: plt.Axes,
     for hline in hlines:
         ax.axhline(y=hline, color=next(color_cycle), zorder=next(zorder_cycles),  linestyle= linestyle)
 
-def general_modify_legend(legend):
+def general_modify_legend(legend, boxstyle: str = 'Square',
+                        pad: float = 0.5, linewidth: float = 2.5,
+                        edgecolor: str = 'black', facecolor: str = 'white', alpha: float = 1):
     """
     Customizes the appearance of a legend.
 
@@ -162,11 +275,11 @@ def general_modify_legend(legend):
     Returns:
         None
     """
-    legend.get_frame().set_boxstyle("Square", pad=0.5)
-    legend.get_frame().set_linewidth(2.5)
-    legend.get_frame().set_edgecolor('black')
-    legend.get_frame().set_facecolor('white')
-    legend.get_frame().set_alpha(1)
+    legend.get_frame().set_boxstyle(boxstyle, pad=pad)
+    legend.get_frame().set_linewidth(linewidth)
+    legend.get_frame().set_edgecolor(edgecolor)
+    legend.get_frame().set_facecolor(facecolor)
+    legend.get_frame().set_alpha(alpha)
     
 def general_margin_bin(axis,
                         y_margin = 0.1, 
