@@ -8,11 +8,16 @@ ase.constraints.'''
 # Copyright 2008, 2009 CAMd
 # (see accompanying license files for details).
 
-from math import cos, sin
+from math import cos, sin, sqrt
 import warnings
 import numpy as np
 np.seterr(all='raise')
 import os
+import copy
+import sys
+import time
+from os.path import isfile
+import collections
 
 def read_any(filename):
     try:
@@ -27,11 +32,11 @@ def read_any(filename):
         return read_con(filename)
     except:
         pass
-    raise IOError, "Could not read file %s." % filename
+    raise IOError("Could not read file %s." % filename)
 
 def write_jmol(filename, atoms, eigenvalues, eigenvectors):
     f_xyz = open(filename,'w')
-    for i in xrange(len(eigenvectors)):
+    for i in range(len(eigenvectors)):
         mode = eigenvectors[:,i]
         mode.shape = (len(mode)/3,3)
 
@@ -66,12 +71,12 @@ def get_atomtypes(fname):
 
 def atomtypes_outpot(posfname, numsyms):
     """Try to retreive chemical symbols from OUTCAR or POTCAR
-    
+
     If getting atomtypes from the first line in POSCAR/CONTCAR fails, it might
     be possible to find the data in OUTCAR or POTCAR, if these files exist.
 
     posfname -- The filename of the POSCAR/CONTCAR file we're trying to read
-    
+
     numsyms -- The number of symbols we must find
 
     """
@@ -131,7 +136,7 @@ def read_vasp(filename='CONTCAR'):
     file and tries to read atom types from POSCAR/CONTCAR header, if this fails
     the atom types are read from OUTCAR or POTCAR file.
     """
- 
+
     if isinstance(filename, str):
         f = open(filename)
     else: # Assume it's a file-like object
@@ -175,7 +180,7 @@ def read_vasp(filename='CONTCAR'):
     if commentcheck.any():
         # only keep the elements up to the first including a '!':
         numofatoms = numofatoms[:np.arange(len(numofatoms))[commentcheck][0]]
-        
+
     numsyms = len(numofatoms)
     if len(atomtypes) < numsyms:
         # First line in POSCAR/CONTCAR didn't contain enough symbols.
@@ -190,7 +195,7 @@ def read_vasp(filename='CONTCAR'):
 
     for i, num in enumerate(numofatoms):
         numofatoms[i] = int(num)
-        [atom_symbols.append(atomtypes[i]) for na in xrange(numofatoms[i])]
+        [atom_symbols.append(atomtypes[i]) for na in range(numofatoms[i])]
 
     # Check if Selective dynamics is switched on
     sdyn = f.readline()
@@ -206,7 +211,7 @@ def read_vasp(filename='CONTCAR'):
     atoms_pos = np.empty((tot_natoms, 3))
     if selective_dynamics:
         selective_flags = np.empty((tot_natoms, 3), dtype=bool)
-    for atom in xrange(tot_natoms):
+    for atom in range(tot_natoms):
         ac = f.readline().split()
         atoms_pos[atom] = (float(ac[0]), float(ac[1]), float(ac[2]))
         if selective_dynamics:
@@ -243,7 +248,7 @@ def read_vasp_out(filename='OUTCAR',index = 'all'):
     """Import OUTCAR type file.
 
     Reads unitcell, atom positions, energies, and forces from the OUTCAR file
-    and attempts to read constraints (if any) from CONTCAR/POSCAR, if present. 
+    and attempts to read constraints (if any) from CONTCAR/POSCAR, if present.
     """
     try:          # try to read constraints, first from CONTCAR, then from POSCAR
         constr = read_vasp('CONTCAR').constraints
@@ -275,7 +280,7 @@ def read_vasp_out(filename='OUTCAR',index = 'all'):
                     temp = temp[0:temp.find(c)]
             species += [temp]
         if 'ions per type' in line:
-            species = species[:len(species)/2]
+            species = species[:int(len(species)/2)]
             temp = line.split()
             for ispecies in range(len(species)):
                 species_num += [int(temp[ispecies+4])]
@@ -355,15 +360,15 @@ def write_vasp(filename, atoms, label='', direct=False, sort=None, symbol_count 
 
     Writes label, scalefactor, unitcell, # of various kinds of atoms,
     positions in cartesian or scaled coordinates (Direct), and constraints
-    to file. Cartesian coordiantes is default and default label is the 
+    to file. Cartesian coordiantes is default and default label is the
     atomic species, e.g. 'C N H Cu'.
     """
-    
+
     if isinstance(filename, str):
         f = open(filename, 'w')
     else: # Assume it's a 'file-like object'
         f = filename
-    
+
     if isinstance(atoms, (list, tuple)):
         if len(atoms) > 1:
             raise RuntimeError("Don't know how to save more than "+
@@ -487,8 +492,8 @@ def box_to_length_angle(box):
     angles[2] = np.arccos(np.dot(box[1,:]/lengths[1],box[2,:]/lengths[2]))
     angles *= 180.0/np.pi
     return lengths, angles
-    
-    
+
+
 def read_con(filename):
     f = open(filename, 'r')
     lines = f.readlines()
@@ -536,9 +541,9 @@ def read_con(filename):
             if len(trajectory) == 0:
                 raise
             return trajectory
-        trajectory.append(a)        
-            
-            
+        trajectory.append(a)
+
+
 def write_con(filename, p, w = 'w'):
     con = open(filename, w)
     print >> con, "Generated by vtstscripts"
@@ -584,8 +589,8 @@ def read_xdatcar(fileName):
     lines = f.readlines()
     f.close()
     lattice_constant = float(lines[1].strip())
-    cell = np.array([[float(x) * lattice_constant for x in lines[2].split()], 
-                        [float(x) * lattice_constant for x in lines[3].split()], 
+    cell = np.array([[float(x) * lattice_constant for x in lines[2].split()],
+                        [float(x) * lattice_constant for x in lines[3].split()],
                         [float(x) * lattice_constant for x in lines[4].split()]])
     elements = lines[5].split()
     natoms = [int(x) for x in lines[6].split()]
@@ -717,7 +722,7 @@ chemical_symbols = ['X',  'H',  'He', 'Li', 'Be',
                     'Am', 'Cm', 'Bk', 'Cf', 'Es',
                     'Fm', 'Md', 'No', 'Lr']
 
-atomic_numbers = {}
+atomic_numbers = {'A':1}
 for Z, symbol in enumerate(chemical_symbols):
     atomic_numbers[symbol] = Z
 
@@ -1073,7 +1078,7 @@ class Atom(object):
             self.data[name] = self.get_raw(name)
         self.index = None
         self.atoms = None
-        
+
     def get_raw(self, name):
         """Get attribute, return None if not explicitely set."""
         if name == 'symbol':
@@ -1081,7 +1086,7 @@ class Atom(object):
 
         if self.atoms is None:
             return self.data[name]
-        
+
         plural = names[name][0]
         if plural in self.atoms.arrays:
             return self.atoms.arrays[plural][self.index]
@@ -1325,7 +1330,7 @@ class Atoms(object):
                 calculator = atoms.get_calculator()
 
         self.arrays = {}
-        
+
         if symbols is None:
             if numbers is None:
                 if positions is not None:
@@ -1394,7 +1399,7 @@ class Atoms(object):
 
     calc = property(get_calculator, set_calculator, _del_calculator,
                     doc='Calculator object.')
-    
+
     def set_constraint(self, constraint=None):
         """Apply one or more constrains.
 
@@ -1416,13 +1421,13 @@ class Atoms(object):
 
     constraints = property(_get_constraints, set_constraint, _del_constraints,
                            'Constraints of the atoms.')
-    
+
     def set_cell(self, cell, scale_atoms=False, fix=None):
         """Set unit cell vectors.
 
         Parameters:
 
-        cell : 
+        cell :
             Unit cell.  A 3x3 matrix (the three unit cell vectors) or
             just three numbers for an orthorhombic cell.
         scale_atoms : bool
@@ -1432,7 +1437,7 @@ class Atoms(object):
         Examples:
 
         Two equivalent ways to define an orthorhombic cell:
-        
+
         >>> a.set_cell([a, b, c])
         >>> a.set_cell([(a, 0, 0), (0, b, 0), (0, 0, c)])
 
@@ -1464,7 +1469,7 @@ class Atoms(object):
 
         Note that the commonly used factor of 2 pi for Fourier
         transforms is not included here."""
-        
+
         rec_unit_cell = np.linalg.inv(self.get_cell()).transpose()
         return rec_unit_cell
 
@@ -1473,7 +1478,7 @@ class Atoms(object):
         if isinstance(pbc, int):
             pbc = (pbc,) * 3
         self._pbc = np.array(pbc, bool)
-        
+
     def get_pbc(self):
         """Get periodic boundary condition flags."""
         return self._pbc.copy()
@@ -1482,12 +1487,12 @@ class Atoms(object):
         """Add new array.
 
         If *shape* is not *None*, the shape of *a* will be checked."""
-        
+
         if dtype is not None:
             a = np.array(a, dtype)
         else:
             a = a.copy()
-            
+
         if name in self.arrays:
             raise RuntimeError
 
@@ -1500,7 +1505,7 @@ class Atoms(object):
         if shape is not None and a.shape[1:] != shape:
             raise ValueError('Array has wrong shape %s != %s.' %
                              (a.shape, (a.shape[0:1] + shape)))
-        
+
         self.arrays[name] = a
 
     def get_array(self, name, copy=True):
@@ -1512,13 +1517,13 @@ class Atoms(object):
             return self.arrays[name].copy()
         else:
             return self.arrays[name]
-    
+
     def set_array(self, name, a, dtype=None, shape=None):
         """Update array.
 
         If *shape* is not *None*, the shape of *a* will be checked.
         If *a* is *None*, then the array is deleted."""
-        
+
         b = self.arrays.get(name)
         if b is None:
             if a is not None:
@@ -1539,7 +1544,7 @@ class Atoms(object):
         name must be one of: 'tags', 'momenta', 'masses', 'magmoms',
         'charges'."""
         return name in self.arrays
-    
+
     def set_atomic_numbers(self, numbers):
         """Set atomic numbers."""
         self.set_array('numbers', numbers, int, ())
@@ -1574,7 +1579,7 @@ class Atoms(object):
     def set_tags(self, tags):
         """Set tags for all atoms."""
         self.set_array('tags', tags, int, ())
-        
+
     def get_tags(self):
         """Get integer array of tags."""
         if 'tags' in self.arrays:
@@ -1593,21 +1598,21 @@ class Atoms(object):
     def set_velocities(self, velocities):
         """Set the momenta by specifying the velocities."""
         self.set_momenta(self.get_masses()[:, np.newaxis] * velocities)
-        
+
     def get_momenta(self):
         """Get array of momenta."""
         if 'momenta' in self.arrays:
             return self.arrays['momenta'].copy()
         else:
             return np.zeros((len(self), 3))
-        
+
     def set_masses(self, masses='defaults'):
         """Set atomic masses.
 
         The array masses should contain a list of masses.  In case
         the masses argument is not given or for those elements of the
         masses list that are None, standard values are set."""
-        
+
         if masses == 'defaults':
             masses = atomic_masses[self.arrays['numbers']]
         elif isinstance(masses, (list, tuple)):
@@ -1626,13 +1631,13 @@ class Atoms(object):
             return self.arrays['masses'].copy()
         else:
             return atomic_masses[self.arrays['numbers']]
-        
+
     def set_initial_magnetic_moments(self, magmoms=None):
         """Set the initial magnetic moments.
 
         Use either one or three numbers for every atom (collinear
         or non-collinear spins)."""
-        
+
         if magmoms is None:
             self.set_array('magmoms', None)
         else:
@@ -1654,7 +1659,7 @@ class Atoms(object):
             return self._calc.get_magnetic_moments(self)
         else:
             return np.zeros(len(self))
-        
+
     def get_magnetic_moment(self):
         """Get calculated total magnetic moment."""
         if self._calc is None:
@@ -1667,6 +1672,13 @@ class Atoms(object):
     def set_charges(self, charges):
         """Set charges."""
         self.set_array('charges', charges, float, ())
+
+    def get_initial_charges(self):
+        """Get array of initial charges."""
+        if 'charges' in self.arrays:
+            return self.arrays['charges'].copy()
+        else:
+            return np.zeros(len(self))
 
     def get_charges(self):
         """Get array of charges."""
@@ -1682,7 +1694,7 @@ class Atoms(object):
             newpositions = np.asarray(newpositions, float)
             for constraint in self.constraints:
                 constraint.adjust_positions(positions, newpositions)
-                
+
         self.set_array('positions', newpositions, shape=(3,))
 
     def get_positions(self):
@@ -1771,7 +1783,7 @@ class Atoms(object):
             # Hopefully a 6-vector, but don't check in case some weird
             # calculator does something else.
             return stress
-    
+
     def get_stresses(self):
         """Calculate the stress-tensor of all the atoms.
 
@@ -1788,7 +1800,7 @@ class Atoms(object):
 
         Only available for calculators which has a get_dipole_moment()
         method."""
-        
+
         if self._calc is None:
             raise RuntimeError('Atoms object has no calculator.')
         try:
@@ -1797,7 +1809,7 @@ class Atoms(object):
             raise AttributeError(
                 'Calculator object has no get_dipole_moment method.')
         return dipole
-    
+
     def copy(self):
         """Return a copy."""
         import copy
@@ -1819,7 +1831,7 @@ class Atoms(object):
         Equivalent to len(atoms) in the standard ASE Atoms class.
         """
         return len(self)
-    
+
     def __repr__(self):
         num = self.get_atomic_numbers()
         N = len(num)
@@ -1856,10 +1868,10 @@ class Atoms(object):
         """Extend atoms object by appending atoms from *other*."""
         if isinstance(other, Atom):
             other = self.__class__([other])
-            
+
         n1 = len(self)
         n2 = len(other)
-        
+
         for name, a1 in self.arrays.items():
             a = np.zeros((n1 + n2,) + a1.shape[1:], a1.dtype)
             a[:n1] = a1
@@ -1907,17 +1919,17 @@ class Atoms(object):
                 raise IndexError('Index out of range.')
 
             return Atom(atoms=self, index=i)
-        
+
         import copy
-        
+
         atoms = self.__class__(cell=self._cell, pbc=self._pbc, info=self.info)
         # TODO: Do we need to shuffle indices in adsorbate_info too?
         atoms.adsorbate_info = self.adsorbate_info
-        
+
         atoms.arrays = {}
         for name, a in self.arrays.items():
             atoms.arrays[name] = a[i].copy()
-        
+
         # Constraints need to be deepcopied, since we need to shuffle
         # the indices
         atoms.constraints = copy.deepcopy(self.constraints)
@@ -1952,7 +1964,7 @@ class Atoms(object):
         atom.cut_reference_to_atoms()
         del self[i]
         return atom
-    
+
     def __imul__(self, m):
         """In-place repeat of atoms."""
         if isinstance(m, int):
@@ -1960,7 +1972,7 @@ class Atoms(object):
 
         M = np.product(m)
         n = len(self)
-        
+
         for name, a in self.arrays.items():
             self.arrays[name] = np.tile(a, (M,) + (1,) * (len(a.shape) - 1))
 
@@ -2160,7 +2172,7 @@ class Atoms(object):
             assert norm(v) >= eps
             if s > 0:
                 v /= s
-        
+
         if isinstance(center, str) and center.lower() == 'com':
             center = self.get_center_of_mass()
 
@@ -2175,14 +2187,14 @@ class Atoms(object):
                           np.cross(rotcell, s * v) + 
                           np.outer(np.dot(rotcell, v), (1.0 - c) * v))
             self.set_cell(rotcell)
-                
+
     def rotate_euler(self, center=(0, 0, 0), phi=0.0, theta=0.0, psi=0.0):
         """Rotate atoms via Euler angles.
-        
+
         See e.g http://mathworld.wolfram.com/EulerAngles.html for explanation.
-        
+
         Parameters:
-        
+
         center :
             The point to rotate about. A sequence of length 3 with the
             coordinates, or 'COM' to select the center of mass.
@@ -2192,7 +2204,7 @@ class Atoms(object):
             Rotation around the x axis.
         psi :
             2nd rotation around the z axis.
-        
+
         """
         if isinstance(center, str) and center.lower() == 'com':
             center = self.get_center_of_mass()
@@ -2274,8 +2286,8 @@ class Atoms(object):
         list[2]->list[3] by changing the atom indexed by list[3]
         if mask is not None, all the atoms described in mask 
         (read: the entire subgroup) are moved
-        
-        example: the following defines a very crude 
+
+        example: the following defines a very crude
         ethane-like molecule and twists one half of it by 30 degrees.
 
         >>> atoms = Atoms('HHCCHH', [[-1, 1, 0], [-1, -1, 0], [0, 0, 0],
@@ -2293,7 +2305,7 @@ class Atoms(object):
         axis = self.positions[list[2]] - self.positions[list[1]]
         center = self.positions[list[2]]
         self._masked_rotate(center, axis, diff, mask)
-        
+
     def rotate_dihedral(self, list, angle, mask=None):
         """Rotate dihedral angle.
 
@@ -2303,10 +2315,10 @@ class Atoms(object):
         """
         start = self.get_dihedral(list)
         self.set_dihedral(list, angle + start, mask)
-    
+
     def get_angle(self, list):
         """Get angle formed by three atoms.
-        
+
         calculate angle between the vectors list[0]->list[1] and
         list[1]->list[2], where list contains the atomic indexes in
         question."""
@@ -2342,7 +2354,7 @@ class Atoms(object):
         axis = np.cross(v10, v12)
         center = self.positions[list[1]]
         self._masked_rotate(center, axis, diff, mask)
-    
+
     def rattle(self, stdev=0.001, seed=None):
         """Randomly displace atoms.
 
@@ -2370,6 +2382,31 @@ class Atoms(object):
             Dr = np.linalg.solve(self._cell.T, D)
             D = np.dot(Dr - np.round(Dr) * self._pbc, self._cell)
         return np.linalg.norm(D)
+
+    def get_all_distances(self, mic=False):
+        """Return distances of all of the atoms with all of the atoms.
+
+        Use mic=True to use the Minimum Image Convention.
+        """
+        L = len(self)
+        R = self.arrays['positions']
+
+        D = []
+        for i in range(L - 1):
+            D.append(R[i + 1:] - R[i])
+        D = np.concatenate(D)
+
+        if mic:
+            D, D_len = find_mic(D, self._cell, self._pbc)
+        else:
+            D_len = np.sqrt((D**2).sum(1))
+
+        results = np.zeros((L, L), dtype=float)
+        start = 0
+        for i in range(L - 1):
+            results[i, i + 1:] = D_len[start:start + L - i - 1]
+            start += L - i - 1
+        return results + results.T
 
     def set_distance(self, a0, a1, distance, fix=0.5):
         """Set the distance between two atoms.
@@ -2453,7 +2490,7 @@ class Atoms(object):
     def get_volume(self):
         """Get volume of unit cell."""
         return abs(np.linalg.det(self._cell))
-    
+
     def _get_positions(self):
         """Return reference to positions-array for in-place manipulations."""
         return self.arrays['positions']
@@ -2478,14 +2515,14 @@ class Atoms(object):
     def _get_cell(self):
         """Return reference to unit cell for in-place manipulations."""
         return self._cell
-    
+
     cell = property(_get_cell, set_cell, doc='Attribute for direct ' +
                        'manipulation of the unit cell.')
 
     def _get_pbc(self):
         """Return reference to pbc-flags for in-place manipulations."""
         return self._pbc
-    
+
     pbc = property(_get_pbc, set_pbc,
                    doc='Attribute for direct manipulation ' +
                    'of the periodic boundary condition flags.')
@@ -2516,8 +2553,8 @@ class Atoms(object):
         elif format == 'con':
             write_con(filename, self)
         else:
-            raise Exception, "Unknown file format: %s" % format
-        
+            raise Exception("Unknown file format: %s" % format)
+
 
 def string2symbols(s):
     """Convert string to list of chemical symbols."""
@@ -2525,9 +2562,9 @@ def string2symbols(s):
 
     if n == 0:
         return []
-    
+
     c = s[0]
-    
+
     if c.isdigit():
         i = 1
         while i < n and s[i].isdigit():
@@ -2989,7 +3026,7 @@ class SinglePointCalculator:
     configuration.  If the positions, atomic numbers, unit cell, or
     boundary conditions are changed, then asking for
     energy/forces/stress will raise an exception."""
-    
+
     def __init__(self, energy, forces, stress, magmoms, atoms):
         """Save energy, forces and stresses for the current configuration."""
         self.energy = energy
@@ -3087,7 +3124,7 @@ class SinglePointDFTCalculator(SinglePointCalculator):
         if nos is not None:
             return nos == 2
         return None
-    
+
     def get_ibz_k_points(self):
         """Return k-points in the irreducible part of the Brillouin zone."""
         return self.get_bz_k_points()
@@ -3111,3 +3148,1735 @@ class SinglePointDFTCalculator(SinglePointCalculator):
                 if kpt.s == spin:
                     return kpt.eps_n
         return None
+
+class DummyMPI:
+    rank = 0
+    size = 1
+
+    def sum(self, a):
+        if isinstance(a, np.ndarray) and a.ndim > 0:
+            pass
+        else:
+            return a
+
+    def barrier(self):
+        pass
+
+    def broadcast(self, a, rank):
+        pass
+
+
+all_changes = ['positions', 'numbers', 'cell', 'pbc',
+               'initial_charges', 'initial_magmoms']
+
+def equal(a, b, tol=None):
+    """ndarray-enabled comparison function."""
+    if isinstance(a, np.ndarray):
+        b = np.array(b)
+        if a.shape != b.shape:
+            return False
+        if tol is None:
+            return (a == b).all()
+        else:
+            return np.allclose(a, b, rtol=tol, atol=tol)
+    if isinstance(b, np.ndarray):
+        return equal(b, a, tol)
+    if tol is None:
+        return a == b
+    return abs(a - b) < tol * abs(b) + tol
+
+class Parameters(dict):
+    """Dictionary for parameters.
+
+    Special feature: If param is a Parameters instance, then param.xc
+    is a shorthand for param['xc'].
+    """
+
+    def __getattr__(self, key):
+        if key not in self:
+            return dict.__getattribute__(self, key)
+        return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    @classmethod
+    def read(cls, filename):
+        """Read parameters from file."""
+        file = open(os.path.expanduser(filename))
+        parameters = cls(eval(file.read()))
+        file.close()
+        return parameters
+
+    def tostring(self):
+        keys = sorted(self.keys())
+        return 'dict(' + ',\n     '.join(
+            '%s=%r' % (key, self[key]) for key in keys) + ')\n'
+
+    def write(self, filename):
+        file = open(filename, 'w')
+        file.write(self.tostring())
+        file.close()
+
+class Calculator:
+    """Base-class for all ASE calculators.
+
+    A calculator must raise NotImplementedError if asked for a
+    property that it can't calculate.  So, if calculation of the
+    stress tensor has not been implemented, get_stress(atoms) should
+    raise NotImplementedError.  This can be achieved simply by not
+    including the string 'stress' in the list implemented_properties
+    which is a class member.  These are the names of the standard
+    properties: 'energy', 'forces', 'stress', 'dipole', 'charges',
+    'magmom' and 'magmoms'.
+    """
+
+    implemented_properties = []
+    'Properties calculator can handle (energy, forces, ...)'
+
+    default_parameters = {}
+    'Default parameters'
+
+    def __init__(self, restart=None, ignore_bad_restart_file=False, label=None,
+                 atoms=None, **kwargs):
+        """Basic calculator implementation.
+
+        restart: str
+            Prefix for restart file.  May contain a directory.  Default
+            is None: don't restart.
+        ignore_bad_restart_file: bool
+            Ignore broken or missing restart file.  By default, it is an
+            error if the restart file is missing or broken.
+        label: str
+            Name used for all files.  May contain a directory.
+        atoms: Atoms object
+            Optional Atoms object to which the calculator will be
+            attached.  When restarting, atoms will get its positions and
+            unit-cell updated from file.
+        """
+        self.atoms = None  # copy of atoms object from last calculation
+        self.results = {}  # calculated properties (energy, forces, ...)
+        self.parameters = None  # calculational parameters
+
+        if restart is not None:
+            try:
+                self.read(restart)  # read parameters, atoms and results
+            except ReadError:
+                if ignore_bad_restart_file:
+                    self.reset()
+                else:
+                    raise
+
+        self.label = None
+        self.directory = None
+        self.prefix = None
+
+        self.set_label(label)
+
+        if self.parameters is None:
+            # Use default parameters if they were not read from file:
+            self.parameters = self.get_default_parameters()
+
+        if atoms is not None:
+            atoms.calc = self
+            if self.atoms is not None:
+                # Atoms were read from file.  Update atoms:
+                if not (equal(atoms.numbers, self.atoms.numbers) and
+                        (atoms.pbc == self.atoms.pbc).all()):
+                    raise RuntimeError('Atoms not compatible with file')
+                atoms.positions = self.atoms.positions
+                atoms.cell = self.atoms.cell
+
+        self.set(**kwargs)
+
+        if not hasattr(self, 'name'):
+            self.name = self.__class__.__name__.lower()
+
+    def set_label(self, label):
+        """Set label and convert label to directory and prefix.
+
+        Examples:
+
+        * label='abc': (directory='.', prefix='abc')
+        * label='dir1/abc': (directory='dir1', prefix='abc')
+
+        Calculators that must write results to files with fixed names
+        can overwrite this method so that the directory is set to all
+        of label."""
+
+        self.label = label
+
+        if label is None:
+            self.directory = None
+            self.prefix = None
+        else:
+            self.directory, self.prefix = os.path.split(label)
+            if self.directory == '':
+                self.directory = os.curdir
+
+    def get_default_parameters(self):
+        return Parameters(copy.deepcopy(self.default_parameters))
+
+    def todict(self):
+        default = self.get_default_parameters()
+        return dict((key, value)
+                    for key, value in self.parameters.items()
+                    if key not in default or value != default[key])
+
+    def reset(self):
+        """Clear all information from old calculation."""
+
+        self.atoms = None
+        self.results = {}
+
+    def read(self, label):
+        """Read atoms, parameters and calculated properties from output file.
+
+        Read result from self.label file.  Raise ReadError if the file
+        is not there.  If the file is corrupted or contains an error
+        message from the calculation, a ReadError should also be
+        raised.  In case of succes, these attributes must set:
+
+        atoms: Atoms object
+            The state of the atoms from last calculation.
+        parameters: Parameters object
+            The parameter dictionary.
+        results: dict
+            Calculated properties like energy and forces.
+
+        The FileIOCalculator.read() method will typically read atoms
+        and parameters and get the results dict by calling the
+        read_results() method."""
+
+        self.set_label(label)
+
+    def get_atoms(self):
+        if self.atoms is None:
+            raise ValueError('Calculator has no atoms')
+        atoms = self.atoms.copy()
+        atoms.calc = self
+        return atoms
+
+    @classmethod
+    def read_atoms(cls, restart, **kwargs):
+        return cls(restart=restart, label=restart, **kwargs).get_atoms()
+
+    def set(self, **kwargs):
+        """Set parameters like set(key1=value1, key2=value2, ...).
+
+        A dictionary containing the parameters that have been changed
+        is returned.
+
+        Subclasses must implement a set() method that will look at the
+        chaneged parameters and decide if a call to reset() is needed.
+        If the changed parameters are harmless, like a change in
+        verbosity, then there is no need to call reset().
+
+        The special keyword 'parameters' can be used to read
+        parameters from a file."""
+
+        if 'parameters' in kwargs:
+            filename = kwargs.pop('parameters')
+            parameters = Parameters.read(filename)
+            parameters.update(kwargs)
+            kwargs = parameters
+
+        changed_parameters = {}
+
+        for key, value in kwargs.items():
+            oldvalue = self.parameters.get(key)
+            if key not in self.parameters or not equal(value, oldvalue):
+                if isinstance(oldvalue, dict):
+                    # Special treatment for dictionary parameters:
+                    for name in value:
+                        if name not in oldvalue:
+                            raise KeyError(
+                                'Unknown subparameter "%s" in '
+                                'dictionary parameter "%s"' % (name, key))
+                    oldvalue.update(value)
+                    value = oldvalue
+                changed_parameters[key] = value
+                self.parameters[key] = value
+
+        return changed_parameters
+
+    def check_state(self, atoms, tol=1e-15):
+        """Check for system changes since last calculation."""
+        if self.atoms is None:
+            system_changes = all_changes
+        else:
+            system_changes = []
+            if not equal(self.atoms.positions, atoms.positions, tol):
+                system_changes.append('positions')
+            if not equal(self.atoms.numbers, atoms.numbers):
+                system_changes.append('numbers')
+            if not equal(self.atoms.cell, atoms.cell, tol):
+                system_changes.append('cell')
+            if not equal(self.atoms.pbc, atoms.pbc):
+                system_changes.append('pbc')
+            if not equal(self.atoms.get_initial_magnetic_moments(),
+                         atoms.get_initial_magnetic_moments(), tol):
+                system_changes.append('initial_magmoms')
+            if not equal(self.atoms.get_initial_charges(),
+                         atoms.get_initial_charges(), tol):
+                system_changes.append('initial_charges')
+
+        return system_changes
+
+    def get_potential_energy(self, atoms=None, force_consistent=False):
+        energy = self.get_property('energy', atoms)
+        if force_consistent:
+            return self.results.get('free_energy', energy)
+        else:
+            return energy
+
+    def get_forces(self, atoms=None):
+        return self.get_property('forces', atoms)
+
+    def get_stress(self, atoms=None):
+        return self.get_property('stress', atoms)
+
+    def get_dipole_moment(self, atoms=None):
+        return self.get_property('dipole', atoms)
+
+    def get_charges(self, atoms=None):
+        return self.get_property('charges', atoms)
+
+    def get_magnetic_moment(self, atoms=None):
+        return self.get_property('magmom', atoms)
+
+    def get_magnetic_moments(self, atoms=None):
+        return self.get_property('magmoms', atoms)
+
+    def get_property(self, name, atoms=None, allow_calculation=True):
+        if name not in self.implemented_properties:
+            raise NotImplementedError
+
+        if atoms is None:
+            atoms = self.atoms
+            system_changes = []
+        else:
+            system_changes = self.check_state(atoms)
+            if system_changes:
+                self.reset()
+        if name not in self.results:
+            if not allow_calculation:
+                return None
+            try:
+                self.calculate(atoms, [name], system_changes)
+            except Exception:
+                self.reset()
+                raise
+
+        if name == 'magmom' and 'magmom' not in self.results:
+            return 0.0
+
+        if name == 'magmoms' and 'magmoms' not in self.results:
+            return np.zeros(len(atoms))
+
+        result = self.results[name]
+        if isinstance(result, np.ndarray):
+            result = result.copy()
+        return result
+
+    def calculation_required(self, atoms, properties):
+        system_changes = self.check_state(atoms)
+        if system_changes:
+            return True
+        for name in properties:
+            if name not in self.results:
+                return True
+        return False
+
+    def calculate(self, atoms=None, properties=['energy'],
+                  system_changes=all_changes):
+        """Do the calculation.
+
+        properties: list of str
+            List of what needs to be calculated.  Can be any combination
+            of 'energy', 'forces', 'stress', 'dipole', 'charges', 'magmom'
+            and 'magmoms'.
+        system_changes: list of str
+            List of what has changed since last calculation.  Can be
+            any combination of these five: 'positions', 'numbers', 'cell',
+            'pbc', 'initial_charges' and 'initial_magmoms'.
+
+        Subclasses need to implement this, but can ignore properties
+        and system_changes if they want.  Calculated properties should
+        be inserted into results dictionary like shown in this dummy
+        example::
+
+            self.results = {'energy': 0.0,
+                            'forces': np.zeros((len(atoms), 3)),
+                            'stress': np.zeros(6),
+                            'dipole': np.zeros(3),
+                            'charges': np.zeros(len(atoms)),
+                            'magmom': 0.0,
+                            'magmoms': np.zeros(len(atoms))}
+
+        The subclass implementation should first call this
+        implementation to set the atoms attribute.
+        """
+
+        if atoms is not None:
+            self.atoms = atoms.copy()
+
+    def calculate_numerical_forces(self, atoms, d=0.001):
+        """Calculate numerical forces using finite difference.
+
+        All atoms will be displaced by +d and -d in all directions."""
+
+        from ase.calculators.test import numeric_force
+        return np.array([[numeric_force(atoms, a, i, d)
+                          for i in range(3)] for a in range(len(atoms))])
+
+    def calculate_numerical_stress(self, atoms, d=1e-6, voigt=True):
+        """Calculate numerical stress using finite difference."""
+
+        stress = np.zeros((3, 3), dtype=float)
+
+        cell = atoms.cell.copy()
+        V = atoms.get_volume()
+        for i in range(3):
+            x = np.eye(3)
+            x[i, i] += d
+            atoms.set_cell(np.dot(cell, x), scale_atoms=True)
+            eplus = atoms.get_potential_energy()
+
+            x[i, i] -= 2 * d
+            atoms.set_cell(np.dot(cell, x), scale_atoms=True)
+            eminus = atoms.get_potential_energy()
+
+            stress[i, i] = (eplus - eminus) / (2 * d * V)
+            x[i, i] += d
+
+            j = (i + 1) % 3
+            x[i, j] = d
+            x[j, i] = d
+            atoms.set_cell(np.dot(cell, x), scale_atoms=True)
+            eplus = atoms.get_potential_energy()
+
+            x[i, j] = -d
+            x[j, i] = -d
+            atoms.set_cell(np.dot(cell, x), scale_atoms=True)
+            eminus = atoms.get_potential_energy()
+
+            stress[i, j] = (eplus - eminus) / (4 * d * V)
+            stress[j, i] = stress[i, j]
+        atoms.set_cell(cell, scale_atoms=True)
+
+        if voigt:
+            return stress.flat[[0, 4, 8, 5, 2, 1]]
+        else:
+            return stress
+
+    def get_spin_polarized(self):
+        return False
+
+class Dynamics:
+    """Base-class for all MD and structure optimization classes."""
+    def __init__(self, atoms, logfile, trajectory, master=None):
+        """Dynamics object.
+
+        Parameters:
+
+        atoms: Atoms object
+            The Atoms object to operate on.
+
+        logfile: file object or str
+            If *logfile* is a string, a file with that name will be opened.
+            Use '-' for stdout.
+
+        trajectory: Trajectory object or str
+            Attach trajectory object.  If *trajectory* is a string a
+            Trajectory will be constructed.  Use *None* for no
+            trajectory.
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+        """
+
+        self.atoms = atoms
+        if master is None:
+            master = DummyMPI().rank == 0
+        if not master:
+            logfile = None
+        elif isinstance(logfile, str):
+            if logfile == '-':
+                logfile = sys.stdout
+            else:
+                logfile = open(logfile, 'a')
+        self.logfile = logfile
+
+        self.observers = []
+        self.nsteps = 0
+
+        if trajectory is not None:
+            if isinstance(trajectory, str):
+                trajectory = Trajectory(trajectory, mode='w',
+                                        atoms=atoms, master=master)
+            self.attach(trajectory)
+
+    def get_number_of_steps(self):
+        return self.nsteps
+
+    def insert_observer(self, function, position=0, interval=1,
+                        *args, **kwargs):
+        """Insert an observer."""
+        if not isinstance(function, collections.Callable):
+            function = function.write
+        self.observers.insert(position, (function, interval, args, kwargs))
+
+    def attach(self, function, interval=1, *args, **kwargs):
+        """Attach callback function.
+
+        If *interval > 0*, at every *interval* steps, call *function* with
+        arguments *args* and keyword arguments *kwargs*.
+
+        If *interval <= 0*, after step *interval*, call *function* with
+        arguments *args* and keyword arguments *kwargs*.  This is
+        currently zero indexed."""
+
+        if not hasattr(function, '__call__'):
+            function = function.write
+        self.observers.append((function, interval, args, kwargs))
+
+    def call_observers(self):
+        for function, interval, args, kwargs in self.observers:
+            call = False
+            # Call every interval iterations
+            if interval > 0:
+                if (self.nsteps % interval) == 0:
+                    call = True
+            # Call only on iteration interval
+            elif interval <= 0:
+                if self.nsteps == abs(interval):
+                    call = True
+            if call:
+                function(*args, **kwargs)
+
+
+class Optimizer(Dynamics):
+    """Base-class for all structure optimization classes."""
+    def __init__(self, atoms, restart, logfile, trajectory, master=None):
+        """Structure optimizer object.
+
+        Parameters:
+
+        atoms: Atoms object
+            The Atoms object to relax.
+
+        restart: str
+            Filename for restart file.  Default value is *None*.
+
+        logfile: file object or str
+            If *logfile* is a string, a file with that name will be opened.
+            Use '-' for stdout.
+
+        trajectory: Trajectory object or str
+            Attach trajectory object.  If *trajectory* is a string a
+            Trajectory will be constructed.  Use *None* for no
+            trajectory.
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+        """
+        Dynamics.__init__(self, atoms, logfile, trajectory, master)
+        self.restart = restart
+
+        if restart is None or not isfile(restart):
+            self.initialize()
+        else:
+            self.read()
+            barrier()
+
+    def initialize(self):
+        pass
+
+    def run(self, fmax=0.05, steps=100000000):
+        """Run structure optimization algorithm.
+
+        This method will return when the forces on all individual
+        atoms are less than *fmax* or when the number of steps exceeds
+        *steps*."""
+
+        self.fmax = fmax
+        step = 0
+        while step < steps:
+            f = self.atoms.get_forces()
+            self.log(f)
+            self.call_observers()
+            if self.converged(f):
+                return
+            self.step(f)
+            self.nsteps += 1
+            step += 1
+
+    def converged(self, forces=None):
+        """Did the optimization converge?"""
+        if forces is None:
+            forces = self.atoms.get_forces()
+        if hasattr(self.atoms, 'get_curvature'):
+            return ((forces**2).sum(axis=1).max() < self.fmax**2 and
+                    self.atoms.get_curvature() < 0.0)
+        return (forces**2).sum(axis=1).max() < self.fmax**2
+
+    def log(self, forces):
+        fmax = sqrt((forces**2).sum(axis=1).max())
+        e = self.atoms.get_potential_energy()
+        T = time.localtime()
+        if self.logfile is not None:
+            name = self.__class__.__name__
+            self.logfile.write('%s: %3d  %02d:%02d:%02d %15.6f %12.4f\n' %
+                               (name, self.nsteps, T[3], T[4], T[5], e, fmax))
+            self.logfile.flush()
+
+    def dump(self, data):
+        rank = DummyMPI().rank
+        if rank == 0 and self.restart is not None:
+            pickle.dump(data, open(self.restart, 'wb'), protocol=2)
+
+    def load(self):
+        return pickle.load(open(self.restart))
+
+class FIRE(Optimizer):
+    def __init__(self, atoms, restart=None, logfile='-', trajectory=None,
+                 dt=0.1, maxmove=0.2, dtmax=1.0, Nmin=5, finc=1.1, fdec=0.5,
+                 astart=0.1, fa=0.99, a=0.1, master=None):
+        """Parameters:
+
+        atoms: Atoms object
+            The Atoms object to relax.
+
+        restart: string
+            Pickle file used to store hessian matrix. If set, file with
+            such a name will be searched and hessian matrix stored will
+            be used, if the file exists.
+
+        trajectory: string
+            Pickle file used to store trajectory of atomic movement.
+
+        logfile: file object or str
+            If *logfile* is a string, a file with that name will be opened.
+            Use '-' for stdout.
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+        """
+        Optimizer.__init__(self, atoms, restart, logfile, trajectory, master)
+
+        self.dt = dt
+        self.Nsteps = 0
+        self.maxmove = maxmove
+        self.dtmax = dtmax
+        self.Nmin = Nmin
+        self.finc = finc
+        self.fdec = fdec
+        self.astart = astart
+        self.fa = fa
+        self.a = a
+
+    def initialize(self):
+        self.v = None
+
+    def read(self):
+        self.v, self.dt = self.load()
+
+    def step(self,f):
+        atoms = self.atoms
+        if self.v is None:
+            self.v = np.zeros((len(atoms), 3))
+        else:
+            vf = np.vdot(f, self.v)
+            if vf > 0.0:
+                self.v = (1.0 - self.a) * self.v + self.a * f / np.sqrt(
+                    np.vdot(f, f)) * np.sqrt(np.vdot(self.v, self.v))
+                if self.Nsteps > self.Nmin:
+                    self.dt = min(self.dt * self.finc, self.dtmax)
+                    self.a *= self.fa
+                self.Nsteps += 1
+            else:
+                self.v[:] *= 0.0
+                self.a = self.astart
+                self.dt *= self.fdec
+                self.Nsteps = 0
+
+        self.v += self.dt * f
+        dr = self.dt * self.v
+        normdr = np.sqrt(np.vdot(dr, dr))
+        if normdr > self.maxmove:
+            dr = self.maxmove * dr / normdr
+        r = atoms.get_positions()
+        atoms.set_positions(r + dr)
+        self.dump((self.v, self.dt))
+
+pymin = min
+pymax = max
+
+class LineSearch:
+    def __init__(self,  xtol=1e-14):
+
+        self.xtol = xtol
+        self.task = 'START'
+        self.isave = np.zeros((2,), np.intc)
+        self.dsave = np.zeros((13,), float)
+        self.fc = 0
+        self.gc = 0
+        self.case = 0
+        self.old_stp = 0
+
+    def _line_search(self, func, myfprime, xk, pk, gfk, old_fval, old_old_fval,
+                     maxstep=.2, c1=.23, c2=0.46, xtrapl=1.1, xtrapu=4.,
+                     stpmax=50., stpmin=1e-8, args=()):
+        self.stpmin = stpmin
+        self.pk = pk
+        # ??? p_size = np.sqrt((pk **2).sum())
+        self.stpmax = stpmax
+        self.xtrapl = xtrapl
+        self.xtrapu = xtrapu
+        self.maxstep = maxstep
+        phi0 = old_fval
+        derphi0 = np.dot(gfk,pk)
+        self.dim = len(pk)
+        self.gms = np.sqrt(self.dim) * maxstep
+        #alpha1 = pymin(maxstep,1.01*2*(phi0-old_old_fval)/derphi0)
+        alpha1 = 1.
+        self.no_update = False
+
+        if isinstance(myfprime,type(())):
+            # eps = myfprime[1]
+            fprime = myfprime[0]
+            # ??? newargs = (f,eps) + args
+            gradient = False
+        else:
+            fprime = myfprime
+            newargs = args
+            gradient = True
+
+        fval = old_fval
+        gval = gfk
+        self.steps=[]
+
+        while True:
+            stp = self.step(alpha1, phi0, derphi0, c1, c2,
+                                             self.xtol,
+                                             self.isave, self.dsave)
+
+            if self.task[:2] == 'FG':
+                alpha1 = stp
+                fval = func(xk + stp * pk, *args)
+                self.fc += 1
+                gval = fprime(xk + stp * pk, *newargs)
+                if gradient: self.gc += 1
+                else: self.fc += len(xk) + 1
+                phi0 = fval
+                derphi0 = np.dot(gval,pk)
+                self.old_stp = alpha1
+                if self.no_update == True:
+                    break
+            else:
+                break
+
+        if self.task[:5] == 'ERROR' or self.task[1:4] == 'WARN':
+            stp = None  # failed
+        return stp, fval, old_fval, self.no_update
+
+    def step(self, stp, f, g, c1, c2, xtol, isave, dsave):
+        if self.task[:5] == 'START':
+            # Check the input arguments for errors.
+            if stp < self.stpmin:
+                self.task = 'ERROR: STP .LT. minstep'
+            if stp > self.stpmax:
+                self.task = 'ERROR: STP .GT. maxstep'
+            if g >= 0:
+                self.task = 'ERROR: INITIAL G >= 0'
+            if c1 < 0:
+                self.task = 'ERROR: c1 .LT. 0'
+            if c2 < 0:
+                self.task = 'ERROR: c2 .LT. 0'
+            if xtol < 0:
+                self.task = 'ERROR: XTOL .LT. 0'
+            if self.stpmin < 0:
+                self.task = 'ERROR: minstep .LT. 0'
+            if self.stpmax < self.stpmin:
+                self.task = 'ERROR: maxstep .LT. minstep'
+            if self.task[:5] == 'ERROR':
+                return stp
+
+            # Initialize local variables.
+            self.bracket = False
+            stage = 1
+            finit = f
+            ginit = g
+            gtest = c1 * ginit
+            width = self.stpmax - self.stpmin
+            width1 = width / .5
+#           The variables stx, fx, gx contain the values of the step,
+#           function, and derivative at the best step.
+#           The variables sty, fy, gy contain the values of the step,
+#           function, and derivative at sty.
+#           The variables stp, f, g contain the values of the step,
+#           function, and derivative at stp.
+            stx = 0
+            fx = finit
+            gx = ginit
+            sty = 0
+            fy = finit
+            gy = ginit
+            stmin = 0
+            stmax = stp + self.xtrapu * stp
+            self.task = 'FG'
+            self.save((stage, ginit, gtest, gx,
+                       gy, finit, fx, fy, stx, sty,
+                       stmin, stmax, width, width1))
+            stp = self.determine_step(stp)
+            #return stp, f, g
+            return stp
+        else:
+            if self.isave[0] == 1:
+                self.bracket = True
+            else:
+                self.bracket = False
+            stage = self.isave[1]
+            (ginit, gtest, gx, gy, finit, fx, fy, stx, sty, stmin, stmax, \
+            width, width1) =self.dsave
+
+#           If psi(stp) <= 0 and f'(stp) >= 0 for some step, then the
+#           algorithm enters the second stage.
+            ftest = finit + stp * gtest
+            if stage == 1 and f < ftest and g >= 0.:
+                stage = 2
+
+#           Test for warnings.
+            if self.bracket and (stp <= stmin or stp >= stmax):
+                self.task = 'WARNING: ROUNDING ERRORS PREVENT PROGRESS'
+            if self.bracket and stmax - stmin <= self.xtol * stmax:
+                self.task = 'WARNING: XTOL TEST SATISFIED'
+            if stp == self.stpmax and f <= ftest and g <= gtest:
+                self.task = 'WARNING: STP = maxstep'
+            if stp == self.stpmin and (f > ftest or g >= gtest):
+                self.task = 'WARNING: STP = minstep'
+
+#           Test for convergence.
+            if f <= ftest and abs(g) <= c2 * (- ginit):
+                self.task = 'CONVERGENCE'
+
+#           Test for termination.
+            if self.task[:4] == 'WARN' or self.task[:4] == 'CONV':
+                self.save((stage, ginit, gtest, gx,
+                           gy, finit, fx, fy, stx, sty,
+                           stmin, stmax, width, width1))
+                #return stp, f, g
+                return stp
+
+#              A modified function is used to predict the step during the
+#              first stage if a lower function value has been obtained but
+#              the decrease is not sufficient.
+            #if stage == 1 and f <= fx and f > ftest:
+#           #    Define the modified function and derivative values.
+            #    fm =f - stp * gtest
+            #    fxm = fx - stx * gtest
+            #    fym = fy - sty * gtest
+            #    gm = g - gtest
+            #    gxm = gx - gtest
+            #    gym = gy - gtest
+
+#               Call step to update stx, sty, and to compute the new step.
+            #    stx, sty, stp, gxm, fxm, gym, fym = self.update (stx, fxm, gxm, sty,
+            #                                        fym, gym, stp, fm, gm,
+            #                                        stmin, stmax)
+
+#           #    Reset the function and derivative values for f.
+
+            #    fx = fxm + stx * gtest
+            #    fy = fym + sty * gtest
+            #    gx = gxm + gtest
+            #    gy = gym + gtest
+
+            #else:
+#           Call step to update stx, sty, and to compute the new step.
+
+            stx, sty, stp, gx, fx, gy, fy= self.update(stx, fx, gx, sty,
+                                               fy, gy, stp, f, g,
+                                               stmin, stmax)
+
+
+#           Decide if a bisection step is needed.
+
+            if self.bracket:
+                if abs(sty-stx) >= .66 * width1:
+                    stp = stx + .5 * (sty - stx)
+                width1 = width
+                width = abs(sty - stx)
+
+#           Set the minimum and maximum steps allowed for stp.
+
+            if self.bracket:
+                stmin = min(stx, sty)
+                stmax = max(stx, sty)
+            else:
+                stmin = stp + self.xtrapl * (stp - stx)
+                stmax = stp + self.xtrapu * (stp - stx)
+
+#           Force the step to be within the bounds maxstep and minstep.
+
+            stp = max(stp, self.stpmin)
+            stp = min(stp, self.stpmax)
+
+            if (stx == stp and stp == self.stpmax and stmin > self.stpmax):
+                self.no_update = True
+#           If further progress is not possible, let stp be the best
+#           point obtained during the search.
+
+            if (self.bracket and stp < stmin or stp >= stmax) \
+               or (self.bracket and stmax - stmin < self.xtol * stmax):
+                stp = stx
+
+#           Obtain another function and derivative.
+
+            self.task = 'FG'
+            self.save((stage, ginit, gtest, gx,
+                       gy, finit, fx, fy, stx, sty,
+                       stmin, stmax, width, width1))
+            return stp
+
+    def update(self, stx, fx, gx, sty, fy, gy, stp, fp, gp,
+               stpmin, stpmax):
+        sign = gp * (gx / abs(gx))
+
+#       First case: A higher function value. The minimum is bracketed.
+#       If the cubic step is closer to stx than the quadratic step, the
+#       cubic step is taken, otherwise the average of the cubic and
+#       quadratic steps is taken.
+        if fp > fx:  #case1
+            self.case = 1
+            theta = 3. * (fx - fp) / (stp - stx) + gx + gp
+            s = max(abs(theta), abs(gx), abs(gp))
+            gamma = s * np.sqrt((theta / s) ** 2. - (gx / s) * (gp / s))
+            if stp < stx:
+                gamma = -gamma
+            p = (gamma - gx) + theta
+            q = ((gamma - gx) + gamma) + gp
+            r = p / q
+            stpc = stx + r * (stp - stx)
+            stpq = stx + ((gx / ((fx - fp) / (stp-stx) + gx)) / 2.) \
+                   * (stp - stx)
+            if (abs(stpc - stx) < abs(stpq - stx)):
+               stpf = stpc
+            else:
+               stpf = stpc + (stpq - stpc) / 2.
+
+            self.bracket = True
+
+#       Second case: A lower function value and derivatives of opposite
+#       sign. The minimum is bracketed. If the cubic step is farther from
+#       stp than the secant step, the cubic step is taken, otherwise the
+#       secant step is taken.
+
+        elif sign < 0:  #case2
+            self.case = 2
+            theta = 3. * (fx - fp) / (stp - stx) + gx + gp
+            s = max(abs(theta), abs(gx), abs(gp))
+            gamma = s * np.sqrt((theta / s) ** 2 - (gx / s) * (gp / s))
+            if stp > stx:
+                 gamma = -gamma
+            p = (gamma - gp) + theta
+            q = ((gamma - gp) + gamma) + gx
+            r = p / q
+            stpc = stp + r * (stx - stp)
+            stpq = stp + (gp / (gp - gx)) * (stx - stp)
+            if (abs(stpc - stp) > abs(stpq - stp)):
+               stpf = stpc
+            else:
+               stpf = stpq
+            self.bracket = True
+
+#       Third case: A lower function value, derivatives of the same sign,
+#       and the magnitude of the derivative decreases.
+
+        elif abs(gp) < abs(gx):  #case3
+            self.case = 3
+#           The cubic step is computed only if the cubic tends to infinity
+#           in the direction of the step or if the minimum of the cubic
+#           is beyond stp. Otherwise the cubic step is defined to be the
+#           secant step.
+
+            theta = 3. * (fx - fp) / (stp - stx) + gx + gp
+            s = max(abs(theta), abs(gx), abs(gp))
+
+#           The case gamma = 0 only arises if the cubic does not tend
+#           to infinity in the direction of the step.
+
+            gamma = s * np.sqrt(max(0.,(theta / s) ** 2-(gx / s) * (gp / s)))
+            if stp > stx:
+                gamma = -gamma
+            p = (gamma - gp) + theta
+            q = (gamma + (gx - gp)) + gamma
+            r = p / q
+            if r < 0. and gamma != 0:
+               stpc = stp + r * (stx - stp)
+            elif stp > stx:
+               stpc = stpmax
+            else:
+               stpc = stpmin
+            stpq = stp + (gp / (gp - gx)) * (stx - stp)
+
+            if self.bracket:
+
+#               A minimizer has been bracketed. If the cubic step is
+#               closer to stp than the secant step, the cubic step is
+#               taken, otherwise the secant step is taken.
+
+                if abs(stpc - stp) < abs(stpq - stp):
+                    stpf = stpc
+                else:
+                    stpf = stpq
+                if stp > stx:
+                    stpf = min(stp + .66 * (sty - stp), stpf)
+                else:
+                    stpf = max(stp + .66 * (sty - stp), stpf)
+            else:
+
+#               A minimizer has not been bracketed. If the cubic step is
+#               farther from stp than the secant step, the cubic step is
+#               taken, otherwise the secant step is taken.
+
+                if abs(stpc - stp) > abs(stpq - stp):
+                   stpf = stpc
+                else:
+                   stpf = stpq
+                stpf = min(stpmax, stpf)
+                stpf = max(stpmin, stpf)
+
+#       Fourth case: A lower function value, derivatives of the same sign,
+#       and the magnitude of the derivative does not decrease. If the
+#       minimum is not bracketed, the step is either minstep or maxstep,
+#       otherwise the cubic step is taken.
+
+        else:  #case4
+            self.case = 4
+            if self.bracket:
+                theta = 3. * (fp - fy) / (sty - stp) + gy + gp
+                s = max(abs(theta), abs(gy), abs(gp))
+                gamma = s * np.sqrt((theta / s) ** 2 - (gy / s) * (gp / s))
+                if stp > sty:
+                    gamma = -gamma
+                p = (gamma - gp) + theta
+                q = ((gamma - gp) + gamma) + gy
+                r = p / q
+                stpc = stp + r * (sty - stp)
+                stpf = stpc
+            elif stp > stx:
+                stpf = stpmax
+            else:
+                stpf = stpmin
+
+#       Update the interval which contains a minimizer.
+
+        if fp > fx:
+            sty = stp
+            fy = fp
+            gy = gp
+        else:
+            if sign < 0:
+                sty = stx
+                fy = fx
+                gy = gx
+            stx = stp
+            fx = fp
+            gx = gp
+#       Compute the new step.
+
+        stp = self.determine_step(stpf)
+
+        return stx, sty, stp, gx, fx, gy, fy
+
+    def determine_step(self, stp):
+        dr = stp - self.old_stp
+        if abs(pymax(self.pk) * dr) > self.maxstep:
+            dr /= abs((pymax(self.pk) * dr) / self.maxstep)
+        stp = self.old_stp + dr
+        return stp
+
+    def save(self, data):
+        if self.bracket:
+            self.isave[0] = 1
+        else:
+            self.isave[0] = 0
+        self.isave[1] = data[0]
+        self.dsave = data[1:]
+
+class LBFGS(Optimizer):
+    """Limited memory BFGS optimizer.
+
+    A limited memory version of the bfgs algorithm. Unlike the bfgs algorithm
+    used in bfgs.py, the inverse of Hessian matrix is updated.  The inverse
+    Hessian is represented only as a diagonal matrix to save memory
+
+    """
+    def __init__(self, atoms, restart=None, logfile='-', trajectory=None,
+                 maxstep=None, memory=100, damping=1.0, alpha=70.0,
+                 use_line_search=False, master=None):
+        """Parameters:
+
+        atoms: Atoms object
+            The Atoms object to relax.
+
+        restart: string
+            Pickle file used to store vectors for updating the inverse of
+            Hessian matrix. If set, file with such a name will be searched
+            and information stored will be used, if the file exists.
+
+        logfile: file object or str
+            If *logfile* is a string, a file with that name will be opened.
+            Use '-' for stdout.
+
+        trajectory: string
+            Pickle file used to store trajectory of atomic movement.
+
+        maxstep: float
+            How far is a single atom allowed to move. This is useful for DFT
+            calculations where wavefunctions can be reused if steps are small.
+            Default is 0.04 Angstrom.
+
+        memory: int
+            Number of steps to be stored. Default value is 100. Three numpy
+            arrays of this length containing floats are stored.
+
+        damping: float
+            The calculated step is multiplied with this number before added to
+            the positions.
+
+        alpha: float
+            Initial guess for the Hessian (curvature of energy surface). A
+            conservative value of 70.0 is the default, but number of needed
+            steps to converge might be less if a lower value is used. However,
+            a lower value also means risk of instability.
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+        """
+        Optimizer.__init__(self, atoms, restart, logfile, trajectory, master)
+
+        if maxstep is not None:
+            if maxstep > 1.0:
+                raise ValueError('You are using a much too large value for ' +
+                                 'the maximum step size: %.1f Angstrom' %
+                                 maxstep)
+            self.maxstep = maxstep
+        else:
+            self.maxstep = 0.04
+
+        self.memory = memory
+        self.H0 = 1. / alpha  # Initial approximation of inverse Hessian
+                            # 1./70. is to emulate the behaviour of BFGS
+                            # Note that this is never changed!
+        self.damping = damping
+        self.use_line_search = use_line_search
+        self.p = None
+        self.function_calls = 0
+        self.force_calls = 0
+
+    def initialize(self):
+        """Initialize everything so no checks have to be done in step"""
+        self.iteration = 0
+        self.s = []
+        self.y = []
+        self.rho = []  # Store also rho, to avoid calculationg the dot product
+                       # again and again
+
+        self.r0 = None
+        self.f0 = None
+        self.e0 = None
+        self.task = 'START'
+        self.load_restart = False
+
+    def read(self):
+        """Load saved arrays to reconstruct the Hessian"""
+        self.iteration, self.s, self.y, self.rho, \
+        self.r0, self.f0, self.e0, self.task = self.load()
+        self.load_restart = True
+
+    def step(self, f):
+        """Take a single step
+
+        Use the given forces, update the history and calculate the next step --
+        then take it"""
+        r = self.atoms.get_positions()
+
+        self.update(r, f, self.r0, self.f0)
+
+        s = self.s
+        y = self.y
+        rho = self.rho
+        H0 = self.H0
+
+        loopmax = np.min([self.memory, self.iteration])
+        a = np.empty((loopmax,), dtype=np.float64)
+
+        ### The algorithm itself:
+        q = -f.reshape(-1)
+        for i in range(loopmax - 1, -1, -1):
+            a[i] = rho[i] * np.dot(s[i], q)
+            q -= a[i] * y[i]
+        z = H0 * q
+
+        for i in range(loopmax):
+            b = rho[i] * np.dot(y[i], z)
+            z += s[i] * (a[i] - b)
+
+        self.p = - z.reshape((-1, 3))
+        ###
+
+        g = -f
+        if self.use_line_search == True:
+            e = self.func(r)
+            self.line_search(r, g, e)
+            dr = (self.alpha_k * self.p).reshape(len(self.atoms), -1)
+        else:
+            self.force_calls += 1
+            self.function_calls += 1
+            dr = self.determine_step(self.p) * self.damping
+        self.atoms.set_positions(r + dr)
+
+        self.iteration += 1
+        self.r0 = r
+        self.f0 = -g
+        self.dump((self.iteration, self.s, self.y,
+                   self.rho, self.r0, self.f0, self.e0, self.task))
+
+    def determine_step(self, dr):
+        """Determine step to take according to maxstep
+
+        Normalize all steps as the largest step. This way
+        we still move along the eigendirection.
+        """
+        steplengths = (dr**2).sum(1)**0.5
+        longest_step = np.max(steplengths)
+        if longest_step >= self.maxstep:
+            dr *= self.maxstep / longest_step
+
+        return dr
+
+    def update(self, r, f, r0, f0):
+        """Update everything that is kept in memory
+
+        This function is mostly here to allow for replay_trajectory.
+        """
+        if self.iteration > 0:
+            s0 = r.reshape(-1) - r0.reshape(-1)
+            self.s.append(s0)
+
+            # We use the gradient which is minus the force!
+            y0 = f0.reshape(-1) - f.reshape(-1)
+            self.y.append(y0)
+
+            rho0 = 1.0 / np.dot(y0, s0)
+            self.rho.append(rho0)
+
+        if self.iteration > self.memory:
+            self.s.pop(0)
+            self.y.pop(0)
+            self.rho.pop(0)
+
+    def replay_trajectory(self, traj):
+        """Initialize history from old trajectory."""
+        if isinstance(traj, str):
+            from ase.io.trajectory import Trajectory
+            traj = Trajectory(traj, 'r')
+        r0 = None
+        f0 = None
+        # The last element is not added, as we get that for free when taking
+        # the first qn-step after the replay
+        for i in range(0, len(traj) - 1):
+            r = traj[i].get_positions()
+            f = traj[i].get_forces()
+            self.update(r, f, r0, f0)
+            r0 = r.copy()
+            f0 = f.copy()
+            self.iteration += 1
+        self.r0 = r0
+        self.f0 = f0
+
+    def func(self, x):
+        """Objective function for use of the optimizers"""
+        self.atoms.set_positions(x.reshape(-1, 3))
+        self.function_calls += 1
+        return self.atoms.get_potential_energy()
+
+    def fprime(self, x):
+        """Gradient of the objective function for use of the optimizers"""
+        self.atoms.set_positions(x.reshape(-1, 3))
+        self.force_calls += 1
+        # Remember that forces are minus the gradient!
+        return - self.atoms.get_forces().reshape(-1)
+
+    def line_search(self, r, g, e):
+        self.p = self.p.ravel()
+        p_size = np.sqrt((self.p **2).sum())
+        if p_size <= np.sqrt(len(self.atoms) * 1e-10):
+            self.p /= (p_size / np.sqrt(len(self.atoms) * 1e-10))
+        g = g.ravel()
+        r = r.ravel()
+        ls = LineSearch()
+        self.alpha_k, e, self.e0, self.no_update = \
+           ls._line_search(self.func, self.fprime, r, self.p, g, e, self.e0,
+                           maxstep=self.maxstep, c1=.23,
+                           c2=.46, stpmax=50.)
+        if self.alpha_k is None:
+            raise RuntimeError('LineSearch failed!')
+
+class MDMin(Optimizer):
+    def __init__(self, atoms, restart=None, logfile='-', trajectory=None,
+                 dt=None, master=None):
+        """Parameters:
+
+        atoms: Atoms object
+            The Atoms object to relax.
+
+        restart: string
+            Pickle file used to store hessian matrix. If set, file with
+            such a name will be searched and hessian matrix stored will
+            be used, if the file exists.
+
+        trajectory: string
+            Pickle file used to store trajectory of atomic movement.
+
+        maxstep: float
+            Used to set the maximum distance an atom can move per
+            iteration (default value is 0.2 Angstroms).
+
+        logfile: string
+            Text file used to write summary information.
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+        """
+        Optimizer.__init__(self, atoms, restart, logfile, trajectory, master)
+
+        if dt is not None:
+            self.dt = dt
+
+    def initialize(self):
+        self.v = None
+        self.dt = 0.2
+
+    def read(self):
+        self.v, self.dt = self.load()
+
+    def step(self, f):
+        atoms = self.atoms
+
+        if self.v is None:
+            self.v = np.zeros((len(atoms), 3))
+        else:
+            self.v += 0.5 * self.dt * f
+            # Correct velocities:
+            vf = np.vdot(self.v, f)
+            if vf < 0.0:
+                self.v[:] = 0.0
+            else:
+                self.v[:] = f * vf / np.vdot(f, f)
+
+        self.v += 0.5 * self.dt * f
+        r = atoms.get_positions()
+        atoms.set_positions(r + self.dt * self.v)
+        self.dump((self.v, self.dt))
+
+class BFGS(Optimizer):
+    def __init__(self, atoms, restart=None, logfile='-', trajectory=None,
+                 maxstep=None, master=None):
+        """BFGS optimizer.
+
+        Parameters:
+
+        atoms: Atoms object
+            The Atoms object to relax.
+
+        restart: string
+            Pickle file used to store hessian matrix. If set, file with
+            such a name will be searched and hessian matrix stored will
+            be used, if the file exists.
+
+        trajectory: string
+            Pickle file used to store trajectory of atomic movement.
+
+        logfile: file object or str
+            If *logfile* is a string, a file with that name will be opened.
+            Use '-' for stdout.
+
+        maxstep: float
+            Used to set the maximum distance an atom can move per
+            iteration (default value is 0.04 Å).
+
+        master: boolean
+            Defaults to None, which causes only rank 0 to save files.  If
+            set to true,  this rank will save files.
+        """
+        Optimizer.__init__(self, atoms, restart, logfile, trajectory, master)
+
+        if maxstep is not None:
+            if maxstep > 1.0:
+                raise ValueError('You are using a much too large value for ' +
+                                 'the maximum step size: %.1f Å' % maxstep)
+            self.maxstep = maxstep
+
+    def initialize(self):
+        self.H = None
+        self.r0 = None
+        self.f0 = None
+        self.maxstep = 0.04
+
+    def read(self):
+        self.H, self.r0, self.f0, self.maxstep = self.load()
+
+    def step(self, f):
+        atoms = self.atoms
+        r = atoms.get_positions()
+        f = f.reshape(-1)
+        self.update(r.flat, f, self.r0, self.f0)
+        omega, V = np.linalg.eigh(self.H)
+        dr = np.dot(V, np.dot(f, V) / np.fabs(omega)).reshape((-1, 3))
+        steplengths = (dr**2).sum(1)**0.5
+        dr = self.determine_step(dr, steplengths)
+        atoms.set_positions(r + dr)
+        self.r0 = r.flat.copy()
+        self.f0 = f.copy()
+        self.dump((self.H, self.r0, self.f0, self.maxstep))
+
+    def determine_step(self, dr, steplengths):
+        """Determine step to take according to maxstep
+
+        Normalize all steps as the largest step. This way
+        we still move along the eigendirection.
+        """
+        maxsteplength = np.max(steplengths)
+        if maxsteplength >= self.maxstep:
+            dr *= self.maxstep / maxsteplength
+
+        return dr
+
+    def update(self, r, f, r0, f0):
+        if self.H is None:
+            self.H = np.eye(3 * len(self.atoms)) * 70.0
+            return
+        dr = r - r0
+
+        if np.abs(dr).max() < 1e-7:
+            # Same configuration again (maybe a restart):
+            return
+
+        df = f - f0
+        a = np.dot(dr, df)
+        dg = np.dot(self.H, dr)
+        b = np.dot(dr, dg)
+        self.H -= np.outer(df, df) / a + np.outer(dg, dg) / b
+
+    def replay_trajectory(self, traj):
+        """Initialize hessian from old trajectory."""
+        if isinstance(traj, str):
+            from ase.io.trajectory import Trajectory
+            traj = Trajectory(traj, 'r')
+        self.H = None
+        atoms = traj[0]
+        r0 = atoms.get_positions().ravel()
+        f0 = atoms.get_forces().ravel()
+        for atoms in traj:
+            r = atoms.get_positions().ravel()
+            f = atoms.get_forces().ravel()
+            self.update(r, f, r0, f0)
+            r0 = r
+            f0 = f
+
+        self.r0 = r0
+        self.f0 = f0
+
+def find_mic(D, cell, pbc=True):
+    """Finds the minimum-image representation of vector(s) D"""
+    # Calculate the 4 unique unit cell diagonal lengths
+    diags = np.sqrt((np.dot([[1, 1, 1],
+                             [-1, 1, 1],
+                             [1, -1, 1],
+                             [-1, -1, 1],
+                             ], cell)**2).sum(1))
+
+    # calculate 'mic' vectors (D) and lengths (D_len) using simple method
+    Dr = np.dot(D, np.linalg.inv(cell))
+    D = np.dot(Dr - np.round(Dr) * pbc, cell)
+    D_len = np.sqrt((D**2).sum(1))
+    # return mic vectors and lengths for only orthorhombic cells,
+    # as the results may be wrong for non-orthorhombic cells
+    if (max(diags) - min(diags)) / max(diags) < 1e-9:
+        return D, D_len
+
+    # The cutoff radius is the longest direct distance between atoms
+    # or half the longest lattice diagonal, whichever is smaller
+    cutoff = min(max(D_len), max(diags) / 2.)
+
+    # The number of neighboring images to search in each direction is
+    # equal to the ceiling of the cutoff distance (defined above) divided
+    # by the length of the projection of the lattice vector onto its
+    # corresponding surface normal. a's surface normal vector is e.g.
+    # b x c / (|b| |c|), so this projection is (a . (b x c)) / (|b| |c|).
+    # The numerator is just the lattice volume, so this can be simplified
+    # to V / (|b| |c|). This is rewritten as V |a| / (|a| |b| |c|)
+    # for vectorization purposes.
+    latt_len = np.sqrt((cell**2).sum(1))
+    V = abs(np.linalg.det(cell))
+    n = pbc * np.array(np.ceil(cutoff * np.prod(latt_len) /
+                               (V * latt_len)), dtype=int)
+
+    # Construct a list of translation vectors. For example, if we are
+    # searching only the nearest images (27 total), tvecs will be a
+    # 27x3 array of translation vectors. This is the only nested loop
+    # in the routine, and it takes a very small fraction of the total
+    # execution time, so it is not worth optimizing further.
+    tvecs = []
+    for i in range(-n[0], n[0] + 1):
+        latt_a = i * cell[0]
+        for j in range(-n[1], n[1] + 1):
+            latt_ab = latt_a + j * cell[1]
+            for k in range(-n[2], n[2] + 1):
+                tvecs.append(latt_ab + k * cell[2])
+    tvecs = np.array(tvecs)
+
+    # Translate the direct displacement vectors by each translation
+    # vector, and calculate the corresponding lengths.
+    D_trans = tvecs[np.newaxis] + D[:, np.newaxis]
+    D_trans_len = np.sqrt((D_trans**2).sum(2))
+
+    # Find mic distances and corresponding vector(s) for each given pair
+    # of atoms. For symmetrical systems, there may be more than one
+    # translation vector corresponding to the MIC distance; this finds the
+    # first one in D_trans_len.
+    D_min_len = np.min(D_trans_len, axis=1)
+    D_min_ind = D_trans_len.argmin(axis=1)
+    D_min = D_trans[range(len(D_min_ind)), D_min_ind]
+
+    return D_min, D_min_len
+
+class NEB:
+    def __init__(self, images, k=0.1, climb=False, parallel=False,
+                 world=None):
+        """Nudged elastic band.
+
+        images: list of Atoms objects
+            Images defining path from initial to final state.
+        k: float or list of floats
+            Spring constant(s) in eV/Ang.  One number or one for each spring.
+        climb: bool
+            Use a climbing image (default is no climbing image).
+        parallel: bool
+            Distribute images over processors.
+        """
+        self.images = images
+        self.climb = climb
+        self.parallel = parallel
+        self.natoms = len(images[0])
+        self.nimages = len(images)
+        self.emax = np.nan
+
+        if isinstance(k, (float, int)):
+            k = [k] * (self.nimages - 1)
+        self.k = list(k)
+
+        if world is None:
+            world = DummyMPI()
+        self.world = world
+
+        if parallel:
+            assert world.size == 1 or world.size % (self.nimages - 2) == 0
+
+    def interpolate(self, method='linear', mic=False):
+        interpolate(self.images, mic)
+
+        if method == 'idpp':
+            self.idpp_interpolate(traj=None, log=None, mic=mic)
+
+    def idpp_interpolate(self, traj='idpp.traj', log='idpp.log', fmax=0.1,
+                         optimizer=None, mic=False):
+        d1 = self.images[0].get_all_distances(mic=mic)
+        d2 = self.images[-1].get_all_distances(mic=mic)
+        d = (d2 - d1) / (self.nimages - 1)
+        old = []
+        for i, image in enumerate(self.images):
+            old.append(image.calc)
+            image.calc = IDPP(d1 + i * d, mic=mic)
+        if optimizer is None:
+            opt = MDMin(self, trajectory=traj,logfile=log) #default is BFGS in ASE, but runs incredibly slow
+        else:
+            opt = optimizer(self, trajectory=traj, logfile=log)
+        opt.run(fmax=fmax)
+        for image, calc in zip(self.images, old):
+            image.calc = calc
+
+    def get_positions(self):
+        positions = np.empty(((self.nimages - 2) * self.natoms, 3))
+        n1 = 0
+        for image in self.images[1:-1]:
+            n2 = n1 + self.natoms
+            positions[n1:n2] = image.get_positions()
+            n1 = n2
+        return positions
+
+    def set_positions(self, positions):
+        n1 = 0
+        for image in self.images[1:-1]:
+            n2 = n1 + self.natoms
+            image.set_positions(positions[n1:n2])
+            n1 = n2
+
+            # Parallel NEB with Jacapo needs this:
+            try:
+                image.get_calculator().set_atoms(image)
+            except AttributeError:
+                pass
+
+    def get_forces(self):
+        """Evaluate and return the forces."""
+        images = self.images
+        forces = np.empty(((self.nimages - 2), self.natoms, 3))
+        energies = np.empty(self.nimages - 2)
+
+        if not self.parallel:
+            # Do all images - one at a time:
+            for i in range(1, self.nimages - 1):
+                energies[i - 1] = images[i].get_potential_energy()
+                forces[i - 1] = images[i].get_forces()
+        elif self.world.size == 1:
+            def run(image, energies, forces):
+                energies[:] = image.get_potential_energy()
+                forces[:] = image.get_forces()
+            threads = [threading.Thread(target=run,
+                                        args=(images[i],
+                                              energies[i - 1:i],
+                                              forces[i - 1:i]))
+                       for i in range(1, self.nimages - 1)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        else:
+            # Parallelize over images:
+            i = self.world.rank * (self.nimages - 2) // self.world.size + 1
+            try:
+                energies[i - 1] = images[i].get_potential_energy()
+                forces[i - 1] = images[i].get_forces()
+            except:
+                # Make sure other images also fail:
+                error = self.world.sum(1.0)
+                raise
+            else:
+                error = self.world.sum(0.0)
+                if error:
+                    raise RuntimeError('Parallel NEB failed!')
+
+            for i in range(1, self.nimages - 1):
+                root = (i - 1) * self.world.size // (self.nimages - 2)
+                self.world.broadcast(energies[i - 1:i], root)
+                self.world.broadcast(forces[i - 1], root)
+
+        imax = 1 + np.argsort(energies)[-1]
+        self.emax = energies[imax - 1]
+
+        tangent1 = find_mic(images[1].get_positions() -
+                            images[0].get_positions(),
+                            images[0].get_cell(), images[0].pbc)[0]
+        for i in range(1, self.nimages - 1):
+            tangent2 = find_mic(images[i + 1].get_positions() -
+                                images[i].get_positions(),
+                                images[i].get_cell(),
+                                images[i].pbc)[0]
+            if i < imax:
+                tangent = tangent2
+            elif i > imax:
+                tangent = tangent1
+            else:
+                tangent = tangent1 + tangent2
+
+            tt = np.vdot(tangent, tangent)
+            f = forces[i - 1]
+            ft = np.vdot(f, tangent)
+            if i == imax and self.climb:
+                f -= 2 * ft / tt * tangent
+            else:
+                f -= ft / tt * tangent
+                f -= np.vdot(tangent1 * self.k[i - 1] -
+                             tangent2 * self.k[i], tangent) / tt * tangent
+
+            tangent1 = tangent2
+
+        return forces.reshape((-1, 3))
+
+    def get_potential_energy(self):
+        return self.emax
+
+    def __len__(self):
+        return (self.nimages - 2) * self.natoms
+
+
+class IDPP(Calculator):
+    """Image dependent pair potential.
+
+    See:
+
+        Improved initial guess for minimum energy path calculations.
+
+        Søren Smidstrup, Andreas Pedersen, Kurt Stokbro and Hannes Jónsson
+
+        Chem. Phys. 140, 214106 (2014)
+    """
+
+    implemented_properties = ['energy', 'forces']
+
+    def __init__(self, target, mic):
+        Calculator.__init__(self)
+        self.target = target
+        self.mic = mic
+
+    def calculate(self, atoms, properties, system_changes):
+        Calculator.calculate(self, atoms, properties, system_changes)
+
+        P = atoms.get_positions()
+        d = []
+        D = []
+        for p in P:
+            Di = P - p
+            if self.mic:
+                Di, di = find_mic(Di, atoms.get_cell(), atoms.get_pbc())
+            else:
+                di = np.sqrt((Di**2).sum(1))
+            d.append(di)
+            D.append(Di)
+        d = np.array(d)
+        D = np.array(D)
+
+        dd = d - self.target
+        d.ravel()[::len(d) + 1] = 1  # avoid dividing by zero
+        d4 = d**4
+        e = 0.5 * (dd**2 / d4).sum()
+        f = -2 * ((dd * (1 - 2 * dd / d) / d**5)[..., np.newaxis] * D).sum(0)
+        self.results = {'energy': e, 'forces': f}
+
+def interpolate(images, mic=False):
+    """Given a list of images, linearly interpolate the positions of the
+    interior images."""
+    pos1 = images[0].get_positions()
+    pos2 = images[-1].get_positions()
+    d = pos2 - pos1
+    if mic:
+        d = find_mic(d, images[0].get_cell(), images[0].pbc)[0]
+    d /= (len(images) - 1.0)
+    for i in range(1, len(images) - 1):
+        images[i].set_positions(pos1 + i * d)
+        # Parallel NEB with Jacapo needs this:
+        try:
+            images[i].get_calculator().set_atoms(images[i])
+        except AttributeError:
+            pass
+

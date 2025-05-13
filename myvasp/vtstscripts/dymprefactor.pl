@@ -63,5 +63,5 @@ print "The prefactor for this system (in units of inverse cm) is $prefactor\n";
 
 $c = 2.99792458e10; 
 $prehertz = $prefactor*$c/1e12; 
-print " (in units of TerraHertz) is $prehertz\n"; 
+print " (in units of TeraHertz) is $prehertz\n"; 
 

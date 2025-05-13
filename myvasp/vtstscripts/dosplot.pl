@@ -17,6 +17,6 @@ foreach $DOSFILE (@ARGV) {
     close GNUPLOT;
     system("gnuplot < $gnufile");
 #    system("ggv -scale 2 dosplot.eps \&");
-    system("rm $gnufile");
+#    system("rm $gnufile");
 }
 

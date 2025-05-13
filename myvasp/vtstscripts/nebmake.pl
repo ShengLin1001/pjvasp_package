@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
 #;-*- Perl -*-
 
-# Makes a linear interpolation between to POSCARs with N points
+# Makes a linear interpolation between two POSCARs with N points
 
 use FindBin qw($Bin);
 use lib "$Bin";
@@ -69,8 +69,8 @@ for($i=0; $i<3; $i++) {
 
 # Ok, the POSCARs appear to be for the same system.
 # Get te header, i.e. the element symbols from the first POSCAR line
-$header = `head -n 1 $pos1`;
-chop($header);
+#$header = `head -n 1 $pos1`;
+#chop($header);
 
 # Calculate basis and lattice step if dyn_cell
 if ($dyn_cell==1) {
@@ -102,15 +102,19 @@ $nim--;
 
 # Put the POSCAR in the initial state folder
 mkdir "00";
+#write_poscar($coo1,$basis1,$lattice1,$natoms1,$totatoms1,
+#             $selectiveflag,$selective,$header,"00/POSCAR",$filetype1);
 write_poscar($coo1,$basis1,$lattice1,$natoms1,$totatoms1,
-             $selectiveflag,$selective,$header,"00/POSCAR",$filetype1);
+             $selectiveflag,$selective,$description,"00/POSCAR",$filetype1);
 
 # Put the POSCAR in the final state folder
 if($nim < 10) { $dir = "0$nim"; }
 else { $dir = "$nim"; }
 mkdir $dir;
+#write_poscar($coo2,$basis2,$lattice2,$natoms1,$totatoms1,
+#             $selectiveflag,$selective,$header,"$dir/POSCAR",$filetype1);
 write_poscar($coo2,$basis2,$lattice2,$natoms1,$totatoms1,
-             $selectiveflag,$selective,$header,"$dir/POSCAR",$filetype1);
+             $selectiveflag,$selective,$description,"$dir/POSCAR",$filetype1);
 
 # Make the rest of the images in the chain
 for($i=0; $i<$totatoms1; $i++) {
@@ -140,11 +144,15 @@ for($im=1; $im<$nim; $im++) {
     else { $dir = "$im"; }
     mkdir $dir;
     if ($dyn_cell==1) {
+#        write_poscar($t,$t_basis,$t_latt,$natoms1,$totatoms1,
+#                     $selectiveflag,$selective,$header,"$dir/POSCAR",$filetype1);
         write_poscar($t,$t_basis,$t_latt,$natoms1,$totatoms1,
-                     $selectiveflag,$selective,$header,"$dir/POSCAR",$filetype1);
+                     $selectiveflag,$selective,$description,"$dir/POSCAR",$filetype1);
     } else {
+#        write_poscar($t,$basis1,$lattice1,$natoms1,$totatoms1,
+#                     $selectiveflag,$selective,$header,"$dir/POSCAR",$filetype1); 
         write_poscar($t,$basis1,$lattice1,$natoms1,$totatoms1,
-                     $selectiveflag,$selective,$header,"$dir/POSCAR",$filetype1); 
+                     $selectiveflag,$selective,$description,"$dir/POSCAR",$filetype1); 
     }
 }
 

@@ -16,8 +16,8 @@ outfile=OUTCAR
 # Token to search for to get the atomic positions
 token=POSITION
 
-# Get the atom number types
-set -A ntype $(sed -n '6 p' $posfile)
+# Get the atom number types; changed by GH 2/26/19 to work with vasp.5 POSCAR files
+set -A ntype $(sed -n '7 p' $posfile)
 echo "Number of atom types:" ${#ntype[*]}
 echo "Multiplicities of these types:" ${ntype[*]}
 ns=${#ntype[*]}

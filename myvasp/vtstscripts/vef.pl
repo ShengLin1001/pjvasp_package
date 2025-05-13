@@ -12,8 +12,8 @@ $outzipped = 0;
 if(-e "OUTCAR.gz") { $outzipped = 1; system "gunzip OUTCAR.gz"; }
 if(-e "OUTCAR.bz2") { $outzipped = 1; system "bunzip2 OUTCAR.bz2"; }
 
-$forces = `grep 'FORCES: max atom, RMS' OUTCAR`;
-$energy = `grep 'energy  without entropy' OUTCAR`;
+$forces = `grep --text 'FORCES: max atom, RMS' OUTCAR`;
+$energy = `grep --text 'energy  without entropy' OUTCAR`;
 
 @forces = split /\n/, $forces;
 @energy = split /\n/, $energy;

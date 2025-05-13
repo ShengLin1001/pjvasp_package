@@ -5,10 +5,10 @@ import aselite
 from sys import argv, exit
 
 if len(argv) < 3:
-    print 'usage: center.py FILE STDDEV'
-    print '       randomly displaces the atoms in FILE by a gaussian with' 
-    print '       a standard deviation of STDDEV' 
-    print
+    print('usage: center.py FILE STDDEV')
+    print('       randomly displaces the atoms in FILE by a gaussian with') 
+    print('       a standard deviation of STDDEV') 
+    print('')
     exit(0)
     
 filename = argv[1]

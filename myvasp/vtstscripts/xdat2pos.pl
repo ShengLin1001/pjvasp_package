@@ -66,8 +66,10 @@ sub onepos {
     $outfile = "POSCAR".$step.".out";
     open(OUT,">$outfile");
 
-    for($i=0; $i<8; $i++) {
+    $nhead=8;
+    for($i=0; $i<$nhead; $i++) {
         $pos = <POS>;
+#        print "line: ",$i," ",$pos;
         print OUT $pos;
         chomp($pos);
         $pos =~ s/^\s+//g;
@@ -76,15 +78,17 @@ sub onepos {
             @elements = split /\s+/, $pos;
             $nel = @elements;
         }
-
         if($i == 5) {
             if($pos[0] =~ /^\d+$/) {
+#                print "VASP4 POSCAR detected\n";
                 @not[0..$nel-1] = @pos[0..$nel-1];
                     while($not[$k] != undef) {
                         $natoms += $not[$k++];
                     }   # Calculate the number of atoms
             } else {
                 $atomtypeflag = 1; #check for vasp5 style POSCAR
+                $nhead++;
+#                print "VASP5 POSCAR detected\n";
                 @elements = split /\s+/, $pos;
                 $nel = @elements;
             }
@@ -99,21 +103,41 @@ sub onepos {
         }
     }
 
+#    print "Natoms: ",$natoms,"\n";
+
     $pos = undef;
     for($i=0; $i<$natoms; $i++) { $pos .= <POS>; }
+#    print $pos;
     close POS;
     @pos = split /\n/, $pos;
+
+  # check XDATCAR format
+    open XDAT, "XDATCAR" or die " NO XDATCAR IN THIS DIRECTORY \n";
+    for($i=0; $i<6; $i++) {
+        $in = <XDAT>;}
+    chomp($in);
+    $in =~ s/^\s+//g;
+    @in = split /\s+/,$in;
+    $vasp5xdatcarflag = 0;
+    if($in[0] =~ /^\d+$/) {
+#        print "VASP4 XDATCAR detected\n";
+    } else {
+        $vasp5xdatcarflag = 1;
+#        print "VASP5 XDATCAR detected\n";
+    }
+    close XDAT;
 
   # Get the right step from the XDATCAR
     open XDAT, "XDATCAR" or die " NO XDATCAR IN THIS DIRECTORY \n";
     $a = $step;
-    if($atomtypeflag == 1) {
+    if($vasp5xdatcarflag == 1) {
 #        $st = 5 + ($natoms+1)*($a-1);   #GH: xdatcar format change
         $st = 8 + ($natoms+1)*($a-1);
     } else {
-        $st = 6 + ($natoms+1)*($a-1);
+        $st = 7 + ($natoms+1)*($a-1);
     }
     $fn = $st + $natoms;
+#    print "start: ",$st," end: ",$fn,"\n";
 
     die "THE SEARCH IS OUT OF BOUNDS\n" if($st > $nl || $fn > $nl);
 
@@ -122,9 +146,14 @@ sub onepos {
     }
     $in = <XDAT>;
     $j = 0; 
+    
+#    print "pos: \n";
+#    print join("\n",@pos)."\n";
+
+#    print "xdat: \n";
     for($i=$st+1; $i<=$fn; $i++) {
         $in = <XDAT>;
-        if($in == undef){ print $i," hallo\n"; }
+#        print $in;
         chomp($in);
         $in=~s/^\s+//g;
         @in=split /\s+/,$in;

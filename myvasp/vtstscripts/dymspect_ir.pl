@@ -4,10 +4,10 @@
 # Program uses the freq.dat to extract the normal modes and outputs the modes with the amplitude, to display the spectra.
 
 @args = @ARGV;
-@args <= 4 || die "usage: dymspect.pl <freq.dat> <sigma: variance> <minimum frequency> <maximum frequency>\n";
+@args <= 4 || die "usage: dymspect.pl <results.txt> <sigma: variance> <minimum frequency> <maximum frequency>\n";
 
 #defaults
-$freqfile = "freq.dat";
+$freqfile = "results.txt";
 $sigma = 5;
 $x_min = 0;
 $x_max = 3500;
@@ -38,14 +38,16 @@ $numimg = 0;
 # Placing each freqfile array value separated by spaces into new array
 for ($i=0; $i<@freqfile; $i++) {
     @line1 = split(/\s+/,$freqfile[$i]);
-    if($line1[3] == 1) {
-        $numimg++;
-    	next;
-    }
-    $freqValue[$i-$numimg] = $line1[0];
+#    if($line1[3] == 1) {
+#        $numimg++;
+#    	next;
+#    }
+#    $freqValue[$i-$numimg] = $line1[0];
+    $freqValue[$i] = $line1[1];
+    $intenseValue[$i] = $line1[2];
 }
 
-print " Note: freq.dat has $numimg imaginary frequencies.\n";
+#print " Note: freq.dat has $numimg imaginary frequencies.\n";
 
  # Calculating the gaussian for each frequency data point.
 @xValue;
@@ -54,7 +56,7 @@ for ($i=0; $i<@freqValue; $i++) {
         $x = ($j - $freqValue[$i]);
         $y = ( $x / $sigma)**2;
         $z = exp(-0.5*$y);
-        $xValue[$j] += $z;
+        $xValue[$j] += $z * $intenseValue[$i];
     }
 }
 

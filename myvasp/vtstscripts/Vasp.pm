@@ -1,5 +1,3 @@
-# VTSTSCRIPTS version V2.04 (07/07/11)
-
 package Vasp;
 use strict;
 use Math::Trig;
@@ -12,7 +10,7 @@ BEGIN {
 
     @ISA = qw(Exporter);
     @EXPORT = qw(&read_poscar &write_poscar &rotate_basis &read_othercar &write_othercar &dot_product 
-                 &magnitude &pbc_difference &vsum &vmult &dirkar &kardir &volume &inverse
+                 &magnitude &pbc_difference &pbc_difference_ws &vsum &vmult &dirkar &kardir &volume &inverse
                  &set_bc &bbc &pbc &gauss &unit);
    @EXPORT_OK = qw();
 }
@@ -249,7 +247,8 @@ sub rotate_basis {
     $basis->[2][0] = 0;
     $basis->[2][1] = 0;
     return($basis);
-}  
+}
+
 #----------------------------------------------------------------------
 # subroutine read_othercar
 #     This routine reads files that are just an Nx3 array of numbers
@@ -398,6 +397,96 @@ sub pbc_difference {
 }
 
 #----------------------------------------------------------------------
+# subroutine pbc_difference_ws
+#     This routine does a difference between two vectors and applies
+#     periodic boundary conditions to the difference.
+#
+#     INPUT: $difference: reference to Nx3 array
+#            $basis: reference to 3x3 array of basis vectors
+#            $total_atoms: N
+#
+#     OUTPUT: $difference: difference between $coordinates1 and $coordinates2
+#----------------------------------------------------------------------
+
+sub pbc_difference_ws {
+    my $difference = shift;
+    my $basis = shift;
+    my $total_atoms = shift;
+
+    my ($i,$j1,$j2,$j3,$k,@v,@v_tmp);
+    my ($recip_basis,$dist2,$dist2_tmp,$dist2_cur,$done);
+
+    $recip_basis = inverse($basis);
+
+    for ($i=0; $i<$total_atoms; $i++) {
+
+        for ($k=0; $k<3; $k++) {
+            $v[$k] = $difference->[$i][0]*$basis->[$k][0] + $difference->[$i][1]*$basis->[$k][1] + $difference->[$i][2]*$basis->[$k][2];
+        }
+        $dist2_cur = $v[0]*$v[0] + $v[1]*$v[1] + $v[2]*$v[2];
+        $done = 0;
+        while(!$done){
+            $done = 1;
+            for ($j1=-1; $j1<2; $j1++) {
+                for ($j2=-1; $j2<2; $j2++) {
+                    for ($j3=-1; $j3<2; $j3++) {
+                        for ($k=0; $k<3; $k++) {
+                            $v_tmp[$k] = $v[$k] + $j1*$basis->[$k][0] + $j2*$basis->[$k][1] + $j3*$basis->[$k][2];
+                        }
+                        $dist2_tmp = $v_tmp[0]*$v_tmp[0] + $v_tmp[1]*$v_tmp[1] + $v_tmp[2]*$v_tmp[2];
+                        if($dist2_tmp < $dist2_cur) {
+                            for ($k=0; $k<3; $k++) {
+                                $v[$k] = $v_tmp[$k];
+                            }
+                            $dist2_cur = $dist2_tmp;
+                            $done = 0;
+                        }
+                    }
+                }
+            }
+        }
+        for ($k=0; $k<3; $k++) {
+            $difference->[$i][$k] = $v[0]*$recip_basis->[0][$k] + $v[1]*$recip_basis->[1][$k] + $v[2]*$recip_basis->[2][$k];
+        }
+    }
+    return ($difference);
+}
+
+#----------------------------------------------------------------------
+# subroutine dirkar
+#     This routine converts coordinates from direct lattice to 
+#     cartesian.  NOTE:  OUTPUT is in full cartesian, not scaled
+#     cartesian.
+#
+#     INPUT: $vector: reference to array containing coordinates (Nx3)
+#            $basis: reference to 3x3 array containing basis
+#            $lattice:  lattice constant of coordinates
+#            $total_atoms: N
+#
+#     OUTPUT: $vector:  converted coordinates
+#----------------------------------------------------------------------
+
+sub dirkar {
+    my $vector = shift;
+    my $basis = shift;
+    my $lattice = shift;
+    my $total_atoms = shift;
+
+    my ($i,$v1,$v2,$v3);
+
+    for ($i=0; $i<$total_atoms; $i++) {
+        $v1 = $vector->[$i][0]*$basis->[0][0] + $vector->[$i][1]*$basis->[0][1] + $vector->[$i][2]*$basis->[0][2];
+        $v2 = $vector->[$i][0]*$basis->[1][0] + $vector->[$i][1]*$basis->[1][1] + $vector->[$i][2]*$basis->[1][2];
+        $v3 = $vector->[$i][0]*$basis->[2][0] + $vector->[$i][1]*$basis->[2][1] + $vector->[$i][2]*$basis->[2][2];
+        $vector->[$i][0] = $v1;
+        $vector->[$i][1] = $v2;
+        $vector->[$i][2] = $v3;
+    }
+
+    return ($vector);
+}
+
+#----------------------------------------------------------------------
 # subroutine unit
 #     This routine returns the unit vector of the given vector
 #
@@ -483,6 +572,7 @@ sub vmult {
     }
     return ($vector);
 }
+
 #----------------------------------------------------------------------
 # subroutine dirkar
 #     This routine converts coordinates from direct lattice to 
@@ -538,9 +628,9 @@ sub kardir {
     my $total_atoms = shift;
     my $recip_basis;
     my ($v1,$v2,$v3,$i,$j);
-  
+
     $recip_basis = inverse($basis);
-  
+
     for ($i=0; $i<$total_atoms; $i++) {
         $v1 = $vector->[$i][0]*$recip_basis->[0][0] + $vector->[$i][1]*$recip_basis->[1][0] + $vector->[$i][2]*$recip_basis->[2][0];
         $v2 = $vector->[$i][0]*$recip_basis->[0][1] + $vector->[$i][1]*$recip_basis->[1][1] + $vector->[$i][2]*$recip_basis->[2][1];
@@ -615,7 +705,6 @@ sub inverse {
             $jjj = $jj + 1;
             if ($jjj>2) { $jjj-=3; }
             $inverse->[$j][$i] = $basis->[$jj][$ii]*$basis->[$jjj][$iii] - $basis->[$jjj][$ii]*$basis->[$jj][$iii];
-            # print "$i $ii $iii $j $jj $jjj: ".$inverse->[$j][$i]."\n";
         }
     }
 
@@ -656,11 +745,6 @@ sub set_bc {
         for($i=0; $i<$total_atoms; $i++){
             for($j=0; $j<3; $j++){
                 $coordinates->[$i][$j] = pbc($coordinates->[$i][$j]); }}
-    # Boundaries [1-x,x]
-    } elsif($ENV{'VTST_BC'} eq 'CBC') {
-        for($i=0; $i<$total_atoms; $i++){
-            for($j=0; $j<3; $j++){
-                $coordinates->[$i][$j] = cbc($coordinates->[$i][$j]); }}
     }
 }
 

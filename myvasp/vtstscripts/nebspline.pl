@@ -119,7 +119,7 @@ open (OUT,">exts.dat");
 $NumE = 0;
 foreach $Pos (sort {$a<=>$b} (keys(%Ext))){
     $NumE++;
-    $outline = sprintf("Extrema %d found at image %9.6f with energy: %9.6f\n",$NumE,$Pos,$Ext{$Pos});
+    $outline = sprintf("Extremum %d found at image %9.6f with energy: %9.6f\n",$NumE,$Pos,$Ext{$Pos});
     print OUT $outline;
 }
 close (OUT);

@@ -13,10 +13,10 @@ $xyzflag = 0;  # turn off xyz writing, by default
 
 if(!$ARGV[0]) {
     print "\nUsing POSCARs to generate movie\n\n";
-    $filetype = "POSCAR";
+    $filename = "POSCAR";
 } else {
     print "\nUsing CONTCARs to generate movie\n\n";
-    $filetype = "CONTCAR";
+    $filename = "CONTCAR";
 }
 
 $dir = cwd;
@@ -24,7 +24,8 @@ $zip = $ENV{'VTST_ZIP'};
 if($zip eq ''){ $zip = 'gzip'; }
 $i = 0;
 $string = "00";
-while(chdir $string) {
+while(-d $string) {
+    chdir $string;
 # Grab the forces and energies to add to the xyz files
     $zipped = 0;
     $outcar = 1;
@@ -44,10 +45,13 @@ while(chdir $string) {
     }
 
     $if = 1;
-    if(!(-e $filetype)) { print "copying\n"; system "cp POSCAR CONTCAR"; $if = 0; }
-    system "$Bin/pos2con.pl $filetype POSCAR.con > /dev/null";
+    if(!(-e $filename)) { print "copying\n"; system "cp POSCAR CONTCAR"; $if = 0; }
+    system "$Bin/pos2con.pl $filename POSCAR.con > /dev/null";
     system "$Bin/con2xyz.pl POSCAR.con > /dev/null";
-    system "$Bin/pos2con.pl POSCAR.con POSCAR_TMP> /dev/null";
+#    system "$Bin/pos2con.pl POSCAR.con POSCAR_TMP> /dev/null";
+    ($coordinates,$basis,$lattice,$num_atoms,$total_atoms,$selectiveflag,$selective,$description,$filetype) = read_poscar($filename);
+    write_poscar($coordinates,$basis,$lattice,$num_atoms,$total_atoms,$selectiveflag,$selective,$description,"POSCAR_TMP",$filetype);
+    
     unlink "POSCAR.con";
     if(!$if) { print "unlinking\n"; unlink "CONTCAR"; }
     if($outcar) {

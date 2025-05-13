@@ -36,6 +36,7 @@ if(@ARGV == 0) {
 
 # Get the masses for each atom from the OUTCAR
 #  $pomass = `grep POMASS OUTCAR | grep ZVAL`;
+print "Reading masses from OUTCAR\n";
 $outfilename=$outcarfiles[0];
 $pomass = `grep POMASS $outfilename | grep ZVAL`;
 @pomass = split /\n/ , $pomass;
@@ -57,7 +58,7 @@ for($i=0; $i<$ntyp; $i++) {
     $natoms_tot += $natoms_typ[$i];
 }
 # print masses
-#  print "Typ_Mass: ",@typ_mass;
+print join("\n",@typ_mass),"\n";
 
 $j = 0;
 $t = $natoms_typ[0];
@@ -71,6 +72,7 @@ for($i=0; $i<$natoms_tot; $i++) {
 
 #  print "Mass: ",@mass ;
 
+print "Reading forces from OUTCAR\n";
 # $splitline = 'POSITION.*TOTAL-FORCE \(eV\/Angst\)';
 $splitline = 'HIPREC TOTAL-FORCE \(eV\/A\)';
 
@@ -124,6 +126,7 @@ for ($i=0; $i<@outcarfiles; $i++) {
 #----------------------------------------------------------------------
 # read displacecars, count displacements
 #----------------------------------------------------------------------
+print "Reading displacements from DISPLACECAR\n";
 $num_displacements = 0;
 for ($m=0; $m<$num_displacecars; $m++) {
     if($singleflag){
@@ -151,6 +154,7 @@ for ($m=0; $m<$num_displacecars; $m++) {
 #______________________________________________________________________
 # check which forces correspond to displacements, build matrix
 #----------------------------------------------------------------------
+print "Building Hessian matrix\n";
 $current_displacement = 0;
 for ($m=0; $m<$num_displacecars; $m++) {
     for ($i=0; $i<$total_atoms; $i++) {
@@ -203,6 +207,7 @@ for($i=0; $i<$num_dof; $i++) {
 close FRQ;
 
 # Solve the eigensystem
+print "Solving the eigensystem\n";
 ($l, $V) = $B->sym_diagonalize();
 
 # Sort the eigenvalues. Use selection sort. $t will be the order we want to print out
@@ -229,6 +234,7 @@ for($i=0 ; $i<$num_dof ; $i++) {
 
 # Write out the eigenvalues, frequencies in cm^{-1} to the STDOUT and 
 # omega^{2} to 'eigs.dat'
+print "Writing the eigenvalues\n";
 open EIG , ">eigs.dat";
 open FREQ , ">freq.dat";
 print "\n";

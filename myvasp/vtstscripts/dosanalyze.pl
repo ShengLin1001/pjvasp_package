@@ -1,34 +1,34 @@
 #!/usr/bin/env perl
 #;-*- Perl -*-
 
-print "\n";
-
 @ARGV>0 || die "usage: dosanalyze.pl [w=number widths at quarter-height to include] [e=emin,emax] <s,p,d,a (all)> <atom num(s)>\n";
 
-# Determine how many Widths at Half Height to include, default 2.5
 $arg1 = @ARGV[0];
-$e_range = grep(/e=[-+]?\d+/, $arg1);
+
+# these next variables are used as flags for how the energy range is specified
+$e_range = grep(/e=[-+]?\d+/, $arg1); 
 $w = grep(/w=\d+/, $arg1);
-#print $e_range."|".$w."\n";
 $Emin = $Emax = 0;
 
 if(@ARGV>0){
     $arg1 = @ARGV[0];
     if($arg1 =~ /^\d+$/ || $arg1 =~ /^(\d+)(-)(\d+)$/) {
     } elsif($w) {
+        # energy range specified in terms of widths at quarter-height
         $NumStdDevs = shift(@ARGV);
         $NumStdDevs =~ s/^(w=)(0*)(\d+)(\.?)(\d*)$/$2$3$4$5/;
+        # print "Nstd: ".$NumStdDevs."\n";
     } elsif($e_range) {
+        # energy range specified explicitly
         $string = shift(@ARGV);
         @dummy = split(/=/, $string);
         @amy = split(/,/, $dummy[-1]);
         $Emin = $amy[0];
         $Emax = $amy[1];
-#    print $Emin."\n"."$Emax\n";
     }
     if($NumStdDevs =~ m/^\D/) { die "Error in usage syntax!\n"; }
     if($e_range) {
-        print "integrate from ".$Emin."eV to ".$Emax."eV.\n";
+        print "Integrate from ".$Emin."eV to ".$Emax."eV.\n";
         if($Emin>$Emax) {
             die "Emin is larger than Emax!\n";
         }
@@ -37,7 +37,7 @@ if(@ARGV>0){
 
 # If no band is selected, analyze d band
 $oflag = 'd';
-if(@ARGV>0) {
+if(@ARGV>0) { # check for another argument
     $arg2 = @ARGV[0];
     if($arg2 =~ /^\d+$/ || $arg2 =~ /^(\d+)(-)(\d+)$/) {
     } else {
@@ -48,19 +48,31 @@ if(@ARGV>0) {
          die "Error in usage syntax!\n";
     }
 }
+ #print "oflag: ".$oflag."\n";
+
 
 # Determine whether file is spin polarized or not and denote the number of columns
-if(@ARGV>0 && @ARGV[0]==0) {
-    $DOSfile = "DOS0";
-} else {
+ #print "argv: ".@ARGV." argv[0]: ".@ARGV[0]."\n";
+
+#if(@ARGV>0 && @ARGV[0]==0) { # check for another argument
+if(@ARGV>0) { # check for another argument
     $DOSfile = "DOS1";
+     #print "Analyzing specific atoms\n";
+} else {
+    $DOSfile = "DOS0";
+     #print "Analyzing all atoms\n";
 }
 open (DOS,$DOSfile);
-<DOS>;
+<DOS>; #strip the first line
 $in = <DOS>;
 $in =~ s/^\s+//g;
+if($in =~ /^#/){
+    $in = <DOS>;
+    $in =~ s/^\s+//g;
+}
 @line = split(/\s+/,$in);
-$spin = @line;
+$cols = @line;
+ #print "cols: ",$cols,"\n";
 
 # Set selected atom(s)
 if(@ARGV[0] =~ /^\d+$/){
@@ -72,6 +84,7 @@ if(@ARGV[0] =~ /^\d+$/){
         $Atm[$i] = $i+$1;
     }
 }
+ #print "amin: ".$Atm[0]." amax: ".$Atm[$NumAtm-1]."\n";
 
 # Find how many atom DOS there are
 opendir MAINDIR, "." or die "can't open this dir!" ;
@@ -94,34 +107,44 @@ if($arg2 =~ /^\d+$/) {
    print "When no band is selected, will analyze d band\n";
 }
 
-
 # Determine which subroutine to execute based on band
 $maxDOSj = 0; # For determination of where DOS max occurs
 $maxDOS = 0;
-#print "spin:".$spin."\n";
-if($spin == 4 || $spin == 7) { npNA(); }
-if($spin == 3 || $spin == 5) { npA0(); }
+if($cols == 4 || $cols == 10 || $cols == 7 || $cols == 19) { readDOSi(); } # read a set of DOSi files
+if($cols == 3 || $cols == 5) { readDOS0(); } # read the total DOS in DOS0
 
-# Subroutine for non-polarized analyzing a specific band
-sub npNA{
+# Subroutine for analyzing a specific set of atoms in DOSi
+sub readDOSi{
 
-    if($spin == 4) {
-    # If no orbital flag, plot the d-band
+    if($cols == 4) {
         if($oflag =~ /^s$/i) { $col = 1; }
         if($oflag =~ /^p$/i) { $col = 2; }
         if($oflag =~ /^d$/i) { $col = 3; }
-        if($oflag =~ /^a$/i) { $col = 4; }
+        if($oflag =~ /^a$/i) { $col = 4; }  # analyze all bands
     }
 
-    if($spin == 7) {
-    # If no orbital flag, analyze the d-band
+    if($cols == 10) {
+        if($oflag =~ /^s$/i) { $col = 1; }
+        if($oflag =~ /^p$/i) { $col = 2; }
+        if($oflag =~ /^d$/i) { $col = 5; }
+        if($oflag =~ /^a$/i) { $col = 10; } # analyze all bands
+    }
+
+    if($cols == 7) {
         if($oflag =~ /^s$/i) { $colup = 1; $coldown = 2; }
         if($oflag =~ /^p$/i) { $colup = 3; $coldown = 4; }
         if($oflag =~ /^d$/i) { $colup = 5; $coldown = 6; }
-        if($oflag =~ /^a$/i) { $colup = 7 }; # analyze all bands
+        if($oflag =~ /^a$/i) { $colup = 7; } # analyze all bands
     }
 
-# Read selected DOS files
+    if($cols == 19) {
+        if($oflag =~ /^s$/i) { $colup = 1; $coldown = 2; }
+        if($oflag =~ /^p$/i) { $colup = 3; $coldown = 4; }
+        if($oflag =~ /^d$/i) { $colup = 9; $coldown = 10; }
+        if($oflag =~ /^a$/i) { $colup = 19; } # analyze all bands
+    }
+
+    # Read selected DOS files
     $first = 1;
     for ($i=1; $i<=$NumDOS; $i++) {
         if($NumAtm == 0){
@@ -135,22 +158,49 @@ sub npNA{
         <DOS>;
         while ($in = <DOS>) {
             $in =~ s/^\s+//g;
+            if($in =~ /^#/){
+                $in = <DOS>;
+                $in =~ s/^\s+//g;
+            }
             @line = split(/\s+/,$in);
             $eneval = $line[0];
-            if($spin == 4) {
+            if($cols == 4) {
                 if($col < 4) {
                     $dosval = $line[$col];
                 } else {
                     $dosval = $line[1]+$line[2]+$line[3];
                 }
             }
-            if($spin == 7) {
+            if($cols == 10) {
+                if($col == 1) {
+                    $dosval = $line[1];
+                } elsif($col == 2) {
+                    $dosval = $line[2]+$line[3]+$line[4];
+                } elsif($col == 5) {
+                    $dosval = $line[5]+$line[6]+$line[7]+$line[8]+$line[9];
+                } else {
+                    $dosval = $line[1]+$line[2]+$line[3]+$line[4]+$line[5]+$line[6]+$line[7]+$line[8]+$line[9];
+                }
+            }
+            if($cols == 7) {
                 if($colup < 7) {
                     $dosval = $line[$colup]-$line[$coldown];
                 } else {
                     $dosval = $line[1]-$line[2]+$line[3]-$line[4]+$line[5]-$line[6];
                 }
             }
+            if($cols == 19) {
+                if($colup == 1) {
+                    $dosval = $line[1]-$line[2];
+                } elsif($colup == 3) {
+                    $dosval = $line[3]-$line[4]+$line[5]-$line[6]+$line[7]-$line[8];
+                } elsif($colup == 9) {
+                    $dosval = $line[9]-$line[10]+$line[11]-$line[12]+$line[13]-$line[14]+$line[15]-$line[16]+$line[17]-$line[18];
+                } else {
+                    $dosval = $line[1]-$line[2]+$line[3]-$line[4]+$line[5]-$line[6]+$line[7]-$line[8]+$line[9]-$line[10]+$line[11]-$line[12]+$line[13]-$line[14]+$line[15]-$line[16]+$line[17]-$line[18];
+                }
+            }
+
             if($first){
                 $Ene[$j] = $eneval;
                 $Dos[$j] = $dosval;
@@ -176,12 +226,12 @@ sub npNA{
             $numene == $j || die "Number of energy values in $DOSFILE does not match first file.\n";
         }
     }
-# End of subroutine np
+# End of subroutine readDOSi
 }
 
 
-# Subroutine for non-polarized analyzing all DOS for all atoms (DOS0 file)
-sub npA0 {
+# Subroutine for reading the total DOS in the DOS0 file
+sub readDOS0 {
 
     print "WARNING: For DOS0, ALL bands are analyzed\n";
     $NumDOS = 1;
@@ -191,10 +241,10 @@ sub npA0 {
         $in =~ s/^\s+//g;
         @line = split(/\s+/,$in);
         $eneval = $line[0];
-        if($spin == 3){
+        if($cols == 3){
             $dosval = $line[1];
         }
-        if($spin == 5){
+        if($cols == 5){
             $dosval = $line[1] - $line[2];
         }
         $Ene[$j] = $eneval;
@@ -207,9 +257,8 @@ sub npA0 {
     }
     close(DOS);
     $numene = $j;
-# End of subroutine npA0
+# End of subroutine readDOS0
 }
-
 
 if($w){
     # Find half width at half height and corresponding indices
@@ -245,12 +294,11 @@ if(!$e_range) {
 }
 
 # Calculate the average energy state
-$dossum = $dstsum = $dsqsum = 0;
+$dossum = $dstsum = 0;
 if($w) {
     for($i=$numenemin; $i<=$numenemax; $i++) {
         $dossum += $Dos[$i];
         $dstsum += $Ene[$i]*$Dos[$i];
-        $dsqsum += $Ene[$i]*$Ene[$i]*$Dos[$i]*$Dos[$i];
         $dssqsum += $Ene[$i]*$Ene[$i]*$Dos[$i];
     }
 } else {
@@ -265,7 +313,7 @@ if($w) {
 
 $dossum || die "Total DOS is zero.\n";
 $eneavg = $dstsum/$dossum;
-$enevar = ($dssqsum*$dossum - $dstsum*$dstsum)/($dossum*$dossum);
+$enevar = $dssqsum/$dossum - $eneavg*$eneavg;
 $enestd = sqrt($enevar);
 
 if($w || $e_range) {
@@ -279,7 +327,7 @@ if($w || $e_range) {
     $norm = $diff/$eneavg;
     $absnorm = abs($norm);
     if($absnorm > 0.1){
-        print "WARNING: band center has shifted by more than 10% compared to full integrated range\n";
+        print "WARNING: band center has shifted by more than 10% compared to full integration range\n";
     }
 }
 

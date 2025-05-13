@@ -3,7 +3,7 @@
 
 # 29-05-2003
 
-# After vto has been run, go into the dir from vto <dir>.
+# After vfin.pl has been run, go into the dir from vfin.pl <dir>.
 # All the OUTCARs should now be zipped.
 
 # nebmovie.pl should use CONTCARs not POSCARs.
@@ -11,6 +11,14 @@
 use Cwd;
 $dir = cwd;
 use FindBin qw($Bin);
+
+@args = @ARGV;
+@alg_args;
+foreach my $k (@args) {
+    if (index($k,"-") != -1) { #want to separate options preceded with "-"
+        push @alg_args, shift(@args);
+    }
+}
 
 # Unzip the OUTCARs
 print "\n" ;
@@ -34,8 +42,13 @@ print 'done',"\n";
 $i-=2;
 
 # Same as the 'spline' alias
-print 'Do nebbarrier.pl ; nebspline.pl',"\n";
-system "$Bin/nebbarrier.pl ; $Bin/nebspline.pl";
+if (grep /-alt_dist/,@alg_args) {
+				print 'Do nebbarrier.pl -alt_dist; nebspline.pl',"\n";
+				system "$Bin/nebbarrier.pl -alt_dist; $Bin/nebspline.pl";
+} else {
+				print 'Do nebbarrier.pl ; nebspline.pl',"\n";
+				system "$Bin/nebbarrier.pl ; $Bin/nebspline.pl";
+}
 if (-e "nebss.dat"){system "$Bin/nebspliness.pl";}
 
 print 'Do nebef.pl',"\n";

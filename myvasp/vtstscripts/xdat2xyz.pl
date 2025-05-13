@@ -59,7 +59,7 @@ if($zipped) {
 # from the POSCAR file.
 
 
-if(-e "XDATCAR") {
+if(-e "CONTCAR") {
     open POS, "CONTCAR";
 }else{
     open POS, "POSCAR" or die " NO POSCAR IN THIS DIRECTORY \n";

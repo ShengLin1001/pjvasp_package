@@ -62,7 +62,7 @@ for ($atm=0; $atm<$total_atoms; $atm++) {
     $dist_sq += $dist;
     $dist = sqrt($dist);
 
-   printf("%9.6f   %9.6f   %9.6f :  %9.6f  %3s\n",@{$cardiff->[$atm]},$dist,($atm));
+   printf("%9.6f   %9.6f   %9.6f :  %9.6f  %3s\n",@{$cardiff->[$atm]},$dist,($atm+1));
 }
 $dist_sq = sqrt($dist_sq);
 

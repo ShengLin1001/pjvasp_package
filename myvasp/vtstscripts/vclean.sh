@@ -1,88 +1,78 @@
 #!/bin/sh
+set -x
+set -e
 
-  echo "   ****   "
-  echo " Cleaning up after a normal vasp run "
-  echo "   ****   " 
+echo "   ****   "
+echo " Cleaning up after a normal vasp run "
+echo "   ****   " 
 
-  Bin=`dirname "$0"`
-  ZIP=${VTST_ZIP-gzip}
+VTSTPATH=`dirname "$0"`
+ZIP=${VTST_ZIP-gzip}
+DEST="$1"
 
-  rm -f EIGENVAL IBZKPT OSZICAR PCDAT vasprun.xml CHG
+# Create xyz movie from XDATCAR.
+"$VTSTPATH/xdat2xyz.pl" > /dev/null
+if [ -s movie.xyz ]
+then
+   mv movie.xyz $DEST
+fi
 
-  if [ -s WAVECAR ] 
-  then
-    mv WAVECAR $1 ; "$ZIP" $1/WAVECAR &
-  else
-    rm -f WAVECAR
-  fi
-  if [ -s CHGCAR ] 
-  then
-    mv CHGCAR $1 ; "$ZIP" $1/CHGCAR &
-  else
-    rm -f CHGCAR
-  fi
-  if [ -s AECCAR0 ]
-  then
-     mv AECCAR0 $1 ; "$ZIP" $1/AECCAR0 &
-  fi
-  if [ -s AECCAR1 ]
-  then
-     mv AECCAR1 $1 ; "$ZIP" $1/AECCAR1 &
-  fi
-  if [ -s AECCAR2 ]
-  then
-     mv AECCAR2 $1 ; "$ZIP" $1/AECCAR2 &
-  fi
-  if [ -s PROCAR ]
-  then
-    mv PROCAR $1 ; "$ZIP" $1/PROCAR &
-  else
-    rm -f PROCAR
-  fi
-  if [ -s DOSCAR ] 
-  then
-    mv DOSCAR $1 ; "$ZIP" $1/DOSCAR &
-  else
-    rm -f DOSCAR
-  fi
+# Create energy and forces plot.
+"$VTSTPATH/vef.pl" > /dev/null
+if [ -s fe.dat ]
+then
+   mv fe.dat $DEST
+fi
+if [ -s vaspout.??? ]
+then
+   mv vaspout.??? $DEST
+fi
 
-  "$Bin/xdat2xyz.pl" > /dev/null ;
-  if [ -s movie.xyz ]
-  then
-     mv movie.xyz $1
-  fi
-  "$Bin/vef.pl" > /dev/null ;
-  if [ -s vaspout.eps ]
-  then
-     mv fe.dat vaspout.eps $1
-  fi
-  if [ -s XDATCAR ]
-  then
-     mv XDATCAR $1 ; "$ZIP" $1/XDATCAR &
-  fi
-  if [ -s OUTCAR ]
-  then
-     mv OUTCAR $1 ; "$ZIP" $1/OUTCAR &
-  fi
+# Convert POSCAR and CONTCAR to con and xyz formats.
+for file in POSCAR CONTCAR
+do
+    "$VTSTPATH/pos2con.pl" $file > /dev/null
+    "$VTSTPATH/con2xyz.pl" $file.con > /dev/null 
+    mv $file.con $file.xyz $DEST
+done
 
-  "$Bin/pos2con.pl" POSCAR > /dev/null
-  "$Bin/con2xyz.pl" POSCAR.con > /dev/null 
-  mv POSCAR.con POSCAR.xyz $1 ;
-  "$Bin/pos2con.pl" CONTCAR > /dev/null 
-  "$Bin/con2xyz.pl" CONTCAR.con > /dev/null 
-  mv CONTCAR.con CONTCAR.xyz $1 ;
-  cp POSCAR CONTCAR INCAR KPOINTS $1
+# Files to delete.
+rm -f EIGENVAL IBZKPT PCDAT vasprun.xml CHG
 
-  if [ ${VTST_STDOUT} ] 
-  then
-    if [ -s ${VTST_STDOUT} ]
-    then
-      mv ${VTST_STDOUT} $1
+# Files to copy.
+cp POSCAR CONTCAR INCAR KPOINTS $DEST
+
+# Files to move and compress.
+for file in WAVECAR CHGCAR AECCAR? PROCAR DOSCAR XDATCAR OUTCAR REPORT \
+            ICONST OSZICAR
+do
+    # If a file exists and has data in it, then keep it.
+    if [ -s $file ]; then
+        mv $file $DEST
+
+        # Compress it in the background.
+        "$ZIP" $DEST/$file &
+
+    # If the file is zero length (or doesn't exist) delete it.
+    else
+        rm -f $file
     fi
-  fi
-  if [ ${VTST_STDERR} ]
-  then
-    rm -f ${VTST_STDERR}
-  fi
+done
 
-  mv CONTCAR POSCAR
+# If $VTST_STDOUT is set and the file is of non-zero length, move it to $DEST.
+if [ ${VTST_STDOUT} ] 
+then
+  if [ -s ${VTST_STDOUT} ]
+  then
+    mv ${VTST_STDOUT} $DEST
+  fi
+fi
+
+# If $VTST_STDERR is set and exists, delete it.
+if [ ${VTST_STDERR} ]
+then
+  rm -f ${VTST_STDERR}
+fi
+
+# Move CONTCAR to POSCAR to prepare for next run.
+mv CONTCAR POSCAR

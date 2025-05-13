@@ -6,6 +6,9 @@
 # configuration is contain in POSCARs and not CONTCAR. 
 # If there is an input argument then it is the image number to be used.
 
+use FindBin qw($Bin);
+use lib "$Bin";
+
 if($ARGV[0]) {
     $image = $ARGV[0];
     $f = 0;

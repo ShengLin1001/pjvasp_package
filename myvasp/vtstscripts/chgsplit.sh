@@ -6,7 +6,7 @@
   echo " Input file :: \"$file\" "
 
 # Get the total number of atoms
-  set -- $( sed '6q;d' $file )
+  set -- $( sed '7q;d' $file )
   sum=0
   while [ $# -gt 0 ]; do
     i=$1
@@ -15,7 +15,7 @@
   done
 
 # Cut out the header info
-  nh=$((9+sum))
+  nh=$((10+sum))
   rm -f haus
   sed "$nh"q $file > haus
 
@@ -33,7 +33,7 @@
   echo " Total spin (file \"cf1\") "
   sed -n "$((l1+1)),$((l2-1)) p" $file >> cf1
 #  head -$((l2-1)) $file | tail -n +$((l1+1)) >> cf1
-  echo " Magneticzatition (file \"cf2\") "
+  echo " Magnetization (file \"cf2\") "
   sed -n "$((l2+1)),$ p" $file >> cf2
 #  tail -$((l3-l2)) $file >> cf2
 

@@ -1116,6 +1116,3 @@ sub stdatMin2
     1;
     
     
-    
-    
-    

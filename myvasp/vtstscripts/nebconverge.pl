@@ -24,9 +24,7 @@ if (@args==0) {
     @directories = @args;
 }
 
-if(chdir vaspgr) {
-    chdir $dir;
-} else {
+if(!(-d "vaspgr")) {
     system "mkdir vaspgr";
 }
   

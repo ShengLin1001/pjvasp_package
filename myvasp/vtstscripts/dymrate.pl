@@ -14,7 +14,7 @@ $hbar = 6.46538e-2;             # Planck's constant over 2*pi
 $pi = 3.141592653589793238464;  # pi
 $c = 29979245800;               # speed of light cm
 $w2v = 15633304363477.891;      # sqrt(eV/(Ang^2 amu) to s^-1
-$w_invcm = 521.47;              # sqrt(eV/(Ang^2 amu) to s^-1
+$w_invcm = 521.47;              # sqrt(eV/(Ang^2 amu) to cm^-1
 
 # Read in the necessary info
 die "  INPUT THE INITIAL AND FINAL TEMPERATURE, CLASSICAL ENERGY GAP(eV) 

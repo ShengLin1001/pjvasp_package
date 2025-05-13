@@ -22,6 +22,8 @@ $poscarfile2 = $args[1];
   = read_poscar($poscarfile2);
 
 $difference = pbc_difference($coordinates1,$coordinates2,$total_atoms);
+$difference = pbc_difference_ws($difference,$basis,$total_atoms);
+
 $cartesian = dirkar($difference,$basis,$lattice,$total_atoms);
 $distance = magnitude($cartesian,$total_atoms);
 

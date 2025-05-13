@@ -33,7 +33,7 @@
   $numbers = join "  " , @line ;
 # Calculate the total number of atoms
   while($line[$k] != undef){$natoms+=$line[$k++] ;}
-  
+ 
 # Write out the .vasp file
   print OUT "SOME INFORMATION WE DONT CARE ABOUT   ","NCLASS=",$nel,"  ATOM=",$types,"\n" ;
   print OUT "   ",$numbers,"\n" ;
@@ -41,7 +41,7 @@
   print OUT "   ","\n" ;
   for ($i=1; $i<5; $i++){print OUT $file[$i],"\n" ;}
   print OUT "   ","\n" ;
-  $sh = 7+$index ;
+  $sh = 6+$index ;
   for ($i=1;$i<=$natoms; $i++){
     $line = $file[$sh+$i] ; chomp($line) ; $line=~s/^\s+//g ; @line=split /\s+/,$line ;
     printf OUT "%13.8f %11.8f %11.8f %5s\n",@line[0..2],"#$i" ;

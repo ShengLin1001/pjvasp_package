@@ -5,16 +5,16 @@ from os import system
 from sys import exit, argv
 
 if '-h' in argv:
-    print 'usage: vef.py'
-    print '       prints the force and energy for each ionic step of a vasp run'
-    print
+    print('usage: vef.py')
+    print('       prints the force and energy for each ionic step of a vasp run')
+    print('')
     exit(0)
 
 vtst_path = dirname(abspath(__file__))
 
 filename = 'OUTCAR'
 if not isfile(filename):
-    print 'No such file: %s' % filename
+    print('No such file: %s' % filename)
     exit(1)
 
 traj = aselite.read_vasp_out(filename)
@@ -28,7 +28,7 @@ for i, atoms in enumerate(traj):
         e0 = e
     f = atoms.get_max_atom_force()
     str = '%5i %20.8f %20.6f %20.6g ' % (i,f,e,e-e0)
-    print str
+    print(str)
     fe.write(str+'\n')
 fe.close()
 

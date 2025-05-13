@@ -6,8 +6,8 @@
 open (IN1,$ARGV[0]) || die ("Can't open file $!");
 open (OUT,">CHGCAR_tot");
 
-# read the heder of the CHGCAR
-for ($i=0; $i<5; $i++) {
+# read the header of the CHGCAR
+for ($i=0; $i<6; $i++) {
     $line1 = <IN1>;
     $header1 .= $line1;
 }

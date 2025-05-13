@@ -45,11 +45,9 @@
     mv NEWMODECAR MODECAR
   fi
 
-  if [ -s lanczos.out ]      
+  if [ -s LANCAR ]      
   then
-    mv lanczos.out $1 ; "$ZIP" $1/lanczos.out &
-  else
-    rm -f lanczos.out
+    mv LANCAR $1 ; "$ZIP" $1/LANCAR &
   fi
  
   rm PI*

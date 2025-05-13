@@ -27,7 +27,7 @@
   close P2 ;
 
 # Make sure that they are at least the same length
-  die "The two files are not of the same length\n" if $n1 != $n2 ;
+#  die "The two files are not of the same length\n" if $n1 != $n2 ;
 
 # Get the basis vectors 
   for ($i=1; $i<5; $i++){
@@ -41,21 +41,50 @@
 # Get the number of different kinds of atoms and the number of each kind
   if ($p1[5] =~ /\d+/) {
       $lineno = 5;
+	#print "is vasp 4 \n";
+      $vasp5=0;
   }else{
       $lineno = 6;
+      #print "is vasp 5 \n";
+      $vasp5=1;
   }
   @elements = split /\s+/ , $p1[$lineno] ;
   $nel = @elements ;
+
   $line = $p1[$lineno] ; chomp($line) ; $line=~s/^\s+//g ; @line=split /\s+/,$line ;
   @not[0..$nel-1] = @line[0..$nel-1] ;
-  while ($not[$k] != undef){$natoms+=$not[$k++] ;}
+  while ($not[$k1] != undef){
+  $natoms1+=$not[$k1++] ;
+  }
+  $line = $p2[$lineno] ; chomp($line) ; $line=~s/^\s+//g ; @line=split /\s+/,$line ;
+  @not[0..$nel-1] = @line[0..$nel-1] ;
+  while ($not[$k2] != undef){
+  $natoms2+=$not[$k2++] ;
+  }
 
+  die "The two files do not have the same number of atoms! \n" if $natoms1 != $natoms2 ;
+
+
+  $line = $p1[$lineno] ; chomp($line) ; $line=~s/^\s+//g ; @line=split /\s+/,$line ;
+  @not[0..$nel-1] = @line[0..$nel-1] ;
+  while ($not[$k] != undef){
+  $natoms+=$not[$k++] ;
+  }
+  if ($p1[7] =~ /Selective/){
+	#print "is selective dynamic \n";
+	$selectiveDynamics=1;
+  }else{
+	#print "not selective dynamic\n";
+	$selectiveDynamics=0;
+  }
 # Calculate the difference between each coordinate in each of the files and apply
 # periodic boundary conditions
-  $sh = 8 ; 
+  $sh = 7 + $vasp5+$selectiveDynamics ; 
   for ($i=0; $i<$natoms; $i++){
     $j = $i+$sh ;
-    $l1 = $p1[$j] ; chomp($l1) ; $l1=~s/^\s+//g ; @l1=split /\s+/,$l1 ;
+    $l1 = $p1[$j] ; chomp($l1) ; $l1=~s/^\s+//g ;
+    @l1=split /\s+/,$l1 ;
+    # print "$l1 \n";
     $l2 = $p2[$j] ; chomp($l2) ; $l2=~s/^\s+//g ; @l2=split /\s+/,$l2 ;
 # pbc
     $dx = $l1[0]-$l2[0] ; while ($dx > 0.5){$dx -= 1.0 ;} while ($dx < -0.5){$dx += 1.0 ;}
@@ -67,7 +96,7 @@
     $w[$i][1] = ($dx*$ax[1]+$dy*$ay[1]+$dz*$az[1])*$latt ;
     $w[$i][2] = ($dx*$ax[2]+$dy*$ay[2]+$dz*$az[2])*$latt ;
   }
-
+#  print "after the loop \n";
 # Normalize the mode and print out
   for ($i=0; $i<$natoms; $i++){
     for ($j=0; $j<3; $j++){
@@ -75,6 +104,7 @@
     }
   }
   $sum = sqrt($sum) ;
+#  print "sum is $sum \n";
   open MOD , ">MODECAR" ;
   for ($i=0; $i<$natoms; $i++){
     for ($j=0; $j<3; $j++){

@@ -111,7 +111,7 @@ if($filetype eq "con")
     $head .= "1    0    0\n";
     $head .= "$v2[0]    $v2[1]    0\n";
     $head .= "$v3[0]    $v3[1]    $v3[2]\n";
-    $head .= $atomtypes."\n"; # uncomment for vasp5 default
+    $head .= $atomtypes."\n";
     $head .= $natoms."\nSelective dynamics\nDirect\n";
     $file = $head.join("\n",@coords)."\n";
     if(@args >= 2) {
@@ -136,7 +136,7 @@ if($filetype eq "vasp")
 
     set_bc($coordinates,$total_atoms);
 
-    $coordinates = dirkar($coordinates,$basis,$lattice,$total_atoms);
+#    $coordinates = dirkar($coordinates,$basis,$lattice,$total_atoms);
 
     if(@args >= 2) {
         $outputfilename = $args[1];
@@ -161,6 +161,36 @@ if($filetype eq "vasp")
     $angle2 = acos(dot_product($vector1,$vector3,1)/$mag1/$mag3)*$fact;
     $angle3 = acos(dot_product($vector2,$vector3,1)/$mag3/$mag2)*$fact;
     printf OUT "%16.10f %16.10f %16.10f\n",$angle1,$angle2,$angle3;
+
+    $newlattice = 1.0;
+    $newbasis->[0][0] = $mag1;
+    $newbasis->[1][0] = 0;
+    $newbasis->[2][0] = 0;
+    $newbasis->[0][1] = $angle1==90?0:cos($angle1/$fact);
+    $newbasis->[1][1] = $angle1==90?1:sin($angle1/$fact);
+    $newbasis->[2][1] = 0;
+    $newbasis->[0][2] = $angle2==90?0:cos($angle2/$fact);
+    $newbasis->[1][2] = ($angle2==90 && $angle3==90)?0:(cos($angle3/$fact)-$newbasis->[0][1]*$newbasis->[0][2])/$newbasis->[1][1];
+    $newbasis->[2][2] = sqrt(1.0-$newbasis->[0][2]**2-$newbasis->[1][2]**2);
+
+    $newbasis->[0][1] *= $mag2;
+    $newbasis->[1][1] *= $mag2;
+    $newbasis->[0][2] *= $mag3;
+    $newbasis->[1][2] *= $mag3;
+    $newbasis->[2][2] *= $mag3;
+
+    # set near-zero elements to zero
+    for($i=0; $i<3; $i++){
+        for($j=0; $j<3; $j++){
+            if(abs($newbasis->[$i][$j]) < 1e-10) { $newbasis->[$i][$j] = 0; }
+        }
+    }
+
+#    print "debug: newbasis[x][0] = ",$newbasis->[0][0]," ",$newbasis->[1][0]," ",$newbasis->[2][0],"\n";
+#    print "debug: newbasis[x][1] = ",$newbasis->[0][1]," ",$newbasis->[1][1]," ",$newbasis->[2][1],"\n";
+#    print "debug: newbasis[x][2] = ",$newbasis->[0][2]," ",$newbasis->[1][2]," ",$newbasis->[2][2],"\n";
+
+    $coordinates = dirkar($coordinates,$newbasis,$newlattice,$total_atoms);
 
     print OUT "0 0\n";
     printf OUT "0 0 0\n";

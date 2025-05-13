@@ -25,7 +25,11 @@ for ($i=0; $i<$total_atoms; $i++) {
         for ($j=0; $j<3; $j++) {
             $difference->[0][$j] = pbc($coordinates->[$central_atom-1][$j]-$coordinates->[$i][$j]);
         }
+# new WS pbc
+        $difference = pbc_difference_ws($difference,$basis,"1");
+# end WS pbc
         $difference = dirkar($difference,$basis,$lattice,"1");
+
         $mag_difference = magnitude($difference,"1");
         $index = int($mag_difference/$bin_size);
         $bin->{$index}[@{$bin->{$index}}] = $i;

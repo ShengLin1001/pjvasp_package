@@ -6,7 +6,7 @@ use lib "$Bin";
 use Vasp;
 
 # This program extracts the dynamical matrix information (the forces vs displacement)
-# from the OUTCAR files.  
+# GH: I'm actually not sure why we have this script; consider replacing or removing it
 
 @args = @ARGV;
 @args == 3 || die "usage: extract_matrix.pl <DISPLACECAR 1> <DISPLACECAR 2> <matrix for 1>\n";

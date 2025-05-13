@@ -11,7 +11,7 @@
 #   comm. doesn't work after 'save sel?'
 # make labels smaller
 
-require 'ctime.pl';
+#require 'ctime.pl';
 
 $M_PI = 3.14159265358979323846264338327950288;
 $sphflag=0;
@@ -1440,7 +1440,7 @@ sub sub_plotatm {
 
     print "%!PS-Adobe-3.0 EPSF-3.0\n";
     printf "%%%%BoundingBox: %.5g %.5g %.5g %.5g\n",@bbox;
-    print "%%Creator: $progname\n%%CreationDate: ",&ctime(time);
+#    print "%%Creator: $progname\n%%CreationDate: ",&ctime(time);
     print "%%DocumentData: Clean7Bit\n";
     $sphere=<<ENDOFSPHERE;
 
