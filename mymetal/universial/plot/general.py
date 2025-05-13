@@ -9,6 +9,7 @@ Functions:
     - check_all_rcParams: Check all Matplotlib rcParams settings.
     - get_ploted_figure: Get the current figure and axis objects.
     - add_color_band: Add semi-transparent color band to axes.
+    - add_circle_number: Add a numbered circle to a plot.
     - general_modify_band_plot: Modify the appearance of a band structure plot.
     - generate_gradient_colors: Generate a list of gradient colors.
     - general_modify_line: Modify the appearance of lines in a plot.
@@ -22,18 +23,24 @@ Functions:
 
 
 from ase import Atoms
+
 import numpy as np
+
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.colors import to_rgb
 from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
-from brokenaxes import brokenaxes
-from typing import List, Tuple, Union
-import matplotlib.colors as mcolors
-from itertools import cycle
+from matplotlib.patches import Ellipse
 
-import matplotlib.pyplot as plt
+from brokenaxes import brokenaxes
+
+from typing import List, Tuple, Union
+
+from itertools import cycle
+    
+
 
 def check_font_size(ax: plt.Axes):
     x_label_fontsize = ax.xaxis.get_label().get_fontsize()
@@ -127,6 +134,77 @@ def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, 
     # Fill the gradient region
     ax.imshow(X=gradient, extent=extent, aspect='auto',
             cmap=cmap, origin=origin, alpha=alpha)
+
+def add_circle_number(positions: List[float]=None, ax: Axes=None, color: str='steelblue', number: int=0,
+                               radiusx_ratio: float = 0.05, text_y_offset_inch: float = -0.0267, lw: float = 2, fontsize: int = 24,
+                               **circle_kwargs) -> None:
+    
+    """Draws a numbered hollow ellipse at a specific data coordinate on a matplotlib axis.
+
+    This function compensates for figure and axes aspect ratio distortions and allows
+    precise placement of text annotations (numbers) inside ellipse markers.
+
+    Args:
+        positions (List[float]): A list of two elements [x, y] specifying the center of the ellipse.
+        ax (Axes): A matplotlib Axes object to draw on.
+        color (str): Color of the ellipse edge and number text. Defaults to 'steelblue'.
+        number (int): The number to display inside the ellipse. Defaults to 0.
+        radiusx_ratio (float): Horizontal radius of ellipse as a fraction of x-axis length. Defaults to 0.05.
+        text_y_offset_inch (float): Vertical offset of the number text in inches. Defaults to -0.0267.
+        lw (float): Line width of the ellipse edge. Defaults to 2.
+        fontsize (int): Font size of the number text. Defaults to 24.
+        **circle_kwargs: Additional keyword arguments passed to the Ellipse patch.
+
+    Raises:
+        ValueError: If `positions` is None, `ax` is None, or `positions` does not contain exactly two values.
+
+    Examples:
+        Basic usage:
+        >>> fig, ax = plt.subplots()
+        >>> add_circle_number([0.5, 0.5], ax, number=1, color='red')
+
+        Annotating energy diagram features:
+        >>> add_circle_number(
+        ...     [max_fcc_layer2-0.01, min_energy_diff2+0.5*(max_energy_diff2-min_energy_diff2)],
+        ...     ax, color=color4, radiusx_ratio=0.017, lw=2, number=1)
+        >>> add_circle_number(
+        ...     [max_fcc_layer2-0.01, min_energy_diff+0.5*(min_energy_diff2-min_energy_diff)],
+        ...     ax, color=color4, radiusx_ratio=0.017, lw=2, number=2)
+
+    Note:
+        The function automatically compensates for:
+        - Axes aspect ratio distortions
+        - Figure-to-axes size scaling
+        - Data coordinate transformations
+        - Font rendering offsets
+    """
+    if positions is None:
+        raise ValueError("positions must be provided")
+    if ax is None:
+        raise ValueError("ax must be provided")
+    if len(positions) != 2:
+        raise ValueError("positions must be a list of two elements [x, y]")
+
+    ax_pos = ax.get_position()
+    fig, ax, (x0,x1), (y0,y1) = get_ploted_figure()
+    fig_width, fig_height = fig.get_size_inches()
+    ax_width_inches = ax_pos.width * fig_width
+    ax_height_inches = ax_pos.height * fig_height
+    xlength = x1 - x0
+    ylength = y1 - y0
+    aspect_ratio = ax_height_inches / ax_width_inches
+    text_y_offset = text_y_offset_inch / ax_height_inches * ylength
+
+    # For plot, tranform to data coordinates
+    radiusx = radiusx_ratio * xlength
+    # First trnasform to inch unit, then to data coordinates
+    radiusy = radiusx_ratio / aspect_ratio * ylength
+
+    ax.add_patch(Ellipse(positions, width=2*radiusx, height=2*radiusy, edgecolor=color, facecolor='none', lw=lw,
+                         **circle_kwargs))
+    ax.text(positions[0], positions[1]+text_y_offset, str(number), fontsize=fontsize, ha='center', va='center', color=color)
+
+
 
 def general_modify_band_plot(ax: plt.Axes) -> plt.Axes:
     xticks = ax.get_xticks()
