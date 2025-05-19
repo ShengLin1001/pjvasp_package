@@ -5,26 +5,72 @@ REPOS=(~/mysoft/pei/vasp_utils ~/mysoft/pei/mymetal)
 
 for REPO in "${REPOS[@]}"; do
     if [ -d "$REPO" ]; then
-        echo "==> Updating repository in $REPO"
-        cd "$REPO"
+        echo "📦 ==> Updating repository in $REPO"
+        cd "$REPO" || continue
 
-        # 检查是否有未提交的更改并提交
+        # 检查是否有改动（包括删除）
         if [[ -n $(git status --porcelain) ]]; then
-            git add .
+            echo "⚠️  Detected unstaged changes."
+
+            # 添加所有更改（包含删除）
+            git add -A
             git commit -m "Update from $USER_ACCOUNT."
+
         else
-            echo "No changes to commit in $REPO."
+            echo "✅ No changes to commit in $REPO."
         fi
 
-        # 拉取和推送到已设置的上游分支
-        git pull --rebase  # 使用 --rebase 以减少合并冲突
+        # 处理可能因 unstaged changes 阻止的 pull --rebase
+        if [[ -n $(git status --porcelain) ]]; then
+            echo "📥 Stashing local changes before rebase pull..."
+            git stash push -m "auto-stash before pull"
+            git pull --rebase
+            git stash pop || echo "⚠️  Conflict during stash pop. Please resolve manually."
+        else
+            git pull --rebase
+        fi
+
+        # 推送更改
         git push
 
         cd - > /dev/null
     else
-        echo "Repository $REPO does not exist."
+        echo "❌ Repository $REPO does not exist."
     fi
-    echo "done!"
+
+    echo "✅ Done syncing: $REPO"
     printf '=%.0s' {1..80}; echo
 done
+
+
+
+# #!/bin/bash
+
+# USER_ACCOUNT=${USER:-"unknown_user"}
+# REPOS=(~/mysoft/pei/vasp_utils ~/mysoft/pei/mymetal)
+
+# for REPO in "${REPOS[@]}"; do
+#     if [ -d "$REPO" ]; then
+#         echo "==> Updating repository in $REPO"
+#         cd "$REPO"
+
+#         # 检查是否有未提交的更改并提交
+#         if [[ -n $(git status --porcelain) ]]; then
+#             git add .
+#             git commit -m "Update from $USER_ACCOUNT."
+#         else
+#             echo "No changes to commit in $REPO."
+#         fi
+
+#         # 拉取和推送到已设置的上游分支
+#         git pull --rebase  # 使用 --rebase 以减少合并冲突
+#         git push
+
+#         cd - > /dev/null
+#     else
+#         echo "Repository $REPO does not exist."
+#     fi
+#     echo "done!"
+#     printf '=%.0s' {1..80}; echo
+# done
 
