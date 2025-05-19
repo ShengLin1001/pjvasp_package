@@ -1,76 +1,113 @@
 #!/bin/bash
 
+# ================================
+# Git Multi-Repository Sync Script
+# Author: ChatGPT
+# Version: 1.0
+# ================================
+
+# ---- Configurable paths ----
 USER_ACCOUNT=${USER:-"unknown_user"}
-REPOS=(~/mysoft/pei/vasp_utils ~/mysoft/pei/mymetal)
+REPOS=(
+  "$HOME/mysoft/pei/vasp_utils"
+  "$HOME/mysoft/pei/mymetal"
+)
 
-for REPO in "${REPOS[@]}"; do
-    if [ -d "$REPO" ]; then
-        echo "📦 ==> Updating repository in $REPO"
-        cd "$REPO" || continue
+# ---- Parameters ----
+PUSH_ONLY=false
+ENABLE_LOG=false
+USE_STASH=true
+LOGFILE="git_sync_$(date +%F).log"
 
-        # 检查是否有改动（包括删除）
-        if [[ -n $(git status --porcelain) ]]; then
-            echo "⚠️  Detected unstaged changes."
-
-            # 添加所有更改（包含删除）
-            git add -A
-            git commit -m "Update from $USER_ACCOUNT."
-
-        else
-            echo "✅ No changes to commit in $REPO."
-        fi
-
-        # 处理可能因 unstaged changes 阻止的 pull --rebase
-        if [[ -n $(git status --porcelain) ]]; then
-            echo "📥 Stashing local changes before rebase pull..."
-            git stash push -m "auto-stash before pull"
-            git pull --rebase
-            git stash pop || echo "⚠️  Conflict during stash pop. Please resolve manually."
-        else
-            git pull --rebase
-        fi
-
-        # 推送更改
-        git push
-
-        cd - > /dev/null
-    else
-        echo "❌ Repository $REPO does not exist."
-    fi
-
-    echo "✅ Done syncing: $REPO"
-    printf '=%.0s' {1..80}; echo
+# ---- Parse input arguments ----
+for arg in "$@"; do
+  case $arg in
+    --push-only) PUSH_ONLY=true ;;
+    --log) ENABLE_LOG=true ;;
+    --no-stash) USE_STASH=false ;;
+  esac
 done
 
+# ---- Log function ----
+log() {
+  if $ENABLE_LOG; then
+    echo "$1" | tee -a "$LOGFILE"
+  else
+    echo "$1"
+  fi
+}
 
+# ---- Main loop ----
+for REPO in "${REPOS[@]}"; do
+  if [ -d "$REPO/.git" ]; then
+    log "📦 ==> Updating repository: $REPO"
+    cd "$REPO" || continue
 
-# #!/bin/bash
+    # Clean up junk files
+    find . -name "*.pyc" -delete
+    find . -name "*~" -delete
 
-# USER_ACCOUNT=${USER:-"unknown_user"}
-# REPOS=(~/mysoft/pei/vasp_utils ~/mysoft/pei/mymetal)
+    # Check for .gitignore
+    if [ ! -f .gitignore ]; then
+      log "⚠️  Warning: .gitignore not found."
+    fi
 
-# for REPO in "${REPOS[@]}"; do
-#     if [ -d "$REPO" ]; then
-#         echo "==> Updating repository in $REPO"
-#         cd "$REPO"
+    # Stage & commit all changes
+    if [[ -n $(git status --porcelain) ]]; then
+      log "🔧 Committing changes..."
+      git add -A
+      git commit -m "Auto update from $USER_ACCOUNT at $(date '+%F %T')"
+    else
+      log "✅ No local changes to commit."
+    fi
 
-#         # 检查是否有未提交的更改并提交
-#         if [[ -n $(git status --porcelain) ]]; then
-#             git add .
-#             git commit -m "Update from $USER_ACCOUNT."
-#         else
-#             echo "No changes to commit in $REPO."
-#         fi
+    # Optional: Pull updates
+    if ! $PUSH_ONLY; then
+      if $USE_STASH && [[ -n $(git status --porcelain) ]]; then
+        log "📥 Stashing changes before pull..."
+        git stash push -m "auto-stash before pull"
+        git pull --rebase
+        git stash pop || log "⚠️  Stash pop caused conflicts. Please resolve manually."
+      else
+        git pull --rebase
+      fi
+    else
+      log "⏩ Pull skipped (push-only mode)."
+    fi
 
-#         # 拉取和推送到已设置的上游分支
-#         git pull --rebase  # 使用 --rebase 以减少合并冲突
-#         git push
+    # Conflict check
+    if git ls-files -u | grep -q .; then
+      log "❌ Merge conflict detected. Manual resolution required. Skipping push."
+      cd - >/dev/null
+      continue
+    fi
 
-#         cd - > /dev/null
-#     else
-#         echo "Repository $REPO does not exist."
-#     fi
-#     echo "done!"
-#     printf '=%.0s' {1..80}; echo
-# done
+    # Ensure upstream exists
+    if git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+      log "📤 Pushing to remote..."
+      if ! git push; then
+        PATCH_BACKUP="../$(basename "$REPO")_backup_$(date +%Y%m%d_%H%M%S).patch"
+        git diff > "$PATCH_BACKUP"
+        log "⚠️ Push failed. Patch backup saved to $PATCH_BACKUP"
+      fi
+    else
+      log "❌ No upstream branch set. Skipping push."
+    fi
 
+    cd - >/dev/null
+    log "✅ Done syncing: $REPO"
+    printf '=%.0s' {1..80}; echo
+  else
+    log "❌ Repository not found or not a Git repo: $REPO"
+    printf '=%.0s' {1..80}; echo
+  fi
+done
+
+# ---- Summary ----
+log "🎉 All repositories processed."
+$ENABLE_LOG && log "📄 Log written to: $LOGFILE"
+
+# ---- Notification (optional, desktop only) ----
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send "Git Sync Complete" "All repositories updated."
+fi
