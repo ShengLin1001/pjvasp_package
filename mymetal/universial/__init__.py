@@ -44,7 +44,7 @@ __all__ = ['check_input',
                     'fixatoms',
                     'adjust_matrix',
                     'three_index_to_four_index',
-                    'my_plot', 'my_plot_brokenaxed', 'my_plot_energy_components', 'my_plot_interlayer_distance', 'my_plot_zpositions'      
-                    'my_plot_orientation', 'my_plot_complete_dos', 'my_plot_horizontal_vertical', 'my_plot_complete_dos', 'my_plot_idos'
+                    'my_plot', 'my_plot_brokenaxed', 'my_plot_energy_components', 'my_plot_interlayer_distance', 'my_plot_zpositions'      ,
+                    'my_plot_orientation', 'my_plot_complete_dos', 'my_plot_horizontal_vertical', 'my_plot_complete_dos', 'my_plot_idos',
                     'get_integration'
 ]

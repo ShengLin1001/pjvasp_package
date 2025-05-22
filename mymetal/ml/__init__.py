@@ -15,10 +15,10 @@ Modules:
 from mymetal.ml.dataset import (CustomDataset, get_all_data, get_mean_std)
 from mymetal.ml.plot import (my_imshow)
 from mymetal.ml.model import (train_model, visualize_model, visualize_model_predictions)
-from mymetal.ml.n2p2.dataset import (generate_dataset_from_outcar, my_generate_dataset_from_outcar, write_nnp_data_from_ase)
+from mymetal.ml.n2p2.dataset import (generate_dataset_from_outcar, generate_dataset_from_outcar_n2p2, write_nnp_data_from_ase, read_nnp_dataset, generate_dataset_from_dict)
 
 __all__ = ['CustomDataset', 'get_all_data', 'get_mean_std',
            'my_imshow',
            'train_model', 'visualize_model', 'visualize_model_predictions',
-              'generate_dataset_from_outcar', 'my_generate_dataset_from_outcar', 'write_nnp_data_from_ase'
+              'generate_dataset_from_outcar', 'generate_dataset_from_outcar_n2p2', 'write_nnp_data_from_ase, 'read_nnp_dataset', 'generate_dataset_from_dict',
 ]
