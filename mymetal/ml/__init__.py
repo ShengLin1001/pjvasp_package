@@ -20,5 +20,5 @@ from mymetal.ml.n2p2.dataset import (generate_dataset_from_outcar, generate_data
 __all__ = ['CustomDataset', 'get_all_data', 'get_mean_std',
            'my_imshow',
            'train_model', 'visualize_model', 'visualize_model_predictions',
-              'generate_dataset_from_outcar', 'generate_dataset_from_outcar_n2p2', 'write_nnp_data_from_ase, 'read_nnp_dataset', 'generate_dataset_from_dict',
+              'generate_dataset_from_outcar', 'generate_dataset_from_outcar_n2p2', 'write_nnp_data_from_ase', 'read_nnp_dataset', 'generate_dataset_from_dict',
 ]
