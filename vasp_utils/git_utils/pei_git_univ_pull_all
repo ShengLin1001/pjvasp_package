@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# ================================
+# Git Multi-Repository Pull Script
+# Author: ChatGPT
+# Version: 1.0
+# ================================
+
+# ---- Configurable paths ----
+REPOS=(
+  "$HOME/mysoft/pei/vasp_utils"
+  "$HOME/mysoft/pei/mymetal"
+)
+
+# ---- Optional logging ----
+ENABLE_LOG=false
+LOGFILE="git_pull_$(date +%F).log"
+
+# ---- Parse input arguments ----
+for arg in "$@"; do
+  case $arg in
+    --log) ENABLE_LOG=true ;;
+  esac
+done
+
+# ---- Logging function ----
+log() {
+  if $ENABLE_LOG; then
+    echo "$1" | tee -a "$LOGFILE"
+  else
+    echo "$1"
+  fi
+}
+
+# ---- Pull loop ----
+for REPO in "${REPOS[@]}"; do
+  if [ -d "$REPO/.git" ]; then
+    log "📥 Pulling updates from: $REPO"
+    cd "$REPO" || continue
+
+    if [[ -n $(git status --porcelain) ]]; then
+      log "⚠️  Local changes found in $REPO. You may want to stash or commit first."
+    fi
+
+    if git pull --rebase; then
+      log "✅ Pull successful for $REPO"
+    else
+      log "❌ Pull failed for $REPO"
+    fi
+
+    cd - >/dev/null
+    printf '=%.0s' {1..60}; echo
+  else
+    log "❌ Not a valid Git repository: $REPO"
+    printf '=%.0s' {1..60}; echo
+  fi
+done
+
+# ---- Done ----
+log "🎉 Git pull completed for all repositories."
+$ENABLE_LOG && log "📄 Log written to: $LOGFILE"
+
+if command -v notify-send >/dev/null 2>&1; then
+  notify-send "Git Pull Complete" "All repositories pulled."
+fi
