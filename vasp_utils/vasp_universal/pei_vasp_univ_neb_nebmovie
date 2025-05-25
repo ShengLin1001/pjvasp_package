@@ -1,13 +1,18 @@
 #!/bin/bash
 
+main(){
+    nebmovie
+}
+
+nebmovie(){
 # ====================
 # Configuration
 # ====================
 output_file="movie.xyz"
 
-echo "==========================================================="
+echo "-----------------------------------------------------------"
 echo "Searching for numeric subdirectories containing POSCAR files"
-echo "==========================================================="
+echo "-----------------------------------------------------------"
 
 # 删除旧的轨迹文件
 rm -f "$output_file"
@@ -44,12 +49,13 @@ print(f'Succesfully generated: {output_file}')
         "
 
 
-echo "==========================================================="
+echo "-----------------------------------------------------------"
 echo "All structure data has been successfully extracted."
 echo "Results have been saved to: $output_file"
-echo "==========================================================="
-
-echo "==========================================================="
 echo "✅ Slab structure extraction completed successfully."
 echo "📄 Output saved to: $output_file"
-echo "==========================================================="
+echo "-----------------------------------------------------------"
+}
+
+
+main "$@"; exit

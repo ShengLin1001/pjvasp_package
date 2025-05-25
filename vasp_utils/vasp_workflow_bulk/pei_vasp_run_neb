@@ -1,0 +1,143 @@
+#!/bin/bash
+# J. Pei, 2025-05-23
+#  >>> dist.pl y_full_relax_neb/ini/CONTCAR y_full_relax_neb/fin/CONTCAR
+#  3.117
+#  >>> pei_run_neb 6 (3.117/0.8 is a good choice)
+
+main(){
+    logfile=pei_vasp_run_neb.log
+    exec > >(tee $logfile) 2>&1
+
+    echo "🟢 ===== Run started at: $(date) ====="
+    echo "📌 Command: $0 $@"
+    echo "==============================="
+
+    srcdir0=y_full_relax_neb
+    if [ -d "$srcdir0" ]; then
+        sub_run_neb $1
+    else
+        echo "❌ ERROR: No $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+sub_run_neb(){
+    myroot=$(pwd)
+    srcdir=$myroot/y_full_relax_temp
+    rm -rf "$srcdir"
+
+    echo "🧹 Copying working directory from $srcdir0"
+    cp -r "$srcdir0" "$srcdir"
+    cd "$srcdir"
+
+    echo "==========================================================="
+    echo "📋 INFO:"
+    echo "📁 Using $srcdir0 as reference, and expecting ini/CONTCAR & fin/CONTCAR"
+    echo "📄 Additional required input: {INCAR.neb, KPOINTS.neb, sub.*.neb, Y_*.neb}"
+    echo "📏 Recommended distance: run dist.pl CONTCAR_ini CONTCAR_fin → distance / 0.8"
+    echo "💡 Example usage:"
+    echo "    >>> dist srcdir/ini/CONTCAR srcdir/fin/CONTCAR"
+    echo "    3.13"
+    echo "    >>> pei_vasp_run_neb 6"
+    echo "==========================================================="
+
+    echo "🔍 Checking required CONTCAR files..."
+    for myfile in ./ini/CONTCAR ./fin/CONTCAR; do
+        if [ -f "$myfile" ]; then
+            echo "✅ $myfile exists."
+        else
+            echo "❌ ERROR: $myfile not found. Not fully relaxed."
+            exit 1
+        fi
+    done
+
+    dirsurf=$myroot/y_neb
+    echo "🧹 Preparing clean NEB workspace..."
+    rm -rI "$dirsurf"
+    mkdir "$dirsurf"
+    cd "$dirsurf"
+    mkdir y_dir
+    cd y_dir
+
+    num=$1
+    if [[ ! "$num" =~ ^[0-9]+$ ]]; then
+        echo "❌ ERROR: Usage: $0 <non-negative integer>"
+        exit 1
+    fi
+
+    echo "📏 Running dist.pl to check distance..."
+    dist.pl "$srcdir/ini/CONTCAR" "$srcdir/fin/CONTCAR"
+
+    echo "🧬 Running nebmake.pl to generate $num images..."
+    nebmake.pl "$srcdir/ini/CONTCAR" "$srcdir/fin/CONTCAR" "$num"
+
+    cp "$srcdir/ini/OUTCAR" OUTCAR.ini
+    cp "$srcdir/fin/OUTCAR" OUTCAR.fin
+
+    echo "🎞️  Generating movie with pei_vasp_univ_neb_nebmovie..."
+    pei_vasp_univ_neb_nebmovie
+    mv movie.xyz "$dirsurf"
+
+    echo "🔢 Generating image list..."
+    arr=()
+    for i in $(seq -w 0 $((num + 1))); do
+        arr+=("$i")
+    done
+
+    echo "📂 Checking POSCAR format in each image directory..."
+    for val in "${arr[@]}"; do
+        dirn=$(printf "%02d" "$val")
+        echo "-----------------------------------------------------------"
+        echo "📄 Processing POSCAR in image $dirn"
+        cd "$dirn"
+        head -n 10 POSCAR
+        cd ..
+    done
+
+    echo "📦 Moving OUTCAR files to 00/ and $(printf "%02d" "${arr[-1]}")/"
+    mv OUTCAR.ini "$(printf "%02d" "${arr[0]}")/OUTCAR"
+    mv OUTCAR.fin "$(printf "%02d" "${arr[$((${#arr[@]} - 1))]}")/OUTCAR"
+
+    echo "📥 Copying input templates from ini/..."
+    cp "$srcdir"/ini/{INCAR.neb,KPOINTS.neb,POTCAR,sub.*.neb,Y_*.neb} ./ 2>/dev/null
+
+    echo "✂️  Renaming *.neb files to remove extension..."
+    for file in ./*.neb; do
+        [ -e "$file" ] || continue
+        filename=$(basename "$file")
+        newname="${filename%.neb}"
+        mv "$file" "./$newname"
+        echo "🔁 Moved: $file => $newname"
+    done
+
+    echo "🧾 Checking INCAR content:"
+    echo "Note: ISIF, ISYM, EDIFF, EDIFFG, NCORE"
+    cat -n INCAR
+
+    echo "📍 Checking KPOINTS content:"
+    echo "Note: Grid should match the relaxed cell."
+    cat -n KPOINTS
+
+    echo "🧪 Checking POTCAR (official version should contain COPYR):"
+    head -n 10 POTCAR
+
+    echo "🖥️  Checking sub.vasp:"
+    echo "Note: Check core number and parallel settings."
+    cat -n sub.*
+
+    echo "📐 Checking Y_CONSTR_CELL:"
+    echo "Note: Related to ISIF, controls cell constraint precision."
+    cat -n Y_*
+
+    echo "🚀 Ready to submit job in directory: $(pwd)"
+    # sbatch sub.*
+
+    echo "🧹 Cleaning temporary directory..."
+    rm -rf "$srcdir"
+
+    echo "📄 Moving log file to: $dirsurf/$logfile"
+    mv "$myroot/$logfile" "$dirsurf/"
+}
+
+main "$@"
+exit
