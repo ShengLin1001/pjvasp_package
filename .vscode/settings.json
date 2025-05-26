@@ -1,5 +1,7 @@
 {
     "conventionalCommits.scopes": [
-        "n2p2"
+        "n2p2",
+        "git",
+        "vscode"
     ]
 }
