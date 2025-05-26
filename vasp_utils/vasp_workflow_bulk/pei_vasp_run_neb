@@ -95,8 +95,12 @@ sub_run_neb(){
     done
 
     echo "📦 Moving OUTCAR files to 00/ and $(printf "%02d" "${arr[-1]}")/"
-    mv OUTCAR.ini "$(printf "%02d" "${arr[0]}")/OUTCAR"
-    mv OUTCAR.fin "$(printf "%02d" "${arr[$((${#arr[@]} - 1))]}")/OUTCAR"
+    dir1=$(printf "%02d" "${arr[0]}")
+    dir2=$(printf "%02d" "${arr[-1]}")
+    mv OUTCAR.ini $dir1/OUTCAR
+    mv OUTCAR.fin $dir2/OUTCAR
+    cp $dir1/POSCAR $dir1/CONTCAR
+    cp $dir2/POSCAR $dir2/CONTCAR
 
     echo "📥 Copying input templates from ini/..."
     cp "$srcdir"/ini/{INCAR.neb,KPOINTS.neb,POTCAR,sub.*.neb,Y_*.neb} ./ 2>/dev/null
@@ -119,7 +123,7 @@ sub_run_neb(){
     cat -n KPOINTS
 
     echo "🧪 Checking POTCAR (official version should contain COPYR):"
-    head -n 10 POTCAR
+    head -n 10 POTCAR | cat -n
 
     echo "🖥️  Checking sub.vasp:"
     echo "Note: Check core number and parallel settings."

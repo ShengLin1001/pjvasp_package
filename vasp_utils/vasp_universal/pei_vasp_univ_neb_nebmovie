@@ -1,61 +1,62 @@
 #!/bin/bash
 
 main(){
-    nebmovie
+    mode=${1:-0}  # 默认参数为0
+    nebmovie "$mode"
 }
 
 nebmovie(){
-# ====================
-# Configuration
-# ====================
-output_file="movie.xyz"
+    mode=$1
+    if [[ "$mode" == "1" ]]; then
+        target_file="CONTCAR"
+    else
+        target_file="POSCAR"
+    fi
+    output_file="movie_${target_file}.xyz"
 
-echo "-----------------------------------------------------------"
-echo "Searching for numeric subdirectories containing POSCAR files"
-echo "-----------------------------------------------------------"
+    echo "==========================================================="
+    echo "📋 INFO:"
+    echo "📁 Collecting structure files from numeric subdirectories"
+    echo "📄 Target file type: $target_file"
+    echo "📤 Output will be saved as: $output_file"
+    echo "🔧 Used tool: ASE (Atomic Simulation Environment)"
+    echo "💡 Example usage:"
+    echo "    >>> bash nebmovie.sh         # Uses POSCAR (default)"
+    echo "    >>> bash nebmovie.sh 1       # Uses CONTCAR"
+    echo "==========================================================="
 
-# 删除旧的轨迹文件
-rm -f "$output_file"
-echo "==> nebmovie: read_vasp use ASE package and appending them in order"
+    rm -f "$output_file"
+    echo "📦 Starting to collect and write structures..."
 
-python3 -c "
+    python3 -c "
 from ase.io import write
 from ase.io.vasp import read_vasp
 import os
 
-# 获取当前目录下所有的子文件夹名，并根据文件夹名排序（按数字顺序）
 folders = [folder for folder in os.listdir() if os.path.isdir(folder) and folder.isdigit()]
+print(f'📁 Found directory: {folders}')
 
-print(f'Found directory: {folders}')
-
-# 输出轨迹文件名
 output_file = '$output_file'
-
-# 初始化一个空的轨迹列表
+target_file = '$target_file'
 atoms_list = []
 
-# 遍历每个文件夹，读取其中的 POSCAR 文件
-for folder in sorted(folders, key=lambda x: int(x)):  # 按数字顺序排序文件夹
-    print(f'Appending: {folder}')
-    poscar_file = os.path.join(folder, 'POSCAR')  # 构建 POSCAR 文件的完整路径
-    if os.path.exists(poscar_file):  # 检查文件是否存在
-        atoms = read_vasp(poscar_file)  # 使用 ASE 读取 POSCAR 文件
+for folder in sorted(folders, key=lambda x: int(x)):
+    print(f'📥 Appending: {folder}')
+    file_path = os.path.join(folder, target_file)
+    if os.path.exists(file_path):
+        atoms = read_vasp(file_path)
         atoms_list.append(atoms)
 
-# 写入 LAMMPS 轨迹文件
 write(output_file, atoms_list, format='extxyz')
+print(f'✅ Successfully generated: {output_file}')
+    "
 
-print(f'Succesfully generated: {output_file}')
-        "
-
-
-echo "-----------------------------------------------------------"
-echo "All structure data has been successfully extracted."
-echo "Results have been saved to: $output_file"
-echo "✅ Slab structure extraction completed successfully."
-echo "📄 Output saved to: $output_file"
-echo "-----------------------------------------------------------"
+    echo "==========================================================="
+    echo "🎉 DONE:"
+    echo "📊 Total structures processed: ${#folders[@]}"
+    echo "📄 Output file: $output_file"
+    echo "✅ All structure data extracted and combined successfully."
+    echo "==========================================================="
 }
-
 
 main "$@"; exit
