@@ -352,6 +352,19 @@ def general_modify_legend(legend, boxstyle: str = 'Square',
 
     Returns:
         None
+
+    Example:
+            >>> from mymetal.universial.plot.plot import my_plot
+            >>> from mymetal.universial.plot.general import general_modify_legend
+            >>> fig, axes = my_plot(left = 1.6, grid=False, fig_sharex=False)
+            >>> handles_left, labels_left = ax.get_legend_handles_labels()
+            >>> handles_right, labels_right = ax2.get_legend_handles_labels()
+            >>> handles = handles_left + handles_right
+            >>> labels = labels_left + labels_right
+            >>> legend = ax.legend(handles, labels, loc='upper right',
+            ...                    bbox_to_anchor=(0.95, 0.7),
+            ...                    columnspacing=0.0, ncol=1)
+            >>> general_modify_legend(ax.legend(loc='lower center', bbox_to_anchor=(0.5, 0.05), fontsize = 24))
     """
     legend.get_frame().set_boxstyle(boxstyle, pad=pad)
     legend.get_frame().set_linewidth(linewidth)

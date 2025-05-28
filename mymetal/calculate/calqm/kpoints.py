@@ -8,6 +8,7 @@ to compute reciprocal lattice vectors using both cross product and matrix invers
 
 Functions:
     - get_kpoints_by_size(): Generates Monkhorst-Pack and Gamma-centered k-points.
+    - get_size_by_distance(): Computes automatic k-point mesh based on RK or KSPACING.
     - cal_reciprocal_matrix(): Calculates reciprocal lattice vectors using cross product.
     - cal_reciprocal_matrix2(): Calculates reciprocal lattice vectors using matrix inversion.
     - get_lattice_information(): Displays real-space and reciprocal lattice information from a VASP POSCAR file.
@@ -51,6 +52,47 @@ def get_kpoints_by_size(size: tuple=(1, 1, 1), offset: tuple=(0.5, 0.5, 0.5)):
             gkpoints[:, i] += transformed_offset
     
     return mpkpoints, gkpoints
+
+def get_size_by_distance(file: str = None, rk: int = 100, kspacing: float =None) -> tuple:
+    """
+    Compute automatic k-point mesh based on RK or KSPACING scheme in VASP.
+
+    This function reads the unit cell from a VASP CONTCAR file, calculates
+    the reciprocal lattice lengths (in 2π/Å), and determines the number of 
+    k-points along each direction using:
+
+    - **Old VASP method** (RK): uses rounding (`round`) via `+0.5` and `int(...)`
+    - **New VASP method** (KSPACING): uses the ceiling function (`ceil`)
+        
+
+    Args:
+        file (str): Path to the VASP CONTCAR file.
+        rk (int): RK product for the old method (unit: 2π/Å). R_k = 2π / KSPACING.
+        kspacing (float, optional): KSPACING value (unit: Å⁻¹). If None, derived from rk.
+
+    Returns:
+        tuple: (old_auto_kpoints, new_kspacing_kpoints), each a (3,) np.ndarray.
+
+    Example:
+        >>> oldk, newk = get_kpoints_by_rk_or_kspacing(file='CONTCAR', rk=81)
+        >>> print("Old method:", oldk)
+        Old method: [32 32  3]
+        >>> print("New method:", newk)
+        New method: [33 33  3]
+    """
+    if kspacing is None:
+        kspacing = 2 * np.pi / rk  # units: 1/Å, rk - 2*pi/Å
+    # kspacing (R_{k}) in R_k = 2π / KSPACING
+    np.set_printoptions(precision=8, suppress=True)
+    atoms = read_vasp(file)
+    reciprocal_cell_length = np.array(atoms.cell.reciprocal().cellpar())[:3] # units: 2*pi/Å
+    
+    # see here: https://www.vasp.at/wiki/index.php/KSPACING
+    # +0.5 is to round up, 四舍五入
+    old_auto_kpoints =  np.maximum(1, (rk * reciprocal_cell_length + 0.5).astype(int))
+    # KSPACING tag 用的是上限函数，3.2 => 4
+    new_kspacing_kpoints = np.maximum(1, np.ceil(reciprocal_cell_length * 2 * np.pi / kspacing).astype(int))
+    return old_auto_kpoints, new_kspacing_kpoints
 
 def cal_reciprocal_matrix(cell_matrix: np.ndarray=None, scale: float=1.0):
     """

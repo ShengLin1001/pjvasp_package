@@ -34,7 +34,7 @@ from mymetal.calculate.calenergy.surfenergy import cal_surface_energy
 from mymetal.calculate.electronic_structure.plotter import *
 from mymetal.calculate.electronic_structure.universial import *
 from mymetal.calculate.material_science.schmid import *
-from mymetal.calculate.calqm.kpoints import get_kpoints_by_size, cal_reciprocal_matrix, cal_reciprocal_matrix2, get_lattice_information
+from mymetal.calculate.calqm.kpoints import get_kpoints_by_size, get_size_by_distance, cal_reciprocal_matrix, cal_reciprocal_matrix2, get_lattice_information
 __all__ = [
             'compare_atoms', 'cal_atom_num', 'relative_diff', 'cal_mismatch', 'filter_results', 'cal_stretch_lattice',
             'cal_deform_matrix',
@@ -50,6 +50,6 @@ __all__ = [
 
             'cal_fcc_schmid_factors',
 
-            'get_kpoints_by_size', 'cal_reciprocal_matrix', 'cal_reciprocal_matrix2', 'get_lattice_information',
+            'get_kpoints_by_size', 'get_size_by_distance','cal_reciprocal_matrix', 'cal_reciprocal_matrix2', 'get_lattice_information',
 
 ]
