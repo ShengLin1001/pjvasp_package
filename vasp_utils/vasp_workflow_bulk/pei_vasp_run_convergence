@@ -1,0 +1,227 @@
+#!/bin/bash
+# J. Pei, 2025-05-29
+# 🧪 ENCUT and KPOINTS convergence test script
+# 📌 Usage: pei_vasp_run_convergence -encuts 500 -kpoints 3 3 3 4 4 4
+
+main() {
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+
+    # -----------------------
+    # --help support
+    # -----------------------
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        echo -e "${GREEN}pei_vasp_run_convergence${NC} - ENCUT and KPOINTS convergence test"
+        echo ""
+        echo -e "${YELLOW}Usage:${NC}"
+        echo -e "  $0 ${GREEN}-encuts 400 500${NC}"
+        echo -e "  $0 ${GREEN}-kpoints 3 3 3 4 4 4${NC}"
+        echo -e "  $0 ${GREEN}-encuts 400 500 -kpoints 3 3 3 4 4 4${NC}"
+        echo ""
+        echo -e "${YELLOW}Options:${NC}"
+        echo -e "  ${GREEN}-encuts <val1> <val2> ...${NC}    Test convergence with different ENCUT values"
+        echo -e "  ${GREEN}-kpoints <kx1> <ky1> <kz1> ...${NC} Test convergence with different K-point meshes (must be groups of 3)"
+        echo ""
+        echo -e "${YELLOW}Notes:${NC}"
+        echo -e "  - The source directory must be ${BLUE}y_full_relax${NC}"
+        echo -e "  - Required input files: ${GREEN}{INCAR, KPOINTS, CONTCAR or POSCAR, POTCAR, sub.*, Y_*}${NC}"
+        echon -e "  - Don't copy ${GREEN}CHGCAR, WAVECAR${NC}"
+        echo ""
+        echo -e "${YELLOW}Example:${NC}"
+        echo -e "  $0 -encuts 400 500"
+        echo -e "  $0 -kpoints 3 3 3 4 4 4"
+        echo -e "  $0 -encuts 400 500 -kpoints 3 3 3 4 4 4"
+        echo ""
+        exit 0
+    fi
+
+    script_name=$(basename "$0")
+    logfile="${script_name}.log"
+
+    # 📜 Log everything to file and terminal
+    exec > >(tee "$logfile") 2>&1
+
+
+    echo -e "🟢 ===== ${GREEN}Convergence test started${NC} at: $(date) ====="
+    echo "📌 Command: $0 $@"
+    echo "==========================================================="
+
+    srcdir0=y_full_relax
+    if [ -d "$srcdir0" ]; then
+        sub_run_convergence "$@"
+    else
+        echo -e "❌ ${YELLOW}ERROR${NC}: Directory ${BLUE}$srcdir0${NC} not found. Aborting."
+        exit 1
+    fi
+}
+
+sub_run_convergence() {
+    myroot=$(pwd)
+    srcdir=$myroot/y_full_relax_temp
+
+    echo "🧹 Preparing working directory..."
+    rm -rf "$srcdir"
+    echo -e "📁 Copying from: ${BLUE}$srcdir0${NC}"
+    cp -r "$srcdir0" "$srcdir"
+    cd "$srcdir"
+
+    echo "==========================================================="
+    echo -e "📋 ${YELLOW}INFO${NC}:"
+    echo -e "📁 Source:       ${BLUE}$srcdir0${NC}"
+    echo -e "📄 Required:     ${GREEN}{INCAR, KPOINTS, CONTCAR, POTCAR, sub.*, Y_*}${NC}"
+    echo ""
+    echo -e "🧪 Supported:"
+    echo -e "    ➤ ENCUT:     ${GREEN}-encuts 400 500${NC}"
+    echo -e "    ➤ KPOINTS:   ${GREEN}-kpoints 3 3 3 4 4 4${NC}"
+    echo ""
+    echo -e "📏 Note:"
+    echo -e "    - ${YELLOW}KPOINTS values must be multiple of 3${NC}"
+    echo -e "    - Don't copy ${GREEN}CHGCAR, WAVECAR${NC}"
+    echo "==========================================================="
+
+    echo "🔍 Checking CONTCAR..."
+    if [ -f CONTCAR ]; then
+        echo -e "✅ ${GREEN}CONTCAR found${NC}"
+    else 
+        echo -e "⚠️ ${YELLOW}CONTCAR not found${NC}, using POSCAR"
+        cp POSCAR CONTCAR
+    fi
+
+    pei_vasp_univ_find_and_change -nsw     0
+    pei_vasp_univ_find_and_change -ibrion -1
+    pei_vasp_univ_find_and_change -lwave   F
+    pei_vasp_univ_find_and_change -lcharg  F
+    pei_vasp_univ_find_and_change -lelf    F
+    pei_vasp_univ_find_and_change -isif    2
+    echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+
+    cat -n POSCAR
+    cat -n KPOINTS
+    grep NSW INCAR
+    grep IBRION INCAR
+    grep LWAVE INCAR
+    grep LCHARG INCAR
+    grep LELF INCAR
+    grep ISIF INCAR
+    cat -n Y_CONSTR_LATT
+    head -n 10 POTCAR | cat -n
+    echo "==========================================================="
+
+    echo "📥 Parsing arguments..."
+    encuts=()
+    kpoints=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -encuts)
+                shift
+                while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+                    encuts+=("$1") 
+                    shift
+                done
+                ;;
+            -kpoints)
+                shift
+                while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+                    kpoints+=("$1")  
+                    shift
+                done
+                ;;
+            *)
+                echo -e "❌ ${YELLOW}ERROR${NC}: Unknown option $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    echo -e "📏 ENCUTs:   ${GREEN}${encuts[*]}${NC}"
+    echo -e "📏 KPOINTS:  ${GREEN}${kpoints[*]}${NC}"
+
+    elen=${#encuts[@]}
+    klen=${#kpoints[@]}
+
+    echo "🧪 Validating input..."
+    if (( klen % 3 != 0 )); then
+        echo -e "❌ ${YELLOW}ERROR${NC}: KPOINTS length ($klen) is not divisible by 3"
+        exit 1
+    fi
+
+    cd "$myroot"
+
+    # 🎯 ENCUT convergence test
+    if (( elen != 0 )); then
+        dir=y_convergence_encuts
+        echo "==========================================================="
+        echo -e "📂 Creating ENCUT test dir: ${BLUE}$dir${NC}"
+        rm -rI "$dir"
+        mkdir "$dir"
+        cd "$dir"
+        mkdir y_dir
+        cd y_dir
+        
+        for val in "${encuts[@]}"; do
+            echo "----------------"
+            echo -e "📏 ENCUT = ${GREEN}$val${NC}"
+            dirn=$val
+            mkdir "$dirn"
+            cd "$dirn"
+
+            cp "$srcdir"/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*} ./ 2>/dev/null
+            mv CONTCAR POSCAR
+            pei_vasp_univ_find_and_change -encut "$val"
+            grep ENCUT INCAR
+            sed -n '4p' KPOINTS
+            echo -e "🚀 Ready to submit: ${BLUE}$(pwd)${NC}"
+            sbatch sub.*
+
+            cd ..
+        done
+
+        cd "$myroot"
+    fi
+
+    # 🎯 KPOINTS convergence test
+    if (( klen != 0 )); then
+        dir=y_convergence_kpoints
+        echo "==========================================================="
+        echo -e "📂 Creating KPOINTS test dir: ${BLUE}$dir${NC}"
+        rm -rI "$dir"
+        mkdir "$dir"
+        cd "$dir"
+        mkdir y_dir
+        cd y_dir
+
+        for ((i = 0; i < klen; i+=3)); do
+            echo "----------------"
+            echo -e "📏 KPOINTS = ${GREEN}${kpoints[i]} ${kpoints[i+1]} ${kpoints[i+2]}${NC}"
+            dirn="${kpoints[i]}-${kpoints[i+1]}-${kpoints[i+2]}"
+            mkdir "$dirn"
+            cd "$dirn"
+
+            cp "$srcdir"/{INCAR,CONTCAR,POTCAR,sub.*,Y_*} ./ 2>/dev/null
+            mv CONTCAR POSCAR
+
+            cat > KPOINTS << EOF
+Regular ${kpoints[i]} x ${kpoints[i+1]} x ${kpoints[i+2]} mesh centered at Gamma 
+0
+Gamma
+${kpoints[i]} ${kpoints[i+1]} ${kpoints[i+2]}
+0  0  0
+EOF
+            grep ENCUT INCAR
+            sed -n '4p' KPOINTS
+            echo -e "🚀 Ready to submit: ${BLUE}$(pwd)${NC}"
+            sbatch sub.*
+
+            cd ..
+        done
+    fi
+
+    # ♻️ Cleanup
+    echo -e "🧹 Cleaning up: ${BLUE}$srcdir${NC}"
+    rm -rf "$srcdir"
+}
+
+main "$@"
+exit
