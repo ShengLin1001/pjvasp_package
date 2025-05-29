@@ -238,6 +238,20 @@ case "$1" in
         sub_change  INCAR  "LMAXMIX"  "$str"
         ;;
 
+    -lwave)
+        str=" LWAVE= $2      # write WAVECAR"
+        sub_change  INCAR  "LWAVE"  "$str"
+        ;;
+
+    -lcharg)
+        str=" LCHARG= $2      # write CHGCAR"
+        sub_change  INCAR  "LCHARG"  "$str"
+        ;;
+
+    -lelf)
+        str=" LELF= $2      # write electronic localiz. function (ELF), KPAR must be off"
+        sub_change  INCAR  "LELF"  "$str"
+        ;;
 
     *)  echo "==>  Option $1 not recognized. Abort!" 
         exit
