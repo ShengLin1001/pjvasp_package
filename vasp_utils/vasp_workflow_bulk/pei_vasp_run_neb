@@ -5,18 +5,44 @@
 #  >>> pei_run_neb 6 (3.117/0.8 is a good choice)
 
 main(){
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+
+    # =============================
+    # --help option
+    # =============================
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        echo -e "${GREEN}pei_vasp_run_neb${NC} - Generate and prepare NEB images from relaxed endpoints"
+        echo ""
+        echo -e "${YELLOW}Usage:${NC}"
+        echo -e "  $0 ${GREEN}<N_IMAGE>${NC}"
+        echo ""
+        echo -e "${YELLOW}Description:${NC}"
+        echo -e "  - Source folder must be: ${BLUE}y_full_relax_neb${NC}"
+        echo -e "  - Must contain: ${GREEN}ini/CONTCAR${NC}, ${GREEN}fin/CONTCAR${NC}"
+        echo -e "  - Recommended number of images = DISTANCE / 0.8"
+        echo ""
+        echo -e "${YELLOW}Example:${NC}"
+        echo -e "  dist.pl y_full_relax_neb/ini/CONTCAR y_full_relax_neb/fin/CONTCAR"
+        echo -e "  $0 6"
+        echo ""
+        exit 0
+    fi
+
     logfile=pei_vasp_run_neb.log
     exec > >(tee $logfile) 2>&1
 
-    echo "🟢 ===== Run started at: $(date) ====="
-    echo "📌 Command: $0 $@"
+    echo -e "🟢 ===== ${GREEN}Run started${NC} at: $(date) ====="
+    echo -e "📌 Command: ${BLUE}$0${NC} $@"
     echo "==============================="
 
     srcdir0=y_full_relax_neb
     if [ -d "$srcdir0" ]; then
         sub_run_neb $1
     else
-        echo "❌ ERROR: No $srcdir0 found! Abort!"
+        echo -e "❌ ${YELLOW}ERROR${NC}: No ${BLUE}$srcdir0${NC} found! Abort!"
         exit
     fi
 }
@@ -26,33 +52,33 @@ sub_run_neb(){
     srcdir=$myroot/y_full_relax_temp
     rm -rf "$srcdir"
 
-    echo "🧹 Copying working directory from $srcdir0"
+    echo -e "🧹 Copying working directory from ${BLUE}$srcdir0${NC}"
     cp -r "$srcdir0" "$srcdir"
     cd "$srcdir"
 
     echo "==========================================================="
-    echo "📋 INFO:"
-    echo "📁 Using $srcdir0 as reference, and expecting ini/CONTCAR & fin/CONTCAR"
-    echo "📄 Additional required input: {INCAR.neb, KPOINTS.neb, sub.*.neb, Y_*.neb}"
-    echo "📏 Recommended distance: run dist.pl CONTCAR_ini CONTCAR_fin → distance / 0.8"
-    echo "💡 Example usage:"
-    echo "    >>> dist srcdir/ini/CONTCAR srcdir/fin/CONTCAR"
-    echo "    3.13"
-    echo "    >>> pei_vasp_run_neb 6"
+    echo -e "📋 ${YELLOW}INFO${NC}:"
+    echo -e "📁 Using ${BLUE}$srcdir0${NC} as reference, and expecting ini/CONTCAR & fin/CONTCAR"
+    echo -e "📄 Required input: ${GREEN}{INCAR.neb, KPOINTS.neb, sub.*.neb, Y_*.neb}${NC}"
+    echo -e "📏 Recommended: run ${BLUE}dist.pl CONTCAR_ini CONTCAR_fin${NC} → distance / 0.8"
+    echo -e "💡 Example:"
+    echo -e "    >>> dist srcdir/ini/CONTCAR srcdir/fin/CONTCAR"
+    echo -e "    3.13"
+    echo -e "    >>> pei_vasp_run_neb 6"
     echo "==========================================================="
 
     echo "🔍 Checking required CONTCAR files..."
     for myfile in ./ini/CONTCAR ./fin/CONTCAR; do
         if [ -f "$myfile" ]; then
-            echo "✅ $myfile exists."
+            echo -e "✅ ${GREEN}$myfile exists.${NC}"
         else
-            echo "❌ ERROR: $myfile not found. Not fully relaxed."
+            echo -e "❌ ${YELLOW}ERROR${NC}: $myfile not found. Not fully relaxed."
             exit 1
         fi
     done
 
     dirsurf=$myroot/y_neb
-    echo "🧹 Preparing clean NEB workspace..."
+    echo -e "🧹 Preparing clean NEB workspace at: ${BLUE}$dirsurf${NC}"
     rm -rI "$dirsurf"
     mkdir "$dirsurf"
     cd "$dirsurf"
@@ -61,7 +87,7 @@ sub_run_neb(){
 
     num=$1
     if [[ ! "$num" =~ ^[0-9]+$ ]]; then
-        echo "❌ ERROR: Usage: $0 <non-negative integer>"
+        echo -e "❌ ${YELLOW}ERROR${NC}: Usage: $0 <non-negative integer>"
         exit 1
     fi
 
@@ -88,7 +114,7 @@ sub_run_neb(){
     for val in "${arr[@]}"; do
         dirn=$(printf "%02d" "$val")
         echo "-----------------------------------------------------------"
-        echo "📄 Processing POSCAR in image $dirn"
+        echo -e "📄 Processing POSCAR in image ${BLUE}$dirn${NC}"
         cd "$dirn"
         head -n 10 POSCAR
         cd ..
@@ -111,7 +137,7 @@ sub_run_neb(){
         filename=$(basename "$file")
         newname="${filename%.neb}"
         mv "$file" "./$newname"
-        echo "🔁 Moved: $file => $newname"
+        echo -e "🔁 Moved: ${BLUE}$file${NC} => ${GREEN}$newname${NC}"
     done
 
     echo "🧾 Checking INCAR content:"
@@ -122,7 +148,7 @@ sub_run_neb(){
     echo "Note: Grid should match the relaxed cell."
     cat -n KPOINTS
 
-    echo "🧪 Checking POTCAR (official version should contain COPYR):"
+    echo "🧪 Checking POTCAR (should contain COPYR):"
     head -n 10 POTCAR | cat -n
 
     echo "🖥️  Checking sub.vasp:"
@@ -133,13 +159,13 @@ sub_run_neb(){
     echo "Note: Related to ISIF, controls cell constraint precision."
     cat -n Y_*
 
-    echo "🚀 Ready to submit job in directory: $(pwd)"
+    echo -e "🚀 Ready to submit job in directory: ${BLUE}$(pwd)${NC}"
     # sbatch sub.*
 
-    echo "🧹 Cleaning temporary directory..."
+    echo -e "🧹 Removing temporary directory: ${BLUE}$srcdir${NC}"
     rm -rf "$srcdir"
 
-    echo "📄 Moving log file to: $dirsurf/$logfile"
+    echo -e "📄 Moving log file to: ${BLUE}$dirsurf/$logfile${NC}"
     mv "$myroot/$logfile" "$dirsurf/"
 }
 
