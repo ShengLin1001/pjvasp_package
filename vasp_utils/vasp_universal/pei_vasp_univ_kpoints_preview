@@ -1,0 +1,52 @@
+#!/bin/bash
+
+main(){
+    mode=${1:-0}  # 默认参数为0
+
+    script_name=$(basename "$0")
+    logfile="${script_name}.log"
+
+    run "$mode"
+}
+
+run(){
+    mode=$1
+    if [[ "$mode" == "1" ]]; then
+        target_file="CONTCAR"
+    else
+        target_file="POSCAR"
+    fi
+
+    python3 -c "
+from mymetal.calculate.calqm.kpoints import  get_size_by_distance
+oldks = []
+newks = []
+logfile = '$logfile'
+ini = 10
+fin = 100
+interval = 5
+for rk in range(ini, fin + interval, interval):
+    oldk, newk = get_size_by_distance(file='$target_file', rk=rk)
+    oldks.append(oldk)
+    newks.append(newk)
+    print(f'rk {rk}: Old method: {oldk}, New method: {newk}')
+with open(logfile, 'w') as f:
+    f.write('old k-points\n')
+    col = 5
+    fmt  = f'>{col}d'
+    fmt2 = f'>{col}s'
+    fmt_str = '{{0:{0}}} {{1:{0}}} {{2:{0}}} {{3:{0}}}\n'.format(fmt)
+    fmt2_str = '{{0:{0}}} {{1:{0}}} {{2:{0}}} {{3:{0}}}\n'.format(fmt2)
+    f.write(fmt2_str.format('rk', 'Nx', 'Ny', 'Nz'))
+    for i, k in enumerate(oldks):
+        rk = ini + i * interval
+        f.write(fmt_str.format(rk, k[0], k[1], k[2]))
+    f.write('\nnew k-points\n')
+    f.write(fmt2_str.format('rk', 'Nx', 'Ny', 'Nz'))
+    for i, k in enumerate(newks):
+        rk = ini + i * interval
+        f.write(fmt_str.format(rk, k[0], k[1], k[2]))
+    "
+}
+
+main "$@"; exit
