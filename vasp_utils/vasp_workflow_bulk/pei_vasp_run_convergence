@@ -221,6 +221,7 @@ EOF
     # ♻️ Cleanup
     echo -e "🧹 Cleaning up: ${BLUE}$srcdir${NC}"
     rm -rf "$srcdir"
+
 }
 
 main "$@"

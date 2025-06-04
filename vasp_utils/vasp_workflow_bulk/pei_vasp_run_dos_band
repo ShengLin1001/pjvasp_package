@@ -3,32 +3,66 @@
 
 
 main(){
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        echo -e "${GREEN}pei_vasp_run_dos_bs${NC} - Automated setup for DOS and Band Structure calculations"
+        echo ""
+        echo -e "${YELLOW}Usage:${NC}"
+        echo -e "  $0"
+        echo ""
+        echo -e "${YELLOW}Prerequisites:${NC}"
+        echo -e "  📁 Directory: ${BLUE}y_full_relax_scf${NC} with optimized structure"
+        echo -e "  🧱 Inside: relaxed ${GREEN}CONTCAR${NC}, SCF output files, and vaspkit-generated ${GREEN}KPATH.in${NC}"
+        echo ""
+        echo -e "${YELLOW}Steps:${NC}"
+        echo -e "  1. vaspkit -task 303 → generates KPATH.in"
+        echo -e "  2. Copy PRIM.VASP to POSCAR, run SCF: ISIF=2, NSW=0"
+        echo -e "  3. Then run: ${GREEN}$0${NC}"
+        echo ""
+        exit 0
+    fi
+
+    script_name=$(basename "$0")
+    logfile="${script_name}.log"
+
+    # 📜 Log everything to file and terminal
+    exec > >(tee "$logfile") 2>&1
+    
     srcdir0=y_full_relax_scf
     # scf y_full_relax
-    echo "==> dos band calculation"
-    echo "Note: You must follow those step"
-    echo "In y_full_relax_scf: structure optimization; ISIF=3;"
-    echo "                 vaspkit -task 303; cp PRIM.VASP POSCAR; sbatch sub.vasp; ISIF=2"
-    echo "                 scf; NSW=0; ISIF=2; IBRION=-1"
+
+    echo -e "🎯 ${YELLOW}DOS & Band Structure calculation preparation${NC}"
+    echo -e "📋 You must follow these steps beforehand:"
+    echo -e "   - In ${BLUE}y_full_relax_scf${NC}: structure optimization (ISIF=3)"
+    echo -e "   - Then run ${BLUE}vaspkit -task 303${NC}, copy PRIM.VASP → POSCAR, structure optimization (run ISIF=2)"
+    echo -e "   - Run SCF: ISIF=2, NSW=0, IBRION=-1"
+    echo ""
+
     if [ -d "$srcdir0" ]
     then
         sub_run_dos_bs $1
     else
-        echo "==> no $srcdir0 found! Abort!"
-        exit
+        echo -e "❌ ${YELLOW}ERROR${NC}: Directory ${BLUE}$srcdir0${NC} not found! Abort."
+        exit 1
     fi
 }
 
 sub_run_dos_bs(){
-    srcdir=`pwd`/y_full_relax_temp
-    rm -rf $srcdir
-
-    cp -r $srcdir0  $srcdir 
-    cd $srcdir
+    myroot=`pwd`
+    srcdir=$myroot/y_full_relax_temp
+    echo -e "🧹 ${YELLOW}Cleaning temp directory and copying source...${NC}"
+    rm -rf "$srcdir"
+    cp -r "$srcdir0" "$srcdir"
+    cd "$srcdir"
 
     myfile=./CONTCAR
 
    #--------------------
+    echo -e "🛠️  Updating INCAR tags for DOS/BS calculation..."
     pei_vasp_univ_find_and_change  -isym  1
     pei_vasp_univ_find_and_change  -isif  2
     pei_vasp_univ_find_and_change  -nsw   0
@@ -38,19 +72,21 @@ sub_run_dos_bs(){
 
     kpath=KPATH.in
     if [ -f "$kpath" ]; then
-        echo "$kpath exists."
+        echo -e "✅ ${GREEN}$kpath exists.${NC} Updating number of kpoints to 60"
         sed -i '2s/.*/     60/' KPATH.in
     else
-        echo "$kpath does not exist. You need to run vaspkit -task 303"
-        exit
+        echo -e "❌ ${YELLOW}ERROR${NC}: $kpath not found. Please run ${BLUE}vaspkit -task 303${NC} first."
+        exit 1
     fi
+
+    echo -e "📄 Writing constraint file: ${GREEN}Y_CONSTR_LATT${NC}"
     echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 
     cd ..
     #=====================
 
     dirsurf=y_dos_bs
-
+    echo -e "📁 Preparing output directory: ${BLUE}$dirsurf${NC}"
     rm -rI $dirsurf
     mkdir  $dirsurf
     cd     $dirsurf
@@ -60,36 +96,46 @@ sub_run_dos_bs(){
 
     ####################################### work here
     dirn=dos
-    echo ================ $dirn
+    echo -e "================ ${BLUE}$dirn${NC} ================"
 
     mkdir $dirn
     cd    $dirn
 
+    echo -e "📤 Copying necessary files..."
     cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
     mv CONTCAR POSCAR
+
+    echo -e "🔧 Setting ISMEAR = -5 for DOS"
     pei_vasp_univ_find_and_change -ismear -5
 
-    echo 'submit dir:' `pwd`
+    echo -e "🚀 Submitting DOS calculation in ${BLUE}$(pwd)${NC}"
     sbatch sub.*
     cd ..
 
     dirn=bs
-    echo ================ $dirn
+    echo -e "================ ${BLUE}$dirn${NC} ================"
 
     mkdir $dirn
     cd    $dirn
 
+    echo -e "📤 Copying files for band structure..."
     cp $srcdir/{INCAR,KPATH.in,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
     mv CONTCAR POSCAR
     mv $kpath KPOINTS
+
+    echo -e "🔧 Setting ICHARG = 11 and LMAXMIX = 4"
     pei_vasp_univ_find_and_change -icharg 11
     pei_vasp_univ_find_and_change -lmaxmix 4
 
-    echo 'submit dir:' `pwd`
+    echo -e "🚀 Submitting Band Structure calculation in ${BLUE}$(pwd)${NC}"
     sbatch sub.*
     cd ..
 
+    echo -e "🧹 Cleaning up temp directory: ${BLUE}$srcdir${NC}"
     rm -rf $srcdir
+
+    echo -e "📄 Moving log file to: ${BLUE}$dirsurf/$logfile${NC}"
+    mv "$myroot/$logfile" "$dirsurf/"
 }
 
 main "$@"; exit
