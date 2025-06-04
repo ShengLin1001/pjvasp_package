@@ -31,8 +31,11 @@ main(){
         exit 0
     fi
 
-    logfile=pei_vasp_run_neb.log
-    exec > >(tee $logfile) 2>&1
+    script_name=$(basename "$0")
+    logfile="${script_name}.log"
+
+    # 📜 Log everything to file and terminal
+    exec > >(tee "$logfile") 2>&1
 
     echo -e "🟢 ===== ${GREEN}Run started${NC} at: $(date) ====="
     echo -e "📌 Command: ${BLUE}$0${NC} $@"
@@ -97,12 +100,15 @@ sub_run_neb(){
     echo "🧬 Running nebmake.pl to generate $num images..."
     nebmake.pl "$srcdir/ini/CONTCAR" "$srcdir/fin/CONTCAR" "$num"
 
+    echo "🛡️  Running nebavoid.pl to ensure all interatomic distances ≥ 1 Å in the generated NEB images..."
+    nebavoid.pl 1
+
     cp "$srcdir/ini/OUTCAR" OUTCAR.ini
     cp "$srcdir/fin/OUTCAR" OUTCAR.fin
 
     echo "🎞️  Generating movie with pei_vasp_univ_neb_nebmovie..."
     pei_vasp_univ_neb_nebmovie
-    mv movie.xyz "$dirsurf"
+    mv movie*.xyz "$dirsurf"
 
     echo "🔢 Generating image list..."
     arr=()
