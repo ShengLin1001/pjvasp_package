@@ -11,6 +11,8 @@ Functions:
     - my_plot_zpositions: Plot z-positions.
     - my_plot_modify_ploted_figure: Modify and customize the appearance of a plotted figure.
     - my_plot_colorbar: Add a colorbar to a plot.
+    - general_modify_ploted_figure: Deprecated alias for `my_plot_modify_ploted_figure()`.
+    - my_plot_convergence: Plot convergence data with options for encuts and kpoints.
     
 """
 from ase import Atoms
@@ -26,6 +28,7 @@ import matplotlib.colors as mcolors
 from itertools import cycle
 
 import matplotlib.pyplot as plt
+from typing import Callable
 
 from mymetal.universial.plot.general import *
 
@@ -37,7 +40,8 @@ __all__ = [
     'my_plot_zpositions',
     'my_plot_modify_ploted_figure',
     'my_plot_colorbar',
-    'general_modify_ploted_figure',]
+    'general_modify_ploted_figure',
+    'my_plot_convergence']
 
 
 # For old version plot
@@ -705,3 +709,132 @@ def my_plot_colorbar(original_figsize: tuple=(10.72, 8.205),
                         colorbar_size[1]/full_figsize[1]])
     ax2.tick_params(direction='in', width=3, length=8)
     return fig, (ax1, ax2)
+
+# For workflow convergence test
+def my_plot_convergence(x: list = None, 
+                        y: list = None,
+
+                        encuts: bool=False, 
+                        kpoints: bool=False,
+
+                        if_scalex_auto: bool=True,
+                        scalex: float=1.0,
+
+                        if_difference: bool=False,
+                        encuts_labels_dif: list = ['Energy cutoff (eV)', r'$E-E^{\text{Ref}}$ (meV per atom)'],
+                        kpoints_labels_dif: list = ['K-point grid', r'$E-E^{\text{Ref}}$ (meV per atom)'],
+                        if_text: bool=False,
+                        format: str='.1f',
+                        xytext: tuple = (0, 10),
+                        text_threshold: float=2.0,
+                        text_fontsize: int=20,
+                        if_mask: bool=False,
+                        mask_condition: Callable[[list], list] = lambda y: np.abs(y) > 1,
+                        mask_color: str='red',
+
+                        encuts_labels: list = ['Energy cutoff (eV)', 'Energy (eV per atom)'],
+                        kpoints_labels: list = ['K-point grid', 'Energy (eV per atom)'],
+                        kpoints_ylabel_rotation: int=45,
+                        kpoints_ylabel_fontsize: int=20,
+
+                        marker: str='o',
+                        linestyle: str='-',
+                        color: str='b',
+                        label: str='Total Energy',
+                        if_save: bool=False,
+                        savefile: str='p_post_convergence.pdf',
+                        dpi: int=300,
+                        ) -> tuple:
+    """
+    Plot convergence test results for energy cutoff or k-point grids.
+
+    This function visualizes convergence data, such as total energies or 
+    energy differences (relative to reference) versus energy cutoffs or 
+    k-point grid sizes. It supports labeling, annotation, automatic x-axis 
+    scaling, and highlighting specific points with a mask.
+
+    Args:
+        x (list, optional): X-axis data, e.g., cutoff values or k-point grids.
+        y (list, optional): Y-axis data, e.g., total energy (eV/atom).
+        encuts (bool): If True, interpret x as energy cutoffs.
+        kpoints (bool): If True, interpret x as k-point grids.
+        if_scalex_auto (bool): Whether to auto-scale the plot width based on x.
+        scalex (float): Manual scaling factor for plot width.
+        if_difference (bool): Plot energy differences relative to reference.
+        encuts_labels_dif (list): X and Y labels for encut difference plot.
+        kpoints_labels_dif (list): X and Y labels for k-point difference plot.
+        if_text (bool): If True, annotate data points with text.
+        format (str): Format for annotation text (e.g., '.1f').
+        xytext (tuple): Offset for annotation text in points.
+        text_threshold (float): Only annotate points with abs(y) below this.
+        text_fontsize (int): Font size for annotations.
+        if_mask (bool): Whether to highlight points matching `mask_condition`.
+        mask_condition (Callable): A function that returns a boolean mask on y.
+        mask_color (str): Color for masked points.
+        encuts_labels (list): X and Y labels for encut plot.
+        kpoints_labels (list): X and Y labels for k-point plot.
+        kpoints_ylabel_rotation (int): Rotation angle for x-tick labels (k-points).
+        kpoints_ylabel_fontsize (int): Font size for x-tick labels (k-points).
+        marker (str): Marker style for data points.
+        linestyle (str): Line style.
+        color (str): Line color.
+        label (str): Label for legend.
+
+    Returns:
+        tuple: (fig, ax) Matplotlib Figure and Axes objects.
+    """
+    # y units: eV per atom
+    if if_scalex_auto:
+        scalex = max(1, len(x)/10)
+    axes_width = 7.31 * scalex
+    one_fig_width = 1.918 + axes_width + 1.492
+    fig, axes = my_plot(axes_width = axes_width, one_fig_wh=[one_fig_width, 8.205],)
+    ax = axes
+    
+    if encuts:
+        if if_difference:
+            xlabel = encuts_labels_dif[0]
+            ylabel = encuts_labels_dif[1]
+        else:
+            xlabel = encuts_labels[0]
+            ylabel = encuts_labels[1]
+    elif kpoints:
+        if if_difference:
+            xlabel = kpoints_labels_dif[0]
+            ylabel = kpoints_labels_dif[1]
+        else:
+            xlabel = kpoints_labels[0]
+            ylabel = kpoints_labels[1]
+        labels = []
+        for temp in x:
+            tempx = r"${0}\times{1}\times{2}$".format(int(temp[0]), int(temp[1]), int(temp[2]))
+            labels.append(tempx)
+        x = np.arange(len(labels))
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=kpoints_ylabel_rotation, fontsize=kpoints_ylabel_fontsize)
+    
+    if if_difference:
+        y = y - y[-1] # make the last value zero
+        y = y * 1e3   # meV per atom
+        if if_text:
+            for i in range(len(x)):
+                if abs(y[i]) < text_threshold:
+                    ax.annotate(f"{y[i]:{format}}", 
+                                (x[i], y[i]),   
+                                textcoords="offset points",
+                                xytext=xytext,
+                                va = 'bottom',
+                                ha = 'center',
+                                fontsize = text_fontsize)
+
+    ax.plot(x, y, marker=marker, linestyle=linestyle, color=color, label=label)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    if if_mask:
+        mask = mask_condition(y)
+        ax.plot(x[mask], y[mask], marker=marker, color=mask_color, linestyle='None')
+    
+    if if_save:
+        plt.savefig(savefile, dpi=dpi)
+    return fig, ax
