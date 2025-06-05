@@ -17,7 +17,7 @@ sub_plot_all(){
     echo "==> mycmd: "     $mycmd
 
     mylist=`find ./ -type d -name "$workdir"`
-
+    echo mylist $mylist
     for dirn in $mylist ; do
         cd $dirn
         echo -e "\n==>" `pwd`
@@ -30,10 +30,24 @@ sub_plot_all(){
 
 
     echo -e "\n==> ${FUNCNAME[0]} summary: "
+    
+    
     for dirn in $mylist ; do
-        echo -e "\n$dirn"
-        cat $dirn/y_post_time.txt
-        grep "Your highest band" $dirn/y_post_warning.txt
+        cd $dirn
+        temproot=`pwd`
+        echo -e "\n==> $temproot"
+        workdir2=y_dir
+        # dir counts
+        dc=`find ./ -type d -name $workdir2  -print | wc -l`
+        echo -e "\n==> Number of $workdir2: $dc "
+        mylist2=$(find ./ -type d -name "$workdir2" -exec dirname {} \;)
+        for dirn2 in $mylist2 ; do
+            echo -e "\n==> $dirn2"
+            cat -n $dirn2/y_post_time.txt
+            grep -n "Your highest band" $dirn2/y_post_warning.txt
+        done
+        cd $d0
+        echo " "
     done
     echo " "
 
@@ -45,101 +59,18 @@ sub_plot_all(){
 case "$1" in
 
 
-    -convergence) 
-        workdir=y_convergence 
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_convergence.py
-	    sub_plot_all  $workdir  $mycmd 
+    -convergence)
+        workdir=y_convergence
+        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_convergence.py
+        sub_plot_all  $workdir  $mycmd 
         ;;
 
 
-
-
-    -eos) 
-        workdir=y_eos
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_eos.py
-	    sub_plot_all  $workdir  $mycmd 
+    -neb)
+        workdir=y_neb
+        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_neb.py
+        sub_plot_all  $workdir  $mycmd 
         ;;
-
-	
-    -cohesive) 
-        workdir=y_cohesive
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_cohesive.py
-	    sub_plot_all  $workdir  $mycmd 
-        ;;
-
-    -cij_stress) 
-        workdir=y_cij_stress
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_cij_stress.py
-	    sub_plot_all  $workdir  $mycmd 
-        ;;
-
-
-    -cij_energy) 
-        workdir=y_cij_energy 
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_bulk/yin_vasp_plot_cij_energy.py
-	    sub_plot_all  $workdir  $mycmd 
-        ;;
-
-
-
-
-
-
-
-    -planar)
-        workdir=y_planar_relaxed_*
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_planar_defects/yin_vasp_plot_planar_relaxed.py
-        sub_plot_all  "$workdir"  $mycmd
-        ;;
-
-    -gsfe)
-        workdir=y_gsfe_*
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_planar_defects/yin_vasp_plot_gsfe.py
-        sub_plot_all  "$workdir"  $mycmd
-        ;;
-
-    -decohesion)
-        workdir=y_decohesion
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_planar_defects/yin_vasp_plot_decohesion.py
-        sub_plot_all  "$workdir"  $mycmd
-        ;;
-
-    
-
-
-
-
-    -E_in_2_bulk)
-        workdir=y_E_in_2_bulk
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_2_bulk.py
-            sub_plot_all  $workdir  $mycmd
-        ;;
-
-
-    -E_in_2_slab)
-        workdir=y_E_in_2_slab
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_2_slab.py
-            sub_plot_all  $workdir  $mycmd
-        ;;
-
-
-
-    -E_in_1_bulk)
-        workdir=y_E_in_1_bulk
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_1_bulk.py
-            sub_plot_all  $workdir  $mycmd
-        ;;
-
-
-    -E_in_1_slab)
-        workdir=y_E_in_1_slab
-        mycmd=$YIN_GITHUB/vasp_utils/vasp_workflow_others/yin_vasp_plot_E_in_1_slab.py
-            sub_plot_all  $workdir  $mycmd
-        ;;
-
-
-
-
 
 
 

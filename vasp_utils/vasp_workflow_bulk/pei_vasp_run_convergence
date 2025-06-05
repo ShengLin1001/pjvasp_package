@@ -147,7 +147,13 @@ sub_run_convergence() {
         exit 1
     fi
 
-    cd "$myroot"
+    cd $myroot
+
+    dirsurf=$myroot/y_convergence
+    echo -e "🧹 Preparing clean NEB workspace at: ${BLUE}$dirsurf${NC}"
+    rm -rI "$dirsurf"
+    mkdir "$dirsurf"
+    cd "$dirsurf"
 
     # 🎯 ENCUT convergence test
     if (( elen != 0 )); then
@@ -173,12 +179,12 @@ sub_run_convergence() {
             grep ENCUT INCAR
             sed -n '4p' KPOINTS
             echo -e "🚀 Ready to submit: ${BLUE}$(pwd)${NC}"
-            sbatch sub.*
+            #sbatch sub.*
 
             cd ..
         done
 
-        cd "$myroot"
+        cd "$dirsurf"
     fi
 
     # 🎯 KPOINTS convergence test
@@ -212,7 +218,7 @@ EOF
             grep ENCUT INCAR
             sed -n '4p' KPOINTS
             echo -e "🚀 Ready to submit: ${BLUE}$(pwd)${NC}"
-            sbatch sub.*
+            #sbatch sub.*
 
             cd ..
         done
@@ -221,6 +227,9 @@ EOF
     # ♻️ Cleanup
     echo -e "🧹 Cleaning up: ${BLUE}$srcdir${NC}"
     rm -rf "$srcdir"
+
+    echo -e "📄 Moving log file to: ${BLUE}$dirsurf/$logfile${NC}"
+    mv "$myroot/$logfile" "$dirsurf/"
 
 }
 

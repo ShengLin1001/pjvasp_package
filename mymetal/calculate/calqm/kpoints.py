@@ -9,6 +9,7 @@ to compute reciprocal lattice vectors using both cross product and matrix invers
 Functions:
     - get_kpoints_by_size(): Generates Monkhorst-Pack and Gamma-centered k-points.
     - get_size_by_distance(): Computes automatic k-point mesh based on RK or KSPACING.
+    - get_distance_by_size(): Estimates RK value for a given KPOINTS grid size.
     - cal_reciprocal_matrix(): Calculates reciprocal lattice vectors using cross product.
     - cal_reciprocal_matrix2(): Calculates reciprocal lattice vectors using matrix inversion.
     - get_lattice_information(): Displays real-space and reciprocal lattice information from a VASP POSCAR file.
@@ -93,6 +94,40 @@ def get_size_by_distance(file: str = None, rk: int = 100, kspacing: float =None)
     # KSPACING tag 用的是上限函数，3.2 => 4
     new_kspacing_kpoints = np.maximum(1, np.ceil(reciprocal_cell_length * 2 * np.pi / kspacing).astype(int))
     return old_auto_kpoints, new_kspacing_kpoints
+
+def get_distance_by_size(file: str='CONTCAR', size: tuple=None)-> list:
+    """
+    Estimate the matching RK value for a given KPOINTS grid size.
+
+    This function calculates the reciprocal lattice vector lengths,
+    computes the unit length per k-point, and searches for the highest
+    RK value (radius cutoff in reciprocal space) that matches the target grid size.
+
+    Args:
+        file (str): Path to the VASP CONTCAR file. Default is 'CONTCAR'.
+        size (tuple): A tuple of 3 integers representing the desired k-point grid size.
+
+    Returns:
+        list: The maximum matching RK value if found (int), otherwise the estimated RK values (numpy.ndarray).
+    """
+    #np.set_printoptions(precision=8, suppress=True)
+    atoms = read_vasp(file)
+    reciprocal_cell_length = np.array(atoms.cell.reciprocal().cellpar())[:3] # units: 2*pi/Å
+    nsize = np.array(size)
+    unit_lengths = reciprocal_cell_length / nsize              # units: 2*pi/Å
+
+    rks = 1/ unit_lengths
+    #print(r"$R_{k}$:", rks)
+
+    matchrk = []
+    for rk in range(1, 101):
+        otemp, ntemp = get_size_by_distance(file=file, rk=rk)
+        if (otemp == nsize).all() or (ntemp == nsize).all():
+            matchrk.append(rk)
+    if matchrk != []:
+        return max(matchrk)
+    else:
+        return rks
 
 def cal_reciprocal_matrix(cell_matrix: np.ndarray=None, scale: float=1.0):
     """
