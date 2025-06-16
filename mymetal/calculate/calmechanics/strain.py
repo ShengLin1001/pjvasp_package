@@ -18,7 +18,7 @@ import numpy as np
 from numpy import array
 from mymetal.build.film.findhetero import build_supercells
 from mymetal.calculate.calmechanics.deformation import cal_deform_matrix
-from mymetal.universial.matrix.adjust import adjust_matrix
+from mymetal.universal.matrix.adjust import adjust_matrix
 from hetbuilder import Interface
 
 def cal_principal_and_shear_strain_root(bottom: Atoms = None, top: Atoms = None, result: Interface = None, 

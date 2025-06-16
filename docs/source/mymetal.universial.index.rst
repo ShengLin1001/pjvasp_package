@@ -1,13 +1,13 @@
-mymetal.universial.index package
+mymetal.universal.index package
 ================================
 
 Submodules
 ----------
 
-mymetal.universial.index.indextrans module
+mymetal.universal.index.indextrans module
 ------------------------------------------
 
-.. automodule:: mymetal.universial.index.indextrans
+.. automodule:: mymetal.universal.index.indextrans
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ mymetal.universial.index.indextrans module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.index
+.. automodule:: mymetal.universal.index
    :members:
    :undoc-members:
    :show-inheritance:

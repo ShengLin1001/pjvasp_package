@@ -6,12 +6,12 @@ from inspect import getargvalues, currentframe, stack
 from ase.utils import reader
 from ase import Atoms
 from mymetal.io.vasp import my_read_vasp
-from mymetal.universial.print.printafter import *
-from mymetal.universial.data.dataadjust import *
-from mymetal.universial.search.find import *
-from mymetal.universial.check.checkinput import *
-from mymetal.universial.data.datachange import *
-from mymetal.universial.data.patterntrans import *
+from mymetal.universal.print.printafter import *
+from mymetal.universal.data.dataadjust import *
+from mymetal.universal.search.find import *
+from mymetal.universal.check.checkinput import *
+from mymetal.universal.data.datachange import *
+from mymetal.universal.data.patterntrans import *
 from mymetal.io.post.construct import *
 from mymetal.io.post.write import *
 

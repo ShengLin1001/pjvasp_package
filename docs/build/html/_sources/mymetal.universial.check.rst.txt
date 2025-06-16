@@ -1,13 +1,13 @@
-mymetal.universial.check package
+mymetal.universal.check package
 ================================
 
 Submodules
 ----------
 
-mymetal.universial.check.checkinput module
+mymetal.universal.check.checkinput module
 ------------------------------------------
 
-.. automodule:: mymetal.universial.check.checkinput
+.. automodule:: mymetal.universal.check.checkinput
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ mymetal.universial.check.checkinput module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.check
+.. automodule:: mymetal.universal.check
    :members:
    :undoc-members:
    :show-inheritance:

@@ -1,4 +1,4 @@
-"""Some universial functions for electronic structure calculations."""
+"""Some universal functions for electronic structure calculations."""
 
 import numpy as np
 from pymatgen.electronic_structure.bandstructure import BandStructureSymmLine

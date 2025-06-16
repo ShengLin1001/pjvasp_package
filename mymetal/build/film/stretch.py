@@ -26,7 +26,7 @@ from ase.build import bulk, surface
 
 from mymetal.build.film.findprim import my_find_prim
 from mymetal.build.film.extrfilm import my_extr_thick
-from mymetal.universial.atom.moveatom import move_atoms
+from mymetal.universal.atom.moveatom import move_atoms
 
 ####################################################################################################
 # # usage

@@ -11,7 +11,7 @@ Subpackages
    mymetal.io
    mymetal.ml
    mymetal.post
-   mymetal.universial
+   mymetal.universal
 
 Module contents
 ---------------

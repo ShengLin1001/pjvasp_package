@@ -8,7 +8,7 @@ Functions:
 """
 
 from inspect import getargvalues, currentframe, stack
-from mymetal.universial.check.checkinput import check_input
+from mymetal.universal.check.checkinput import check_input
 
 ##############################################################
 #############  output 

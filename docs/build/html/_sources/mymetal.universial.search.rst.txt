@@ -1,13 +1,13 @@
-mymetal.universial.search package
+mymetal.universal.search package
 =================================
 
 Submodules
 ----------
 
-mymetal.universial.search.find module
+mymetal.universal.search.find module
 -------------------------------------
 
-.. automodule:: mymetal.universial.search.find
+.. automodule:: mymetal.universal.search.find
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ mymetal.universial.search.find module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.search
+.. automodule:: mymetal.universal.search
    :members:
    :undoc-members:
    :show-inheritance:

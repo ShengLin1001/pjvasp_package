@@ -12,9 +12,9 @@ Functions:
 
 from ase import Atoms
 from numpy import ndarray, array
-from mymetal.universial.print.printafter import print_after_blank
+from mymetal.universal.print.printafter import print_after_blank
 from inspect import getargvalues, currentframe, stack
-from mymetal.universial.check.checkinput import check_input
+from mymetal.universal.check.checkinput import check_input
 
 def mydel_pos_type(atoms: Atoms = None,
           position_strict: list = None,

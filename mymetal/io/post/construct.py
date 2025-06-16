@@ -8,9 +8,9 @@ Functions:
 """
 
 from inspect import getargvalues, currentframe, stack
-from mymetal.universial.check.checkinput import check_input
-from mymetal.universial.data.dataadjust import myjust
-from mymetal.universial.data.datachange import list_to_char
+from mymetal.universal.check.checkinput import check_input
+from mymetal.universal.data.dataadjust import myjust
+from mymetal.universal.data.datachange import list_to_char
 
 ##############################################################
 ############# construct the content

@@ -1,13 +1,13 @@
-mymetal.universial.print package
+mymetal.universal.print package
 ================================
 
 Submodules
 ----------
 
-mymetal.universial.print.printafter module
+mymetal.universal.print.printafter module
 ------------------------------------------
 
-.. automodule:: mymetal.universial.print.printafter
+.. automodule:: mymetal.universal.print.printafter
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ mymetal.universial.print.printafter module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.print
+.. automodule:: mymetal.universal.print
    :members:
    :undoc-members:
    :show-inheritance:

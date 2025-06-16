@@ -29,7 +29,7 @@
 ├── post
 │   ├── newmain.py
 │   └── oldmain.py
-└── universial
+└── universal
     ├── atom
     ├── check
     ├── data

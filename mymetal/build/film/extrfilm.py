@@ -15,7 +15,7 @@ Functions:
 
 from ase.utils import reader
 from ase import Atoms
-from mymetal.universial.data.datachange import list_to_char
+from mymetal.universal.data.datachange import list_to_char
 from mymetal.post.newmain import myfindall
 from numpy import array, cross
 

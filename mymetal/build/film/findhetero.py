@@ -25,7 +25,7 @@ from ase.visualize import view
 from hetbuilder.algorithm import CoincidenceAlgorithm
 from hetbuilder.plotting import InteractivePlot
 import matplotlib
-from mymetal.universial.atom.moveatom import move_atoms
+from mymetal.universal.atom.moveatom import move_atoms
 
 # set_length Done
 # find_hetero Done!!!!!!!!!!!!!!!!!!!!

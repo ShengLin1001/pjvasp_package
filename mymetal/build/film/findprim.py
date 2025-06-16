@@ -12,7 +12,7 @@ Functions:
 from numpy import array
 from ase import Atoms
 import spglib
-from mymetal.universial.atom.moveatom import *
+from mymetal.universal.atom.moveatom import *
 
 def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag = True, scale_atoms = False, to_primitive = 1) -> Atoms:
     """

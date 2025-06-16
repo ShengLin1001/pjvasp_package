@@ -1,13 +1,13 @@
-mymetal.universial.matrix package
+mymetal.universal.matrix package
 =================================
 
 Submodules
 ----------
 
-mymetal.universial.matrix.adjust module
+mymetal.universal.matrix.adjust module
 ---------------------------------------
 
-.. automodule:: mymetal.universial.matrix.adjust
+.. automodule:: mymetal.universal.matrix.adjust
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ mymetal.universial.matrix.adjust module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.matrix
+.. automodule:: mymetal.universal.matrix
    :members:
    :undoc-members:
    :show-inheritance:

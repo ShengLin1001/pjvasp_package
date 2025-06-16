@@ -1,13 +1,13 @@
-mymetal.universial.plot package
+mymetal.universal.plot package
 ===============================
 
 Submodules
 ----------
 
-mymetal.universial.plot.plot module
+mymetal.universal.plot.plot module
 -----------------------------------
 
-.. automodule:: mymetal.universial.plot.plot
+.. automodule:: mymetal.universal.plot.plot
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +15,7 @@ mymetal.universial.plot.plot module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.plot
+.. automodule:: mymetal.universal.plot
    :members:
    :undoc-members:
    :show-inheritance:

@@ -10,8 +10,8 @@ Functions:
 """
 
 from inspect import getargvalues, currentframe, stack
-from mymetal.universial.check.checkinput import check_input
-from mymetal.universial.print.printafter import print_after_blank
+from mymetal.universal.check.checkinput import check_input
+from mymetal.universal.print.printafter import print_after_blank
 
 def my_pattern_trans(match_type, char = ''):
     """

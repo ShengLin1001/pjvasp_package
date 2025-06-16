@@ -21,7 +21,7 @@ import numpy as np
 from mymetal.calculate.calmechanics.deformation import cal_deform_matrix
 from mymetal.calculate.calmechanics.strain import cal_principal_and_shear_strain, cal_strain_matrix, cal_strain_matrix_root
 from hetbuilder import Interface
-from mymetal.universial.matrix.adjust import adjust_matrix
+from mymetal.universal.matrix.adjust import adjust_matrix
 
 def compare_atoms(atoms1: Atoms = None, atoms2: Atoms = None, tolerance: float=1e-5, focus_z: bool = True) -> list:
     """

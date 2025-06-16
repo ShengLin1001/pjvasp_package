@@ -1,4 +1,4 @@
-mymetal.universial package
+mymetal.universal package
 ==========================
 
 Subpackages
@@ -7,19 +7,19 @@ Subpackages
 .. toctree::
    :maxdepth: 4
 
-   mymetal.universial.atom
-   mymetal.universial.check
-   mymetal.universial.data
-   mymetal.universial.index
-   mymetal.universial.matrix
-   mymetal.universial.plot
-   mymetal.universial.print
-   mymetal.universial.search
+   mymetal.universal.atom
+   mymetal.universal.check
+   mymetal.universal.data
+   mymetal.universal.index
+   mymetal.universal.matrix
+   mymetal.universal.plot
+   mymetal.universal.print
+   mymetal.universal.search
 
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial
+.. automodule:: mymetal.universal
    :members:
    :undoc-members:
    :show-inheritance:

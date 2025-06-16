@@ -7,6 +7,6 @@ are essential for performing density functional theory (DFT) or other electronic
 structure calculations.
 
 Submodules:
-    - universial: Some universial functions for electronic structure calculations.
+    - universal: Some universal functions for electronic structure calculations.
     - plotter: Plotting tools for electronic structure calculations (taken from pymatgen 2024.10.29).
 """

@@ -22,7 +22,8 @@ sub_plot_all(){
         cd $dirn
         echo -e "\n==>" `pwd`
     
-        yin_vasp_univ_post 
+        # move to $cmd
+        # yin_vasp_univ_post 
         python3  $mycmd
     
         cd $d0

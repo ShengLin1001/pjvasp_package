@@ -9,8 +9,8 @@ Functions:
 """
 
 from inspect import getargvalues, currentframe, stack
-from mymetal.universial.check.checkinput import check_input
-from mymetal.universial.data.dataadjust import my_down_up
+from mymetal.universal.check.checkinput import check_input
+from mymetal.universal.data.dataadjust import my_down_up
 
 ##############################################################
 ############# find and extract the matched lines (up-down could be extract)

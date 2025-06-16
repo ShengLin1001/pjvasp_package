@@ -12,7 +12,7 @@ Subpackages:
     - io: Handles input and output operations, including file reading and writing, data import/export, and interfacing with external tools.
     - ml: Implements machine learning algorithms and tools for predictive modeling, analysis, and optimization of materials.
     - post: Contains post-processing functions for analyzing and visualizing results from simulations, experiments, and other calculations.
-    - universial: Provides general-purpose utilities and functions that are commonly used across the package, ensuring modularity and reusability.
+    - universal: Provides general-purpose utilities and functions that are commonly used across the package, ensuring modularity and reusability.
 
 Usage:
     To use this package, import the relevant subpackage and access the necessary functions and classes:
@@ -42,4 +42,4 @@ License:
 # from . import io
 # #from . import ml
 # from . import post
-# from . import universial
+# from . import universal

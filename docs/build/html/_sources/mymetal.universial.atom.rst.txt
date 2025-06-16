@@ -1,29 +1,29 @@
-mymetal.universial.atom package
+mymetal.universal.atom package
 ===============================
 
 Submodules
 ----------
 
-mymetal.universial.atom.delatom module
+mymetal.universal.atom.delatom module
 --------------------------------------
 
-.. automodule:: mymetal.universial.atom.delatom
+.. automodule:: mymetal.universal.atom.delatom
    :members:
    :undoc-members:
    :show-inheritance:
 
-mymetal.universial.atom.fixatom module
+mymetal.universal.atom.fixatom module
 --------------------------------------
 
-.. automodule:: mymetal.universial.atom.fixatom
+.. automodule:: mymetal.universal.atom.fixatom
    :members:
    :undoc-members:
    :show-inheritance:
 
-mymetal.universial.atom.moveatom module
+mymetal.universal.atom.moveatom module
 ---------------------------------------
 
-.. automodule:: mymetal.universial.atom.moveatom
+.. automodule:: mymetal.universal.atom.moveatom
    :members:
    :undoc-members:
    :show-inheritance:
@@ -31,7 +31,7 @@ mymetal.universial.atom.moveatom module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.atom
+.. automodule:: mymetal.universal.atom
    :members:
    :undoc-members:
    :show-inheritance:

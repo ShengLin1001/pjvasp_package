@@ -49,7 +49,7 @@ pip uninstall mymetal-pkg
 ├── post
 │   ├── newmain.py
 │   └── oldmain.py
-└── universial
+└── universal
     ├── atom
     ├── check
     ├── data

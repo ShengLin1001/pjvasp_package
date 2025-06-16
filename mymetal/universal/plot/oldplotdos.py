@@ -1,10 +1,10 @@
 #from mymetal.calculate.electronic_structure.plotter import DosPlotter, BSPlotter, BSPlotterProjected, BSDOSPlotter
 
-from mymetal.calculate.electronic_structure.universial import *
+from mymetal.calculate.electronic_structure.universal import *
 from numpy import array
 import numpy as np
 import re
-from mymetal.universial.plot.plot import *
+from mymetal.universal.plot.plot import *
 import matplotlib.pyplot as plt
 
 from pymatgen.io.lobster import Icohplist

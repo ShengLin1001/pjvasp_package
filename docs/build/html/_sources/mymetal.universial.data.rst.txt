@@ -1,29 +1,29 @@
-mymetal.universial.data package
+mymetal.universal.data package
 ===============================
 
 Submodules
 ----------
 
-mymetal.universial.data.dataadjust module
+mymetal.universal.data.dataadjust module
 -----------------------------------------
 
-.. automodule:: mymetal.universial.data.dataadjust
+.. automodule:: mymetal.universal.data.dataadjust
    :members:
    :undoc-members:
    :show-inheritance:
 
-mymetal.universial.data.datachange module
+mymetal.universal.data.datachange module
 -----------------------------------------
 
-.. automodule:: mymetal.universial.data.datachange
+.. automodule:: mymetal.universal.data.datachange
    :members:
    :undoc-members:
    :show-inheritance:
 
-mymetal.universial.data.patterntrans module
+mymetal.universal.data.patterntrans module
 -------------------------------------------
 
-.. automodule:: mymetal.universial.data.patterntrans
+.. automodule:: mymetal.universal.data.patterntrans
    :members:
    :undoc-members:
    :show-inheritance:
@@ -31,7 +31,7 @@ mymetal.universial.data.patterntrans module
 Module contents
 ---------------
 
-.. automodule:: mymetal.universial.data
+.. automodule:: mymetal.universal.data
    :members:
    :undoc-members:
    :show-inheritance:
