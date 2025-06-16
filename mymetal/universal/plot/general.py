@@ -354,8 +354,8 @@ def general_modify_legend(legend, boxstyle: str = 'Square',
         None
 
     Example:
-            >>> from mymetal.universial.plot.plot import my_plot
-            >>> from mymetal.universial.plot.general import general_modify_legend
+            >>> from mymetal.universal.plot.plot import my_plot
+            >>> from mymetal.universal.plot.general import general_modify_legend
             >>> fig, axes = my_plot(left = 1.6, grid=False, fig_sharex=False)
             >>> handles_left, labels_left = ax.get_legend_handles_labels()
             >>> handles_right, labels_right = ax2.get_legend_handles_labels()

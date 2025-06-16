@@ -13,10 +13,12 @@ Functions:
     - my_plot_colorbar: Add a colorbar to a plot.
     - general_modify_ploted_figure: Deprecated alias for `my_plot_modify_ploted_figure()`.
     - my_plot_convergence: Plot convergence data with options for encuts and kpoints.
+    - my_plot_neb: Plot NEB data with spline fitting and energy/force calculations.
     
 """
 from ase import Atoms
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
@@ -30,7 +32,7 @@ from itertools import cycle
 import matplotlib.pyplot as plt
 from typing import Callable
 
-from mymetal.universial.plot.general import *
+from mymetal.universal.plot.general import *
 
 __all__ = [
     'my_plot',
@@ -838,3 +840,99 @@ def my_plot_convergence(x: list = None,
     if if_save:
         plt.savefig(savefile, dpi=dpi)
     return fig, ax
+
+
+
+def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None, 
+                spline_df: pd.DataFrame =  None, extsdf: pd.DataFrame =  None, 
+                mysplinedf: pd.DataFrame = None,
+                natoms: int = 1,
+                if_save: bool=False,
+                savefile: str='p_post_neb.pdf',
+                dpi: int=300,) -> tuple:
+    """Plot NEB (Nudged Elastic Band) energy and force profiles.
+
+    This function visualizes energy and force data from NEB calculations,
+    including original data, spline fits, and optionally user-defined splines.
+
+    Args:
+        nebdf (pd.DataFrame): DataFrame containing original NEB coordinates and forces.
+        nebefdf (pd.DataFrame): DataFrame with NEB energy and max force data.
+        spline_df (pd.DataFrame): DataFrame with spline-interpolated energy and force.
+        extsdf (pd.DataFrame): DataFrame with extrema point data.
+        mysplinedf (pd.DataFrame): DataFrame with custom spline energy and force.
+        natoms (int): Number of atoms for per-atom normalization.
+        if_save (bool): Whether to save the figure as a file.
+        savefile (str): Filename to save the plot.
+        dpi (int): Resolution of the saved plot.
+
+    Returns:
+        tuple: (fig, axes) of the generated matplotlib figure and axes array.
+    """
+
+    # read data
+    # orginal data
+    image = nebdf['image'] 
+    coord = nebdf['dist_cum(Å)']
+    coord_scale = coord / coord.iloc[-1] # scale to 1
+    energy = nebefdf['energy(eV)'] 
+    energy_rel = ( energy - energy[0] ) * 1e3 / natoms # meV per atom
+    force = nebdf['force_b(eV/Å)']
+    maxforce = nebefdf['force_max(eV/Å)']
+    # spline data
+    spline_coord = spline_df['dist_cum(Å)']
+    spline_coord_scale = spline_coord / spline_coord.iloc[-1] # scale to 1
+    spline_energy = spline_df['energy_rel(eV)'] * 1e3 / natoms # meV per atom
+    spline_force = spline_df['force_b(eV/Å)']
+    # exts data
+    exts_coord = extsdf['image'] #/ coord.iloc[-1]
+    exts_energy = extsdf['energy_rel(eV)'] * 1e3 / natoms # meV per atom
+    # my spline data
+    my_spline_coord_scale = mysplinedf['dist_cum(Å)'] / mysplinedf['dist_cum(Å)'].iloc[-1] # scale to 1
+    my_spline_energy_rel = ( mysplinedf['energy(eV)'] - mysplinedf['energy(eV)'][0]) * 1e3 / natoms # meV per atom
+    my_spline_force = mysplinedf['force_b(eV/Å)']
+
+    # plot
+    fig, axes = my_plot(fig_subp=[2,3],fig_sharex =False)
+    ax = axes[0, 0]
+    ax.plot(coord_scale, energy_rel, marker = 'o', linestyle = '')
+    ax.plot(spline_coord_scale, spline_energy)
+    ax.set_xlabel('Scaled coordinate')
+    ax.set_ylabel('Energy (meV per atom)')
+
+    ax = axes[0, 1]
+    ax.plot(coord, energy_rel, marker = 'o', linestyle = '')
+    ax.plot(spline_coord, spline_energy)
+    ax.set_xlabel('Coordinate (Å)')
+    ax.set_ylabel('Energy (meV per atom)')
+
+    ax = axes[0, 2]
+    ax.plot(coord_scale, force, marker = 'o', linestyle = '')
+    ax.plot(spline_coord_scale, spline_force)
+    ax.set_xlabel('Scaled coordinate')
+    ax.set_ylabel('Force (eV/Å)')
+
+    ax = axes[1, 0]
+    ax.plot(coord, maxforce, marker = 'o')
+    ax.set_xlabel('Coordinate (Å)')
+    ax.set_ylabel('Max force (eV/Å)')
+
+    ax = axes[1, 1]
+    ax.plot(coord_scale, energy_rel, marker = 'o', linestyle = '')
+    ax.plot(my_spline_coord_scale, my_spline_energy_rel)
+    ax.set_xlabel('Scaled coordinate')
+    ax.set_ylabel('Energy (meV per atom)')
+
+    ax = axes[1, 2]
+    ax.plot(coord_scale, force, marker = 'o', linestyle = '')
+    ax.plot(my_spline_coord_scale, my_spline_force)
+    ax.set_xlabel('Scaled coordinate')
+    ax.set_ylabel('Force (eV/Å)')
+
+    if if_save:
+        plt.savefig(savefile, dpi=dpi)
+
+    return fig, axes
+
+
+

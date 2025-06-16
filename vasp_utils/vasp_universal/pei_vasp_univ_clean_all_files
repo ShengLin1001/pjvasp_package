@@ -1,0 +1,11 @@
+#!/bin/bash
+echo "==> cleaning up all files, not include directories"
+# Remove all files in the current directory, but not directories
+# This will delete all files in the current directory, so use with caution!
+# If you want to keep some files, you can modify the command accordingly.
+echo old
+ls --color=auto
+echo ""
+find . -maxdepth 1 -type f -exec rm -f {} \;
+echo new
+ls --color=auto
