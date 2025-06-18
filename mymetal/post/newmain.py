@@ -23,9 +23,11 @@ Functions:
     - write_check: Write the check results to a file.
 """
 
+
 # pre-function
 from re import findall, search, IGNORECASE
-from os import listdir
+from os import listdir, path
+import os
 from numpy import sqrt
 from inspect import getargvalues, currentframe, stack
 from ase.utils import reader
@@ -46,8 +48,7 @@ from mymetal.io.post.write import *
 # # 设置当前工作目录
 # os.chdir(script_dir)
 
-dir_path = './y_dir/'
-stretch_list = [0.997, 0.998, 0.999, 1.000, 1.001, 1.002, 1.003]
+
 
 POSTTIME_CONFIG = [
     # PostTime class items
@@ -129,19 +130,69 @@ POSTEINPLANE_CONFIG = [
 ]
 
 
+myroot = '/public3/home/scg6928/mywork/20230907_au_dft/convergence/fcc/y_convergence/test' 
+os.chdir(myroot)
+
+myroot = os.getcwd()
+os.chdir(myroot)
+dir_path = './y_dir/'
+
+# find all job lists
+job_list = [
+    name for name in listdir(dir_path) 
+    if path.isdir(path.join(dir_path, name))
+]
+job_list.sort()
+
+# find all computational files
+specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR']
+
+sub_dir_path = os.path.join(dir_path, job_list[0])
+for file in os.listdir(sub_dir_path):
+    if file.startswith('sub') or file.startswith('Y'):
+        specified_file.append(file)
+
+def post_general():
+
+    posttime = PostTime()
+    posttime.read_OUTCAR()
+
+    postdata = PostData()
+    postdata.read_OUTCAR()
+
+    postdata2 = PostData2()
+    postdata2.read_OUTCAR()
+
+    # sub.* Y.*
+    postdiff = PostDiff()
+    postdiff.read_diff(specified_file=specified_file)
+
+    postparam = PostParam()
+    postparam.read_OUTCAR()
+
+    postparam2 = PostParam2()
+    postparam2.read_OUTCAR()
+
+    postparamsta = PostParamSta()
+    postparamsta.read_OUTCAR()
+
+    postwarning = PostWarning()
+    postwarning.read_OUTCAR()
+
+
 
 class PostTime:
-    def __init__(self, my_path=dir_path, post_path='./y_post_time.txt', name = 'Post Time', config = POSTTIME_CONFIG):
+    def __init__(self, my_path=dir_path, post_path='./p_post_time.txt', name = 'Post Time', config = POSTTIME_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, stretch_factor= stretch_list, special_name='OUTCAR', title = 'i1 job state: relaxed? time? CPUs? memory?', format = '%.3f'):
+    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1 job state: relaxed? time? CPUs? memory?', format = '%s'):
         count_finish = 0
         count_relax = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             tag_convergence = 0
             filename = f'{self.my_path}{formatted_i}/{special_name}'
@@ -154,11 +205,11 @@ class PostTime:
                     self.post(file, tag_convergence, formatted_i)
             except FileNotFoundError:
                 print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
-        print_after_read(count_finish, stretch_factor,special_name, self.name)
-        self.end(total_job = len(stretch_factor), unfinished = len(stretch_factor)-count_finish, unrelaxed = len(stretch_factor)-count_relax)
+        print_after_read(count_finish, job_list,special_name, self.name)
+        self.end(total_job = len(job_list), unfinished = len(job_list)-count_finish, unrelaxed = len(job_list)-count_relax)
 
-    def post(self, file, tag_convergence=1, my_stretch_factor=0.001):
-        mycontent = [f'{my_stretch_factor}']
+    def post(self, file, tag_convergence=1, my_job=0.001):
+        mycontent = [f'{my_job}']
         write_convergence(tag_convergence, mycontent)
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
@@ -175,16 +226,16 @@ class PostTime:
             post_file.write('-------------------------\n')
 
 class PostData:
-    def __init__(self, my_path=dir_path, post_path='./y_post_data.txt', name = 'Post Data', config = POSTDATA_CONFIG):
+    def __init__(self, my_path=dir_path, post_path='./p_post_data.txt', name = 'Post Data', config = POSTDATA_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, stretch_factor= stretch_list, special_name='OUTCAR', title = 'i1   energy(sigma->0)(eV)  EENTRO(eV)  -stress(kB)', format = '%.3f'):
+    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   energy(sigma->0)(eV)  EENTRO(eV)  -stress(kB)', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             filename = f'{self.my_path}{formatted_i}/{special_name}'
             #print(filename)
@@ -194,10 +245,10 @@ class PostData:
                     self.post(file, formatted_i)
             except FileNotFoundError:
                 print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
-        print_after_read(count_read, stretch_factor,special_name, self.name)
+        print_after_read(count_read, job_list,special_name, self.name)
     
-    def post(self, file, my_stretch_factor=0.001):
-        mycontent = [f'{my_stretch_factor}']
+    def post(self, file, my_job=0.001):
+        mycontent = [f'{my_job}']
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
             #print(mycontent)
@@ -206,16 +257,16 @@ class PostData:
         file.seek(0)
 
 class PostData2:
-    def __init__(self, my_path=dir_path , post_path='./y_post_data_2.txt', name = 'Post Data2', config = POSTDATA2_CONFIG):
+    def __init__(self, my_path=dir_path , post_path='./p_post_data_2.txt', name = 'Post Data2', config = POSTDATA2_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name 
         self.config = config
 
-    def read_OUTCAR(self, stretch_factor= stretch_list, special_name='OUTCAR', title = 'i1   volume  pressure(kB)  Fmax', format = '%.3f'):
+    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   volume  pressure(kB)  Fmax', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             filename = f'{self.my_path}{formatted_i}/{special_name}'
             #print(filename)
@@ -225,10 +276,10 @@ class PostData2:
                     self.post(file, formatted_i)
             except FileNotFoundError:
                 print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
-        print_after_read(count_read, stretch_factor,special_name, self.name)
+        print_after_read(count_read, job_list,special_name, self.name)
     
-    def post(self, file, my_stretch_factor=0.001):
-        mycontent = [f'{my_stretch_factor}']
+    def post(self, file, my_job=0.001):
+        mycontent = [f'{my_job}']
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
         mycontent_char = list_to_char(mycontent) + '\n'
@@ -236,48 +287,48 @@ class PostData2:
         file.seek(0)
 
 class PostDiff:
-    def __init__(self, my_path=dir_path  , post_path='./y_post_diff.txt', name = 'Post Diff'):
+    def __init__(self, my_path=dir_path  , post_path='./p_post_diff.txt', name = 'Post Diff'):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
 
-    def read_diff(self, stretch_factor= stretch_list, title = 'i1   diff  INCAR  KPOINTS  POSCAR  POTCAR  sub.vasp',
-                  specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR', 'sub.vasp', 'Y_CONSTR_CELL.IN'], format = '%.3f' ):
+    def read_diff(self, job_list= job_list, title = 'i1   diff  INCAR  KPOINTS  POSCAR  POTCAR  sub.vasp',
+                  specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR', 'sub.vasp', 'Y_CONSTR_CELL.IN'], format = '%s' ):
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             directory_name = f'{self.my_path}{formatted_i}/'
             # print(directory_name)
             self.post(directory_name, formatted_i, specified_file)
         print(f'Read all diff   - {self.name}')
     
-    def post(self, directory_name, my_stretch_factor=0.001, specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR', 'sub.vasp', 'Y_CONSTR_CELL.IN']):
+    def post(self, directory_name, my_job=0.001, specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR', 'sub.vasp', 'Y_CONSTR_CELL.IN']):
         content = []
         list_dir = listdir(directory_name)
         for file in specified_file:
             if file in list_dir:
                 content.append(file)
-        self.output_list(content, my_stretch_factor)
+        self.output_list(content, my_job)
         
-    def output_list(self, content, my_stretch_factor = 0.001):
+    def output_list(self, content, my_job = 0.001):
         with open(self.post_path, 'a') as post_file:
             post_file.write('\n' + '='*15 + '\n')
-            post_file.write(f'{my_stretch_factor}\n')
+            post_file.write(f'{my_job}\n')
             post_file.write('='*15+'\n'+ '\n')
             for file in content:
                 post_file.write('\n' + f'{file}\n' + '\n')
             
 class PostParam:
-    def __init__(self, my_path=dir_path , post_path='./y_post_param.txt', name = 'POST Param',  config = POSTPARAM_CONFIG):
+    def __init__(self, my_path=dir_path , post_path='./p_post_param.txt', name = 'POST Param',  config = POSTPARAM_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, stretch_factor= stretch_list, special_name='OUTCAR', title = 'i1   input parameters', format = '%.3f'):
+    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   input parameters', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             filename = f'{self.my_path}{formatted_i}/{special_name}'
             # print(filename)
@@ -288,10 +339,10 @@ class PostParam:
                     self.post(file, formatted_i)
             except FileNotFoundError:
                 print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
-        print_after_read(count_read, stretch_factor,special_name, self.name)
+        print_after_read(count_read, job_list,special_name, self.name)
     
-    def post(self, file, my_stretch_factor=0.001):
-        mycontent = [f'{my_stretch_factor}']
+    def post(self, file, my_job=0.001):
+        mycontent = [f'{my_job}']
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
         #print(mycontent)
@@ -301,16 +352,16 @@ class PostParam:
         file.seek(0)
 
 class PostParam2:
-    def __init__(self, my_path=dir_path , post_path='./y_post_param_2.txt', name = 'POST Param 2',  config = POSTPARAM2_CONFIG):
+    def __init__(self, my_path=dir_path , post_path='./p_post_param_2.txt', name = 'POST Param 2',  config = POSTPARAM2_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, stretch_factor= stretch_list, special_name='OUTCAR', title = 'i1   input parameters 2', format = '%.3f'):
+    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   input parameters 2', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             filename = f'{self.my_path}{formatted_i}/{special_name}'
             try:
@@ -319,10 +370,10 @@ class PostParam2:
                     self.post(file, formatted_i)
             except FileNotFoundError:
                 print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
-        print_after_read(count_read, stretch_factor,special_name, self.name)
+        print_after_read(count_read, job_list,special_name, self.name)
     
-    def post(self, file, my_stretch_factor=0.001):
-        mycontent = [f'{my_stretch_factor}']
+    def post(self, file, my_job=0.001):
+        mycontent = [f'{my_job}']
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
         mycontent_char = list_to_char(mycontent) + '\n'
@@ -331,19 +382,19 @@ class PostParam2:
         file.seek(0)
 
 class PostParamSta:
-    def __init__(self, my_path=dir_path , post_path='./y_post_param_statistics.txt', name = 'POST Param Statistics', config = POSTPARAMSTA_CONFIG,  config2 = POSTPARAMSTA_CHECK):
+    def __init__(self, my_path=dir_path , post_path='./p_post_param_statistics.txt', name = 'POST Param Statistics', config = POSTPARAMSTA_CONFIG,  config2 = POSTPARAMSTA_CHECK):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
         self.config2= config2
 
-    def read_OUTCAR(self, stretch_factor= stretch_list, special_name='OUTCAR', title = '# VASP param statistics. OK = the same in all jobs. ',
-                    tag_split = '   ', tag_end = '\n\n', tag_begin='\n', left = False, num=13, format = '%.3f'):
+    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = '# VASP param statistics. OK = the same in all jobs. ',
+                    tag_split = '   ', tag_end = '\n\n', tag_begin='\n', left = False, num=13, format = '%s'):
         count_read = 0
         all_is_same_list = []
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             filename = f'{self.my_path}{formatted_i}/{special_name}'
             # print(filename)
@@ -354,13 +405,13 @@ class PostParamSta:
                     self.post(file, formatted_i, all_is_same_list)
             except FileNotFoundError:
                 print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
-        print_after_read(count_read, stretch_factor,special_name, self.name)
+        print_after_read(count_read, job_list,special_name, self.name)
         write_check(all_is_same_list, self.post_path, self.config2, tag_split, tag_end, tag_begin, left, num)
 
-    def post(self, file, my_stretch_factor=0.001, all_is_same_list=[]):
+    def post(self, file, my_job=0.001, all_is_same_list=[]):
         #print('1')
         #print(all_is_same_list)
-        # mycontent = [f'{my_stretch_factor}']
+        # mycontent = [f'{my_job}']
         mycontent = []
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
@@ -369,7 +420,7 @@ class PostParamSta:
         #print(mycontent_char)
         mycontent_dic = char_to_dic(mycontent_char)
         #print(mycontent_dic)
-        all_is_same_list = check_same(my_stretch_factor, mycontent_dic, self.config2, all_is_same_list)
+        all_is_same_list = check_same(my_job, mycontent_dic, self.config2, all_is_same_list)
         #print('2')
         #print(all_is_same_list)
         # all_is_same_char = list_of_dic_to_char(all_is_same_list)
@@ -377,16 +428,16 @@ class PostParamSta:
         file.seek(0)
 
 class PostWarning:
-    def __init__(self, my_path=dir_path , post_path='./y_post_warning.txt', name = 'POST Warning',  config = POSTWARNING_CONFIG):
+    def __init__(self, my_path=dir_path , post_path='./p_post_warning.txt', name = 'POST Warning',  config = POSTWARNING_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, stretch_factor= stretch_list, special_name='OUTCAR', title = 'i1   WARNING', move_list_down_up =[-10,5], format = '%.3f'):
+    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   WARNING', move_list_down_up =[-10,5], format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
-        for i in stretch_factor:
+        for i in job_list:
             formatted_i = format % i
             filename = f'{self.my_path}{formatted_i}/{special_name}'
             # print(filename)
@@ -397,10 +448,10 @@ class PostWarning:
                     self.post(file, formatted_i, move_list_down_up)
             except FileNotFoundError:
                 print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
-        print_after_read(count_read, stretch_factor,special_name, self.name)
+        print_after_read(count_read, job_list,special_name, self.name)
     
-    def post(self, file, my_stretch_factor=0.001, move_list_down_up = [-10,5]):
-        mycontent = ['-'*20 + f'\n{my_stretch_factor}\n' + '-'*20 +'\n']
+    def post(self, file, my_job=0.001, move_list_down_up = [-10,5]):
+        mycontent = ['-'*20 + f'\n{my_job}\n' + '-'*20 +'\n']
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
         mycontent_char = list_to_char(mycontent) + '\n'
@@ -408,19 +459,19 @@ class PostWarning:
         file.seek(0)
 
 class PostEinplane:
-    def __init__(self, my_path=dir_path , post_path='./y_post_E_in.txt', name = 'POST E INPLANE',  config = POSTEINPLANE_CONFIG):
+    def __init__(self, my_path=dir_path , post_path='./p_post_E_in.txt', name = 'POST E INPLANE',  config = POSTEINPLANE_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR_POSCAR(self, stretch_factor= stretch_list, special_name=['OUTCAR', 'CONTCAR'], title = 'In-plane straining of transversely isotropic materials/slabs: ',
+    def read_OUTCAR_POSCAR(self, job_list= job_list, special_name=['OUTCAR', 'CONTCAR'], title = 'In-plane straining of transversely isotropic materials/slabs: ',
                             format = '%.3f'):
     
-        def read_OUTCAR(stretch_factor= stretch_factor, special_name='OUTCAR', format = format):
+        def read_OUTCAR(job_list= job_list, special_name='OUTCAR', format = format):
             count_read = 0
             Etot = []
-            for i in stretch_factor:
+            for i in job_list:
                 formatted_i = format % i
                 filename = f'{self.my_path}{formatted_i}/{special_name}'
                 # print(filename)
@@ -436,9 +487,9 @@ class PostEinplane:
                     print(f"In {formatted_i} directory, The file {special_name} was not found! - {self.name}")
             return Etot
 
-        def read_CONTCAR(stretch_factor= stretch_factor, special_name='CONTCAR', format = format):
+        def read_CONTCAR(job_list= job_list, special_name='CONTCAR', format = format):
             Atoms_list = []
-            for i in stretch_factor:
+            for i in job_list:
                 formatted_i = format % i
                 filename = f'{self.my_path}{formatted_i}/{special_name}'
                 # print(filename)
@@ -446,15 +497,15 @@ class PostEinplane:
                 Atoms_list.append(my_contcar)
             return Atoms_list
 
-        filenames_OUTCAR = [f'{self.my_path}{format % i}/{special_name[0]}' for i in stretch_factor]
+        filenames_OUTCAR = [f'{self.my_path}{format % i}/{special_name[0]}' for i in job_list]
         #Etot = read_OUTCAR(filenames_OUTCAR, config=self.config)
         #print(Etot)
         read_CONTCAR()
         read_OUTCAR()
         
 
-    def post(self, file, my_stretch_factor=0.001):
-        mycontent = ['-'*20 + f'\n{my_stretch_factor}\n' + '-'*20 +'\n']
+    def post(self, file, my_job=0.001):
+        mycontent = ['-'*20 + f'\n{my_job}\n' + '-'*20 +'\n']
         for config in self.config:
             myfindall(file, **config, mycontent=mycontent)
         mycontent_char = list_to_char(mycontent) + '\n'
@@ -659,14 +710,14 @@ def write_convergence(tag_convergence, mycontent):
     else:
         print(f"tag_convergence is not right! - {calling_function}")
 
-def check_same(my_stretch_factor=0.001, mycontent_dic = [{'ENCUT': 300, 'ISMEAR': 0.20}], mycontent_check = POSTPARAMSTA_CHECK, all_is_same_list = []):
+def check_same(my_job=0.001, mycontent_dic = [{'ENCUT': 300, 'ISMEAR': 0.20}], mycontent_check = POSTPARAMSTA_CHECK, all_is_same_list = []):
     """
-    Now we compare the parameter in my_stretch_factor with the mycontent_check\n
+    Now we compare the parameter in my_job with the mycontent_check\n
     we have two dictionaries, mycontent_dic (dictionary), mycontent_check (list of dictionary)\n
     do a loop for mycontent_check, if the value of mycontent_dic is not same as those of my_content_check\n
     save a flase value for is_same_dic[key]\n
     combined the results with all_is_same_list (a list of a dictionary)  [{'ENCUT': 300, 'ISMEAR': 0.20}]\n
-    after search on every 7 my_stretch_factor, we have a all_is_same_list ( a list of 7 dictionary)\n
+    after search on every 7 my_job, we have a all_is_same_list ( a list of 7 dictionary)\n
     Note, for folat or int, normalize_float_int to keep 0.2 is same as 0.20\n
     """
 
@@ -677,7 +728,7 @@ def check_same(my_stretch_factor=0.001, mycontent_dic = [{'ENCUT': 300, 'ISMEAR'
     # Initialize is_same as a dictionary
     if mycontent_dic and mycontent_check:
         is_same_dic = {}
-        is_same_dic[str('NAME')] = my_stretch_factor
+        is_same_dic[str('NAME')] = my_job
         # Iterate over each parameter dictionary in mycontent_check
         for param_check in mycontent_check:
             # all_match = True  # Flag to track if all parameters in param_check match
@@ -698,7 +749,7 @@ def check_same(my_stretch_factor=0.001, mycontent_dic = [{'ENCUT': 300, 'ISMEAR'
         print_after_blank('mycontent_dic or mycontent_check', calling_function, [])     
     return all_is_same_list
 
-def write_check(all_is_same_list, post_path = './y_dir/y_post_path.txt', mycontent_check = POSTPARAMSTA_CHECK, tag_split = '   ', tag_end = '\n\n', tag_begin='\n', left = False, num=13):
+def write_check(all_is_same_list, post_path = './y_dir/p_post_path.txt', mycontent_check = POSTPARAMSTA_CHECK, tag_split = '   ', tag_end = '\n\n', tag_begin='\n', left = False, num=13):
     """
     After loop, we have a all_is_same_list ( a list of 7 dictionary)\n
     and_opera_check is a all True dictionary\n
@@ -736,42 +787,4 @@ def write_check(all_is_same_list, post_path = './y_dir/y_post_path.txt', myconte
         write_content_to_file(mycontent_char, post_path, 'a')
     else:
         print_after_blank('mycontent_check or all_is_same_list', calling_function, [])    
-
-
-
-
-## usage
-# job = 1
-
-# if job:
-#     posttime = PostTime()
-#     posttime.read_OUTCAR()
-
-#     postdata = PostData()
-#     postdata.read_OUTCAR()
-
-#     postdata2 = PostData2()
-#     postdata2.read_OUTCAR()
-
-#     postdiff = PostDiff()
-#     postdiff.read_diff()
-
-#     postparam = PostParam()
-#     postparam.read_OUTCAR()
-
-#     postparam2 = PostParam2()
-#     postparam2.read_OUTCAR()
-    
-#     postparamsta = PostParamSta()
-#     postparamsta.read_OUTCAR()
-
-#     postwarning = PostWarning()
-#     postwarning.read_OUTCAR()
-
-#     # postEinplane = PostEinplane()
-#     # postEinplane.read_OUTCAR_POSCAR()
-# else:
-#     postEinplane = PostEinplane()
-#     postEinplane.read_OUTCAR_POSCAR()
-
 
