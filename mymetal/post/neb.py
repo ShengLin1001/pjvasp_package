@@ -1,12 +1,23 @@
 import os
+
 import shutil
+
 import pandas as pd
+
+from ase.io import read
 from ase.io.vasp import read_vasp
-from mymetal.universal.plot.plot import my_plot_neb
 
 import numpy as np
+
 from scipy.interpolate import CubicHermiteSpline
+
 from mymetal.io.general import general_read
+from mymetal.io.extxyz import extxyz_to_atomlist
+from mymetal.universal.plot.plot import my_plot_neb, my_plot_xy
+
+from scipy.spatial import cKDTree
+from scipy.sparse.csgraph import connected_components
+from scipy.sparse import csr_matrix
 
 def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CONTCAR', repost: bool = True):
     """Processes NEB calculation results and generates analysis files.
@@ -175,3 +186,270 @@ def my_spline_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,) ->
         'force_b(eV/Å)': my_spline_force
     })
     return my_spline_df
+
+# For detailed analysis, you can use the following function to plot the NEB results.
+def analyze_neb_trajectory(file: str = None, if_save: bool = True, save_dir: str = './', cellxypoints_special_direct: list = None,
+                color_list: list = [['red', 'blue', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan',],
+                        [ 'lime', 'teal', 'lavender', 'tan', 'salmon', 'gold', 'lightcoral', 'skyblue', 'darkblue', 'darkred', 'darkgreen', 'darkorange', ]],
+                boundary_color: str = 'red',
+                special_points_color: str = 'blue',
+                fig_subp_list: list = [None, None],
+                num_ax_legend_list : list = [None, None], 
+                loc_list: list = ['center', 'center'],
+                bbox_to_anchor_list: list = [(0.5, 0.5),(0.5, 0.5) ],
+                ncol_list: list = [2, 2],
+                alpha: list = [[1, 1, 0.7], [1, 1, 0.7]],
+                distance_threshold: float = 0.05,
+                if_plot: bool = False,):
+    """Analyzes NEB (Nudged Elastic Band) trajectory data and visualizes results.
+
+    Processes atomic trajectory data from an extxyz file, calculates displacements,
+    identifies overlapping atoms, and generates visualization plots.
+
+    Args:
+        file: Path to input extxyz file.
+        if_save: Whether to save results to files.
+        save_dir: Directory to save output files.
+        cellxypoints_special_direct: Special points in direct coordinates.
+        **kwargs: Additional plotting parameters (colors, figure settings, etc.).
+
+    Returns:
+        None: Results are saved to files and optionally displayed as plots.
+
+    Example:
+        ```python
+        from mymetal.post.neb import analyze_neb_trajectory
+        from mymetal.io.extxyz import extxyz_to_atomlist
+        from mymetal.universal.plot.general import generate_gradient_colors
+        for lc in ['2.70', '2.80', '2.90']:
+            workdir = f'./neb/{lc}/'
+            file = workdir+"movie_CONTCAR.xyz"
+            cellxypoints_special_direct = [[0, 0], [1/3, 2/3], [2/3, 1/3]]
+            atomlist = extxyz_to_atomlist(file)
+            num_atoms = len(atomlist[0].get_positions())
+            num_frames = len(atomlist)
+            color_list1 = generate_gradient_colors(if_cmap_color=True, if_reverse=True, num_colors=num_frames)
+            color_list2 = generate_gradient_colors(if_cmap_color=True, cmap_color='turbo', num_colors=num_atoms)
+            analyze_neb_trajectory(file, if_save=True, save_dir=workdir, cellxypoints_special_direct=cellxypoints_special_direct, color_list=[color_list1, color_list2],
+                                fig_subp_list=[[5, 3], [4, 2]], num_ax_legend_list=[13, 7], ncol_list=[1,2], alpha=[[0.7, 0.7, 0.7], [0.7, 0.7, 0.7]], distance_threshold=1e-6,
+                                if_plot = True)
+        ```
+    """
+
+    atomlist = extxyz_to_atomlist(file)
+    cell = np.array(atomlist[0].get_cell())
+    cellxy = cell[:2, :2]
+    cellxypoints_special = np.dot(np.array(cellxypoints_special_direct), cellxy) 
+    [positions_xy_list, delta_xy_list, dist_xy_list], [positions_z_list] = get_delta_dist_list(atomlist)
+    cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim = get_figxy_wh_lim(atomlist)
+    ######################################################################################################
+    # loop on every atom in every frame
+    
+    overlap_pairs, overlap_groups = save_overlap_pairs_groups(positions_xy_list, distance_threshold = distance_threshold, save_dir=save_dir)
+
+    if if_plot:
+        my_plot_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
+                figxy_wh_lim = [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim],
+                fig_subp = fig_subp_list[0],
+                cellxypoints_special = cellxypoints_special, if_save=if_save, save_dir=save_dir,
+                color_list=color_list[0], boundary_color=boundary_color, special_points_color=special_points_color,
+                num_ax_legend=num_ax_legend_list[0], loc=loc_list[0],
+                bbox_to_anchor=bbox_to_anchor_list[0], ncol=ncol_list[0],
+                alpha=alpha[0],)
+        my_plot_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
+                figxy_wh_lim = [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim],
+                fig_subp=fig_subp_list[1],
+                cellxypoints_special = cellxypoints_special, if_save=if_save, save_dir=save_dir,
+                if_every_atom=False, if_every_frame=True, if_every_frame_filename='neb_trajectory_xy_diff_frames_text.png',
+                color_list=color_list[1], boundary_color=boundary_color, special_points_color=special_points_color,
+                num_ax_legend=num_ax_legend_list[1], loc=loc_list[1],
+                bbox_to_anchor=bbox_to_anchor_list[1], ncol=ncol_list[1],
+                alpha=alpha[1],
+                if_show_frame_overlap=True, overlap_groups=overlap_groups,
+                )
+        my_plot_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
+                figxy_wh_lim = [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim],
+                fig_subp=fig_subp_list[1],
+                cellxypoints_special = cellxypoints_special, if_save=if_save, save_dir=save_dir,
+                if_every_atom=False, if_every_frame=True,
+                color_list=color_list[1], boundary_color=boundary_color, special_points_color=special_points_color,
+                num_ax_legend=num_ax_legend_list[1], loc=loc_list[1],
+                bbox_to_anchor=bbox_to_anchor_list[1], ncol=ncol_list[1],
+                alpha=alpha[1],
+                )
+
+def remove_translation(positions_list: list = None) -> list:
+    """Removes global translation from a list of atomic positions.
+    NOT USE!!!
+
+    Centers each frame's positions around the center of mass of the first frame.
+
+    Args:
+        positions_list: List of atomic positions for multiple frames.
+
+    Returns:
+        list: Corrected positions with translation removed.
+    """
+    # center of mass
+    reference_com = np.mean(positions_list[0], axis=0)  
+    corrected_positions = []
+    
+    for positions in positions_list:
+        current_com = np.mean(positions, axis=0)
+        delta_com = current_com - reference_com
+        corrected_positions.append(positions - delta_com)
+
+    return corrected_positions
+
+def get_delta_dist_list(atomlist: list = None) -> tuple:
+    """Calculates displacements and distances for atoms in a trajectory.
+
+    Args:
+        atomlist: List of ASE Atoms objects representing trajectory frames.
+
+    Returns:
+        tuple: Contains (positions_xy_list, delta_xy_list, dist_xy_list) and 
+               positions_z_list for all atoms across frames.
+    """
+
+    num_frames = len(atomlist)
+    num_atoms = len(atomlist[0])
+    cellxy = np.array(atomlist[0].get_cell())[:2,:2]
+    # positions_list[j][i], jth frame, ith atom
+    positions_list = []
+    for j in range(num_frames):
+        positions_list.append(np.array(atomlist[j].get_positions()))
+    # remove the rigid translation
+    # corrected_positions_list[j][i], jth frame, ith atom
+    # maybe wrong
+    # corrected_positions_list = remove_translation(positions_list)
+    # positions_list = corrected_positions_list.copy()
+    #########
+    # positions_xy_list[i][j], ith atom, jth frame
+    positions_xy_list = []
+    positions_z_list  = []
+    for i in range(num_atoms):
+        positions_xy_list.append(np.array([positions_list[j][i, :2] for j in range(num_frames)]))
+        positions_z_list.append(np.array([positions_list[j][i, 2] for j in range(num_frames)]))
+    # 位移
+    delta_xy_list = []
+    # 路程
+    dist_xy_list = []
+    for i in range(num_atoms):
+        positions_xy = np.array(positions_xy_list[i])
+        delta_xy = positions_xy - positions_xy[0]
+        # periodic cell 
+        # A_cartesian = A_direct @ cell
+        # all those martix is row-based verctor
+        # A_direct in (-0.5, 0.5)
+        delta_xy_direct = np.dot(delta_xy, np.linalg.inv(cellxy))
+        delta_xy_direct -= np.round(delta_xy_direct)
+        delta_xy = np.dot(delta_xy_direct, cellxy)
+        dist_xy  = np.linalg.norm(delta_xy, axis = 1)
+        delta_xy_list.append(delta_xy)
+        dist_xy_list.append(dist_xy)
+
+    return [positions_xy_list, delta_xy_list, dist_xy_list], [positions_z_list]
+
+def get_figxy_wh_lim(atomlist: list = None) -> tuple:
+    """Calculates figure dimensions and limits based on unit cell.
+
+    Args:
+        atomlist: List of ASE Atoms objects (only first frame is used).
+
+    Returns:
+        tuple: Contains (cell boundary points, figure dimensions, 
+               axes height, and axis limits).
+    """
+    cell = np.array(atomlist[0].get_cell())
+    cellxy = cell[:2, :2]
+    # boundary
+    cellxypoints_xy = np.array([[0, 0], cellxy[0], cellxy[0] + cellxy[1], cellxy[1], [0, 0]])
+    cellxypoints_x  = cellxypoints_xy[:, 0]
+    cellxypoints_y  = cellxypoints_xy[:, 1]
+    figxy_width  = max(cellxypoints_x) - min(cellxypoints_x)
+    figxy_height = max(cellxypoints_y) - min(cellxypoints_y)
+    figxy_lim = [[min(cellxypoints_x), max(cellxypoints_x)], [min(cellxypoints_y), max(cellxypoints_y)]]
+    one_fig_wh_xy = [10.72, 10.72 * figxy_height / figxy_width]
+    axes_height_xy = 7.32 * figxy_height / figxy_width
+    #cellz = cell[2, 2]
+    return cellxypoints_xy, one_fig_wh_xy, axes_height_xy, figxy_lim
+
+def save_overlap_pairs_groups(positions_xy_list: list = None, distance_threshold: float = 0.05, save_dir: str = './') -> tuple:
+    """Identifies and saves overlapping atom pairs and groups.
+
+    Args:
+        positions_xy_list: List of xy positions for all atoms across frames.
+        distance_threshold: Maximum distance to consider atoms overlapping.
+        save_dir: Directory to save output files.
+
+    Returns:
+        tuple: (pairs_list, groups_list) of overlapping atoms.
+    """
+    pairs_list, groups_list = find_overlap_pairs_groups(positions_xy_list, distance_threshold)
+    # pair, group index start from 0
+    with open(os.path.join(save_dir, 'overlap_pairs.txt'), 'w') as f:
+        f.write('#Pairs of overlapping atoms (index starts from 1):\n')
+        for i, pairs in enumerate(pairs_list):
+            f.write('\nFrame {:>4d}:\n'.format(i+1))
+            for pair in pairs:
+                f.write('{:>4d} {:>4d}\n'.format(pair[0]+1, pair[1]+1))
+
+    with open(os.path.join(save_dir, 'overlap_groups.txt'), 'w') as f:
+        f.write('#Groups of overlapping atoms (index starts from 1):\n')
+        for i, groups in enumerate(groups_list):
+            f.write('\nFrame {:>4d}:\n'.format(i+1))
+            for group in groups:
+                formatted_group = ' '.join('{:>4d}'.format(atom+1) for atom in group)
+                f.write('  {}\n'.format(formatted_group))
+
+    return pairs_list, groups_list
+    
+def find_overlap_pairs_groups(positions_xy_list: list = None, distance_threshold: float = 0.05) -> tuple:
+    """Identifies overlapping atom pairs and groups using KDTree.
+
+    Args:
+        positions_xy_list: List of xy positions for all atoms across frames.
+        distance_threshold: Maximum distance to consider atoms overlapping.
+
+    Returns:
+        tuple: (pairs_list, groups_list) for each frame in the trajectory.
+    """
+    num_frames = len(positions_xy_list[0])
+    num_atoms = len(positions_xy_list)
+    # pairs_list[j][i], jth frame, ith pairs
+    # groups_list[j][i], jth frame, ith group of atoms
+    pairs_list = []
+    groups_list = []
+    for i in range(num_frames):
+        positions_xy = np.array([positions_xy_list[j][i] for j in range(num_atoms)])
+        #distance_matrix = squareform(pdist(positions_xy))
+        #print(distance_matrix)
+        tree = cKDTree(positions_xy)
+        pairs = tree.query_pairs(distance_threshold, output_type='ndarray')
+
+        # 处理无重叠的情况
+        if len(pairs) == 0:
+            pairs_list.append( np.empty((0, 2), dtype=int))
+            groups_list.append([])  # 该帧无重叠群组
+            continue
+
+        # 正常处理有重叠的情况
+        pairs_list.append(pairs)
+        # 找到连通区域（重叠原子群）
+        # 构建邻接矩阵（稀疏矩阵）
+        n_nodes = np.max(pairs) + 1  
+        data = np.ones(len(pairs), dtype=bool)
+        adj_matrix = csr_matrix((data, (pairs[:, 0], pairs[:, 1])), shape=(n_nodes, n_nodes))
+
+        # 计算连通分量, labels是每个节点的连通分量标签
+        # n_components是连通分量的数量
+        n_components, labels = connected_components(adj_matrix, directed=False)
+        # 按连通分量分组
+        groups = {}
+        for node, label in enumerate(labels):
+            if label not in groups:
+                groups[label] = []
+            groups[label].append(node)
+        groups_list.append([sorted(group) for group in groups.values()])
+    return pairs_list, groups_list

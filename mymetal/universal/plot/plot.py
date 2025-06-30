@@ -14,22 +14,30 @@ Functions:
     - general_modify_ploted_figure: Deprecated alias for `my_plot_modify_ploted_figure()`.
     - my_plot_convergence: Plot convergence data with options for encuts and kpoints.
     - my_plot_neb: Plot NEB data with spline fitting and energy/force calculations.
+    - my_plot_xy: Create a simple XY plot with options for labels, limits, and saving.
     
 """
 from ase import Atoms
+
+import os
+
 import numpy as np
+
 import pandas as pd
+
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.colors import to_rgb
 from matplotlib.ticker import MultipleLocator, AutoMinorLocator, MaxNLocator
-from brokenaxes import brokenaxes
-from typing import List, Tuple, Union
 import matplotlib.colors as mcolors
-from itertools import cycle
 
-import matplotlib.pyplot as plt
+from brokenaxes import brokenaxes
+
+from typing import List, Tuple, Union
+
+import itertools 
+
 from typing import Callable
 
 from mymetal.universal.plot.general import *
@@ -43,7 +51,9 @@ __all__ = [
     'my_plot_modify_ploted_figure',
     'my_plot_colorbar',
     'general_modify_ploted_figure',
-    'my_plot_convergence']
+    'my_plot_convergence',
+    'my_plot_neb',
+    'my_plot_xy',]
 
 
 # For old version plot
@@ -688,6 +698,41 @@ def my_plot_colorbar(original_figsize: tuple=(10.72, 8.205),
 
     Returns:
         Tuple[Figure, Tuple[Axes, Axes]]: The figure and a tuple containing the main and colorbar axes.
+
+    Usage:
+        ```python
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import matplotlib.colors as mcolors
+
+        fig, axes = my_plot_colorbar(layout="none", grid= False)
+        ax = axes[0]   # Main axis for plotting
+        ax2 = axes[1]  # Colorbar axis
+
+        # main plot
+        keys = np.arange(2.70, 2.91, 0.01).tolist()
+        keys = [round(key, 2) for key in keys]
+        gradient_colors = generate_gradient_colors(if_cmap_color=True, num_colors=len(keys))
+        x = [0, 1/3, 0.5, 5/6, 1]
+        labels = ['FCC', r'$\dfrac{1}{3}$', 'DHCP' , r'$\dfrac{5}{6}$','HCP']
+
+        # 创建ScalarMappable，用于颜色条
+        norm = mcolors.Normalize(vmin=min(keys), vmax=max(keys))  # 范围对应keys
+        sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=norm)  # 使用自定义的颜色映射（如 coolwarm）
+        sm.set_array([])  # 空的数组，用于colorbar
+
+        for key, color in zip(keys, gradient_colors):
+            y = transition_path_dict[key]["energy"]/transition_path_dict[key]["atoms_number"] # eV/atom
+            y = (y-y[0])*1e3 # meV/atom
+            ax.plot(x, y, label=f'{key:.2f} Å', marker='o', linestyle=':',
+                    color=color)#, markerfacecolor='none')
+            ax.set_xlabel(r'Hexagonality $i$')
+            ax.set_ylabel(r'$E^{i}-E^{0}$ (meV/atom)')
+
+        # 添加 colorbar
+        cbar = fig.colorbar(sm, cax = ax2)
+        cbar.set_label('In-plane lattice constant (Å)', rotation=270, labelpad=45)
+        ```
     """
     left = left
     axes_width = axsize[0]
@@ -842,7 +887,7 @@ def my_plot_convergence(x: list = None,
     return fig, ax
 
 
-
+# for workflow NEB trajectory
 def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None, 
                 spline_df: pd.DataFrame =  None, extsdf: pd.DataFrame =  None, 
                 mysplinedf: pd.DataFrame = None,
@@ -933,6 +978,210 @@ def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,
         plt.savefig(savefile, dpi=dpi)
 
     return fig, axes
+
+def my_plot_xy(xy_list: list = None, z_list: list = None, figxy_wh_lim: list = None, fig_subp: list = None,if_every_atom: bool =True, if_every_frame: bool = False,
+               if_every_atom_filename: str = 'neb_trajectory_xy_diff_atoms.png', if_every_frame_filename: str = 'neb_trajectory_xy_diff_frames.png',
+               cellxypoints_special: list = None, if_save: bool = True, save_dir: str = './', 
+               color_list: list = ['red', 'blue', 'green', 'orange', 'purple', 
+                                                    'brown', 'pink', 'gray', 'olive', 'cyan', 'lime', 
+                                                    'teal', 'lavender', 'tan', 'salmon', 'gold', 'lightcoral', 
+                                                    'skyblue', 'darkblue', 'darkred', 'darkgreen', 'darkorange', 
+                                                    ],
+                boundary_color: str = 'red',
+                special_points_color: str = 'blue',
+                num_ax_legend: int = None, loc: str ='center', bbox_to_anchor: tuple =(0.5, 0.5), ncol: int =2,
+                xlabel: str = 'X (Å)', ylabel: str = 'Y (Å)',
+                alpha: list = [1, 1, 0.7],
+                if_show_frame_overlap: bool = False,
+                overlap_groups: list = None,
+                xytext: list = (0, 10)
+                                                    ) -> tuple:
+    """Plots atomic trajectories in 2D with customizable visualization options.
+
+    Args:
+        xy_list: List containing [positions_xy, delta_xy, dist_xy] and positions_z arrays.
+        z_list: Z-coordinate data (unused in 2D plot).
+        figxy_wh_lim: Figure dimensions and limits [cell_points, [width, height], axes_height, lims].
+        fig_subp: Subplot grid layout [rows, cols].
+        if_every_atom: If True, plots each atom's trajectory across frames.
+        if_every_frame: If True, plots each frame's atomic configuration.
+        if_every_atom_filename: Filename for saving atom-wise plots.
+        if_every_frame_filename: Filename for saving frame-wise plots.
+        cellxypoints_special: Special points in the xy plane for highlighting.
+        if_save: If True, saves the plot to a file.
+        save_dir: Directory to save the plot.
+        color_list: List of colors for plotting.
+        boundary_color: Color for the boundary of the cell.
+        special_points_color: Color for special points in the xy plane.
+        num_ax_legend: Number of axes in the legend.
+        loc: Location of the legend.
+        bbox_to_anchor: Bounding box to anchor the legend.
+        ncol: Number of columns in the legend.
+        xlabel: Label for the x-axis.
+        ylabel: Label for the y-axis.
+        alpha: List of alpha values for different plot elements.
+        if_show_frame_overlap: If True, shows overlapping groups in the plot.
+        overlap_groups: List of groups to highlight in the plot.
+        xytext: Offset for text annotations.
+        **kwargs: Additional plotting parameters.
+
+    Returns:
+        tuple: (fig, axes) matplotlib figure and axes objects.
+
+    Raises:
+        ValueError: If neither if_every_atom nor if_every_frame is True.
+
+    Example:
+        ```python
+        # Example usage of my_plot_xy for visualizing atomic trajectories
+
+        # 1. Prepare atomic data from extxyz file
+        atomlist = extxyz_to_atomlist(file)
+        cell = np.array(atomlist[0].get_cell())
+        cellxy = cell[:2, :2]  # Extract 2D cell vectors
+
+        # 2. Convert special points from direct to Cartesian coordinates
+        cellxypoints_special_direct = [[0, 0], [1/3, 2/3], [2/3, 1/3]]
+        cellxypoints_special = np.dot(np.array(cellxypoints_special_direct), cellxy)
+
+        # 3. Calculate trajectory data
+        [positions_xy_list, delta_xy_list, dist_xy_list], [positions_z_list] = get_delta_dist_list(atomlist)
+
+        # 4. Get figure dimensions and limits
+        cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim = get_figxy_wh_lim(atomlist)
+
+        # 5. Identify overlapping atoms
+        overlap_pairs, overlap_groups = save_overlap_pairs_groups(
+            positions_xy_list, 
+            distance_threshold=distance_threshold, 
+            save_dir=save_dir
+        )
+
+        # 6. Plot trajectories
+        if if_plot:
+            # Please see mymetal.post.neb.analyze_neb_trajectory for more details on the parameters.
+            # Example 1: Plot trajectories by atom (each subplot shows one atom's path through frames)
+
+            # Example 2: Plot trajectories by frame (each subplot shows all atoms in one frame)
+
+            # Example 3: Basic frame-by-frame plot without overlap annotations
+        ```
+    """
+    [positions_xy_list, delta_xy_list, dist_xy_list], [positions_z_list] = xy_list, z_list
+    [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim] = figxy_wh_lim
+    boundary = cellxypoints_xy
+    special_points = cellxypoints_special
+    num_atoms = len(positions_xy_list)
+    num_frames = len(positions_xy_list[0])
+    color_cycle = itertools.cycle(color_list)
+
+    if if_every_atom:
+        num_ax = num_atoms
+        num_plot = num_frames
+        filename = if_every_atom_filename
+        fig_subp = [1, num_atoms+1] if fig_subp is None else fig_subp
+        title = 'Atom'
+        num_ax_legend = num_atoms + 1 if num_ax_legend is None else num_ax_legend
+    elif if_every_frame:
+        num_ax = num_frames
+        num_plot = num_atoms # num_points_in_one_ax = num_atoms
+        filename = if_every_frame_filename
+        fig_subp = [1, num_frames+1] if fig_subp is None else fig_subp
+        title = 'Frame'
+        num_ax_legend = num_frames + 1 if num_ax_legend is None else num_ax_legend
+    else:
+        raise ValueError('Either if_every_atom or if_every_frame must be True.')
+    
+    if if_show_frame_overlap:
+        my_plot_group_point = []
+        # every frame loop
+        for overlap_group in overlap_groups:
+            # if len(overlap_group) == 0:
+            #     my_plot_point.append([])
+            #     continue
+            # every group loop in the frame
+            # can deal with the case that there is no overlap group in the frame
+            my_plot_group_point.append([np.max(group) for group in overlap_group])
+
+    fig_xy, axes_xy = my_plot(one_fig_wh = [figxy_width, figxy_height], axes_height = axes_height_xy, fig_subp=fig_subp, fig_sharex=False, top = 0.5)
+    axlist = axes_xy.ravel() # 1-D list, (2,2) => 4
+    if len(axlist) < num_ax+1:
+        raise ValueError(f'Not enough axes in the figure. Expected at least {num_ax} + 1, got {len(axlist)}.')
+    axmainlist = axlist[:num_ax]
+
+    for i, ax in enumerate(axmainlist):
+        
+        ax.plot(boundary[:,0], boundary[:,1], linestyle='-', color=boundary_color, zorder=10, alpha=alpha[0])
+        ax.plot(special_points[:, 0], special_points[:, 1], marker = 'x', linestyle='', color=special_points_color, zorder = 11, alpha=alpha[1])
+
+        if if_show_frame_overlap:
+            my_plot_group_point = []
+            # every frame loop
+            overlap_group = overlap_groups[i]
+            # every group loop in the frame
+            # can deal with the case that there is no overlap group in the frame
+            special_group_points = [np.max(group) for group in overlap_group]
+
+        texts = []
+        for j in range(num_plot):
+            
+            # positions_xy_list[i][j], ith atom, jth frame
+            if if_every_atom:
+                # i is the atom index, j is the frame index
+                positions_xy = positions_xy_list[i]
+                label = f'Frame {j+1}'
+            elif if_every_frame:
+                # i is the frame index, j is the atom index
+                positions_xy = np.array([positions_xy_list[j][i] for j in range(num_plot)])
+                label = f'Atom {j+1}'
+            color = next(color_cycle)
+            ax.plot(positions_xy[j, 0], positions_xy[j, 1], marker='o', linestyle='', label = label, color = color, alpha = alpha[2])
+
+            if if_show_frame_overlap:
+                for temp_i, point in enumerate(special_group_points):
+                    if point == j:
+                        group = overlap_group[temp_i]
+                        group_str = '-'.join(str(atom+1) for atom in group)
+                        text = ax.text(positions_xy[j, 0], positions_xy[j, 1], group_str, 
+                                        ha='center', va='center', zorder = 100)
+                        texts.append(text)
+                        # ax.annotate(group_str, xy=(positions_xy[j, 0], positions_xy[j, 1]),
+                        #             xytext=xytext, textcoords='offset points',)
+                        #print(group_str)
+
+        ax.set_xlim(figxy_lim[0])
+        ax.set_ylim(figxy_lim[1])
+
+        if if_show_frame_overlap:
+            general_adjust_text(
+                texts = texts,
+                ax=ax,
+                x = positions_xy[:, 0],
+                y = positions_xy[:, 1],
+                ensure_inside_axes=True, 
+                #iter_lim= 1000, 
+                #expand= (1.3, 1.3),
+                #force_static=100,          # 控制点与标签的排斥力
+                #force_text=0.3,            # 控制标签间的排斥力
+                if_avoid_markers=True,
+            )
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        ax.set_title(f'{title} {i+1}')
+
+    # For adding legend
+    axblanklist = axlist[num_ax:]
+    for ax in axblanklist:
+        ax.axis('off')
+    ax_legend = axlist[num_ax_legend]
+    handles, labels = axmainlist[-1].get_legend_handles_labels()
+    general_modify_legend(ax_legend.legend(handles, labels, loc=loc, bbox_to_anchor=bbox_to_anchor, ncol=ncol))
+
+    if if_save:
+        plt.savefig(os.path.join(save_dir, filename), dpi=300, facecolor='white')
+        plt.savefig(os.path.join(save_dir, filename.replace('.png', '.pdf')), dpi=300)
+    
+    return fig_xy, axes_xy
 
 
 

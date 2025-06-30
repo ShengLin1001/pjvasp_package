@@ -8,6 +8,7 @@ Functions:
     - check_axes_size: Check the size of axes in a plot.
     - check_all_rcParams: Check all Matplotlib rcParams settings.
     - get_ploted_figure: Get the current figure and axis objects.
+    - get_points_on_markers_boundary: Get points on the boundary of markers in a plot.
     - add_color_band: Add semi-transparent color band to axes.
     - add_circle_number: Add a numbered circle to a plot.
     - general_modify_band_plot: Modify the appearance of a band structure plot.
@@ -19,6 +20,7 @@ Functions:
     - general_font: Customize global plotting settings for Matplotlib.
     - general_axes: Modifies axis properties like ticks, labels, and limits.
     - general_subplots_adjust: Adjusts the figure's subplots, size, and spacing.
+    - general_adjust_text: Adjusts text labels to avoid overlap in a plot.
 """
 
 
@@ -40,7 +42,7 @@ from typing import List, Tuple, Union
 
 from itertools import cycle
     
-
+from adjustText import adjust_text
 
 def check_font_size(ax: plt.Axes):
     x_label_fontsize = ax.xaxis.get_label().get_fontsize()
@@ -88,6 +90,48 @@ def get_ploted_figure():
     xlim = ax.get_xlim()
     ylim = ax.get_ylim()
     return fig, ax, xlim, ylim
+
+def get_points_on_markers_boundary(ax: plt.Axes = None, x: list = None, y: list = None, markersize_pts: float =20, ratio: float =1.0, num_points: int=20) -> np.ndarray:
+    """Generates points around marker boundaries to avoid text overlap.
+
+    Calculates a circular boundary around each marker point to help prevent
+    text labels from overlapping with plot markers.
+
+    Args:
+        ax: Matplotlib axes object.
+        x: X-coordinates of markers.
+        y: Y-coordinates of markers.
+        markersize_pts: Marker size in points.
+        ratio: Scaling factor for marker boundary.
+        num_points: Number of points to generate around each marker.
+
+    Returns:
+        np.ndarray: Array of (x,y) points around all marker boundaries.
+    """
+    fig = ax.figure
+    ax_pos = ax.get_position()
+    fig_width, fig_height = fig.get_size_inches()
+    ax_width_inch = ax_pos.width * fig_width
+    ax_height_inch = ax_pos.height * fig_height
+
+    x0, x1 = ax.get_xlim()
+    y0, y1 = ax.get_ylim()
+    xlength = x1 - x0
+    ylength = y1 - y0
+    
+    # radius, so /2
+    markersize_inch = markersize_pts / 72 * ratio / 2 
+    markersize_xlength = xlength * markersize_inch / ax_width_inch
+    markersize_ylength = ylength * markersize_inch / ax_height_inch 
+    
+    angles = np.linspace(0, 2*np.pi, num_points)
+    avoid_points = []
+    for xi, yi in zip(x, y):
+        px = xi + markersize_xlength * np.cos(angles)
+        py = yi + markersize_ylength * np.sin(angles)
+        avoid_points.extend(zip(px, py))
+    
+    return np.array(avoid_points)
 
 def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, cmap: str = 'coolwarm', alpha: float = 0.5, origin: str='lower') -> None:
     """Adds a colored gradient band to an existing matplotlib Axes object.
@@ -204,7 +248,125 @@ def add_circle_number(positions: List[float]=None, ax: Axes=None, color: str='st
                          **circle_kwargs))
     ax.text(positions[0], positions[1]+text_y_offset, str(number), fontsize=fontsize, ha='center', va='center', color=color)
 
+def general_adjust_text(texts: list = None, ax=None, x: list = None, y: list = None, 
+                        ensure_inside_axes: bool = True, iter_lim: int = 1000, time_lim: float = None,
+                        expand: tuple = (1.0, 1.0), force_static: tuple = (0.1, 0.2), force_text: tuple = (0.1, 0.2),
+                        if_strict_ensure_inside_axes: bool = True, density: int = 50,
+                        if_avoid_markers: bool = True, markersize: float = 20.0, ratio_markers = 1.0, num_points_per_marker: int = 20,
+                        **kwargs
+                        ):
+    """Adjusts text positions to avoid overlaps with markers and axes boundaries.
 
+    Uses adjust_text algorithm to automatically reposition text labels to avoid collisions with
+    specified points, plot markers, and axes boundaries.
+
+    Args:
+        texts: List of matplotlib.text.Text objects to adjust.
+        ax: Matplotlib axes object.
+        x: X-coordinates of points to avoid.
+        y: Y-coordinates of points to avoid.
+        ensure_inside_axes: Keep text within axes boundaries.
+        iter_lim: Maximum iterations for adjustment algorithm.
+        time_lim: Maximum time (seconds) for adjustment.
+        expand: Expansion factors for text bounding boxes.
+        force_static: Repulsion force from static points.
+        force_text: Repulsion force between text labels.
+        if_strict_ensure_inside_axes: Add boundary points to avoid.
+        density: Number of boundary points to generate.
+        if_avoid_markers: Avoid overlap with plot markers.
+        markersize: Size of markers to avoid.
+        ratio_markers: Ratio of marker size to avoid zone.
+        num_points_per_marker: Points to generate around each marker.
+        **kwargs: Additional arguments passed to adjust_text.
+
+    Raises:
+        ValueError: If x and y lengths don't match, or if either is None.
+
+    Note:
+        Requires the adjustText package (https://github.com/Phlya/adjustText).
+
+    Example:
+        ```python
+        from mymetal.universal.plot.general import general_adjust_text
+        import numpy as np
+        from mymetal.universal.plot.plot import my_plot
+
+        # Typical usage in a plotting function to avoid label overlaps
+        fig, ax = my_plot() 
+        texts = []
+        positions = np.random.rand(10, 2)  # Example data points
+        ax.plot(positions[:, 0], positions[:, 1], 'o')  
+
+        # Create some text labels
+        for i, (x, y) in enumerate(positions):
+            texts.append(ax.text(x, y, f'Label {i+1}', ha='center', va='center'))
+        
+        # Adjust text positions to avoid overlaps
+        general_adjust_text(
+            texts=texts,
+            ax=ax,
+            x=positions[:, 0],
+            y=positions[:, 1],
+            ensure_inside_axes=True,
+            if_avoid_markers=True,
+            # Optional parameters with defaults:
+            # expand=(1.0, 1.0),
+            # force_static=(0.1, 0.2),
+            # force_text=(0.1, 0.2),
+            # if_strict_ensure_inside_axes=True,
+            # density=50,
+            # markersize=20.0,
+            # ratio_markers=1.0,
+            # num_points_per_marker=20
+        )
+        
+        ```
+
+    """
+    # markers & check
+    if x is not None and y is not None:
+        if len(x) != len(y):
+            raise ValueError('x and y must have the same length.')
+        else:
+            avoid_points = np.column_stack([x, y])
+    if x is None or y is None:
+        raise ValueError('Both x and y must be provided for avoid points.')
+
+    # boundary points
+    # TODO: ratio to boundary
+    avoid_boundary_points = []
+    if if_strict_ensure_inside_axes:
+        xmin, xmax = ax.get_xlim()
+        ymin, ymax = ax.get_ylim()
+        top = np.column_stack([np.linspace(xmin, xmax, density), 
+                            np.full(density, ymax)])
+        bottom = np.column_stack([np.linspace(xmin, xmax, density), 
+                                np.full(density, ymin)])
+        left = np.column_stack([np.full(density, xmin),
+                            np.linspace(ymin, ymax, density)])
+        right = np.column_stack([np.full(density, xmax),
+                            np.linspace(ymin, ymax, density)])
+        avoid_boundary_points = np.vstack([top, bottom, left, right])
+
+    avoid_marker_points = []
+    if if_avoid_markers:
+        avoid_marker_points = get_points_on_markers_boundary(ax, x, y, markersize_pts=markersize, ratio=ratio_markers, num_points=num_points_per_marker)
+
+    avoid_full_points = np.vstack([avoid_points, avoid_boundary_points, avoid_marker_points])
+    avoid_full_x = avoid_full_points[:, 0]
+    avoid_full_y = avoid_full_points[:, 1]
+    adjust_text(
+        texts = texts,
+        ax=ax,
+        x = avoid_full_x,
+        y = avoid_full_y,
+        expand = expand,
+        force_static=force_static,
+        force_text=force_text,
+        ensure_inside_axes=ensure_inside_axes,
+        iter_lim= iter_lim,  
+        time_lim=time_lim,
+        **kwargs)
 
 def general_modify_band_plot(ax: plt.Axes) -> plt.Axes:
     xticks = ax.get_xticks()
