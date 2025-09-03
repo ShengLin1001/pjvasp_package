@@ -76,8 +76,11 @@ def my_plot(
     top: float = 0.9517,
     axes_height: float = 5.89,
     axes_width: float = 7.31,
-    grid_linewidth: float = 0.5,
-    constrained_layout: bool = False
+    grid_linewidth: float = 2.0,
+    constrained_layout: bool = False,
+    if_keep_wspace_hspace: bool = False,
+    wspace: float = 3.41,
+    hspace: float = 2.315,
 ) -> Tuple[Figure, List[Axes]]:
     """Creates a customized matplotlib figure with specific layout adjustments.
 
@@ -85,10 +88,13 @@ def my_plot(
     subplots, and adjusts their layout according to the given parameters. 
     It also enables minor ticks and customizes the axes' appearance, margins, 
     and tick settings.
+    
+    `if_keep_wspace_hspace` allows to keep the specified width and height
+    space between subplots, adjusting the figure size accordingly.
 
     Args:
         one_fig_wh (List[float]): Width and height of the figure in inches 
-            (default: [10.72, 8.205]).
+            (default: [10.72, 8.205] = [7.31 + 3.41, 5.89 + 2.315]).
         fig_subp (List[int]): Number of rows and columns of subplots 
             (default: [1, 1]).
         fig_sharex (bool): Whether the subplots share the same x-axis 
@@ -100,6 +106,11 @@ def my_plot(
         top (float): Top margin in inches (default: 0.9517).
         axes_height (float): Height of each subplot in inches (default: 5.89).
         axes_width (float): Width of each subplot in inches (default: 7.31).
+        grid_linewidth (float): Width of the grid lines (default: 0.5).
+        constrained_layout (bool): Whether to use constrained layout for the figure
+            (default: False).
+        if_keep_wspace_hspace (bool): If True, keeps the specified width and height
+            space between subplots (default: False).
 
     Returns:
         Tuple[Figure, List[Axes]]: A tuple containing:
@@ -110,6 +121,8 @@ def my_plot(
 
     general_font(grid, grid_linewidth, constrained_layout= constrained_layout)
 
+    if if_keep_wspace_hspace:
+        one_fig_wh = [axes_width + wspace, axes_height + hspace]
     fig_wh = fig_subp[1]*one_fig_wh[0], fig_subp[0]*one_fig_wh[1]
     fig, ax = plt.subplots(nrows=fig_subp[0], ncols=fig_subp[1], 
                            sharex=fig_sharex, figsize=(fig_wh[0], fig_wh[1]))

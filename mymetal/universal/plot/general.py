@@ -120,7 +120,7 @@ def get_points_on_markers_boundary(ax: plt.Axes = None, x: list = None, y: list 
     ylength = y1 - y0
     
     # radius, so /2
-    markersize_inch = markersize_pts / 72 * ratio / 2 
+    markersize_inch = markersize_pts / 72 / 2 
     markersize_xlength = xlength * markersize_inch / ax_width_inch
     markersize_ylength = ylength * markersize_inch / ax_height_inch 
     
@@ -175,12 +175,15 @@ def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, 
         The function requires either a predefined gradient array or a valid cmap name.
         The gradient array should be shaped appropriately for matplotlib's imshow.
     """
+
     # Fill the gradient region
     ax.imshow(X=gradient, extent=extent, aspect='auto',
             cmap=cmap, origin=origin, alpha=alpha)
 
-def add_circle_number(positions: List[float]=None, ax: Axes=None, color: str='steelblue', number: int=0,
-                               radiusx_ratio: float = 0.05, text_y_offset_inch: float = -0.0267, lw: float = 2, fontsize: int = 24,
+def add_circle_number(ax: Axes = None, positions: List[float]=None, color: str='steelblue', number: int=0,
+                               radiusx_ratio: float = 0.05, 
+                               markersize_pts: float = None, 
+                               text_y_offset_inch: float = -0.0267, lw: float = 2, fontsize: int = 24,
                                **circle_kwargs) -> None:
     
     """Draws a numbered hollow ellipse at a specific data coordinate on a matplotlib axis.
@@ -188,12 +191,15 @@ def add_circle_number(positions: List[float]=None, ax: Axes=None, color: str='st
     This function compensates for figure and axes aspect ratio distortions and allows
     precise placement of text annotations (numbers) inside ellipse markers.
 
+    This function must be used after fixing the figure and axes size
+
     Args:
         positions (List[float]): A list of two elements [x, y] specifying the center of the ellipse.
         ax (Axes): A matplotlib Axes object to draw on.
         color (str): Color of the ellipse edge and number text. Defaults to 'steelblue'.
         number (int): The number to display inside the ellipse. Defaults to 0.
         radiusx_ratio (float): Horizontal radius of ellipse as a fraction of x-axis length. Defaults to 0.05.
+        markersize_pts (float): Size of the marker in points. If None, uses radiusx_ratio to calculate size. Defaults to None.
         text_y_offset_inch (float): Vertical offset of the number text in inches. Defaults to -0.0267.
         lw (float): Line width of the ellipse edge. Defaults to 2.
         fontsize (int): Font size of the number text. Defaults to 24.
@@ -230,20 +236,28 @@ def add_circle_number(positions: List[float]=None, ax: Axes=None, color: str='st
         raise ValueError("positions must be a list of two elements [x, y]")
 
     ax_pos = ax.get_position()
-    fig, ax, (x0,x1), (y0,y1) = get_ploted_figure()
+    fig, _, (x0,x1), (y0,y1) = get_ploted_figure()
+    
     fig_width, fig_height = fig.get_size_inches()
     ax_width_inches = ax_pos.width * fig_width
     ax_height_inches = ax_pos.height * fig_height
     xlength = x1 - x0
     ylength = y1 - y0
+
     aspect_ratio = ax_height_inches / ax_width_inches
     text_y_offset = text_y_offset_inch / ax_height_inches * ylength
 
     # For plot, tranform to data coordinates
-    radiusx = radiusx_ratio * xlength
-    # First trnasform to inch unit, then to data coordinates
-    radiusy = radiusx_ratio / aspect_ratio * ylength
-
+    if markersize_pts is None:
+        radiusx = radiusx_ratio * xlength
+        # First trnasform to inch unit, then to data coordinates
+        radiusy = radiusx_ratio / aspect_ratio * ylength
+    else:
+        # radius, so /2
+        markersize_inch = markersize_pts / 72  / 2 
+        radiusx = xlength * markersize_inch / ax_width_inches
+        radiusy = ylength * markersize_inch / ax_height_inches 
+        
     ax.add_patch(Ellipse(positions, width=2*radiusx, height=2*radiusy, edgecolor=color, facecolor='none', lw=lw,
                          **circle_kwargs))
     ax.text(positions[0], positions[1]+text_y_offset, str(number), fontsize=fontsize, ha='center', va='center', color=color)
@@ -563,7 +577,7 @@ def general_margin_bin(axis,
         # Force axis limits to update based on the new margins
         axis.autoscale(enable=True, axis='both', tight=False)
 
-def general_font( grid: bool = True, grid_linewidth: float = 0.5, grid_linestyle = '--',
+def general_font( grid: bool = True, grid_linewidth: float = 2, grid_linestyle = '--',
                  if_ploted: bool = False,
                   fontsize: int = 28, markersize: int = 20, linewidth: int = 3, 
                   markeredgewidth: int = 3, legend_fontsize: int = 24, 
@@ -605,7 +619,6 @@ def general_font( grid: bool = True, grid_linewidth: float = 0.5, grid_linestyle
     plt.rcParams['axes.grid'] = grid                       #
     plt.rcParams['grid.linestyle'] = grid_linestyle        #
     plt.rcParams['grid.linewidth'] = grid_linewidth        #
-    plt.rcParams["savefig.transparent"] = 'True'           # don't need change
     plt.rcParams['lines.linewidth'] = linewidth            #
     plt.rcParams['lines.markersize'] = markersize          #
     plt.rcParams['lines.markeredgewidth'] = markeredgewidth #
@@ -625,6 +638,15 @@ def general_font( grid: bool = True, grid_linewidth: float = 0.5, grid_linestyle
     # Math
     plt.rcParams['mathtext.fontset'] = 'custom'
     plt.rcParams['mathtext.rm'] = 'Arial'  # 设置数学字体为 Arial
+
+    # Savefig
+    plt.rcParams['savefig.transparent'] = False
+    plt.rcParams['savefig.facecolor'] = 'white'
+    plt.rcParams['savefig.dpi'] = 300 
+
+    # background
+    plt.rcParams['axes.facecolor'] = 'white' 
+    plt.rcParams['figure.facecolor'] = 'white'  
 
     if if_ploted:
         fig = plt.gcf()
