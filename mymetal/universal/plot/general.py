@@ -9,6 +9,7 @@ Functions:
     - check_all_rcParams: Check all Matplotlib rcParams settings.
     - get_ploted_figure: Get the current figure and axis objects.
     - get_points_on_markers_boundary: Get points on the boundary of markers in a plot.
+    - add_arrow: Add an arrow with optional text annotation to a plot.
     - add_color_band: Add semi-transparent color band to axes.
     - add_circle_number: Add a numbered circle to a plot.
     - general_modify_band_plot: Modify the appearance of a band structure plot.
@@ -21,6 +22,7 @@ Functions:
     - general_axes: Modifies axis properties like ticks, labels, and limits.
     - general_subplots_adjust: Adjusts the figure's subplots, size, and spacing.
     - general_adjust_text: Adjusts text labels to avoid overlap in a plot.
+    - general_set_all_rcParams: Set multiple Matplotlib rcParams at once.
 """
 
 
@@ -261,6 +263,116 @@ def add_circle_number(ax: Axes = None, positions: List[float]=None, color: str='
     ax.add_patch(Ellipse(positions, width=2*radiusx, height=2*radiusy, edgecolor=color, facecolor='none', lw=lw,
                          **circle_kwargs))
     ax.text(positions[0], positions[1]+text_y_offset, str(number), fontsize=fontsize, ha='center', va='center', color=color)
+
+def add_arrow(ax: plt.Axes = None, text: str = '', start: list = None, end: list = None,
+              xycoords: str = 'data', textcoords: str = None, 
+              arrowprops: dict = dict(arrowstyle="simple", color='red'), 
+              zorder: int = 0, **kwargs) -> plt.Annotation:
+    """
+    Add an arrow between two points on a matplotlib Axes, optionally with text.
+
+    This function is a wrapper around Matplotlib's annotation mechanism,
+    specialized for drawing arrows from a starting point to an ending point.
+    A text label will be added at the starting point.
+
+    Args:
+        ax (plt.Axes): The target Matplotlib Axes.
+        text (str, optional): Annotation text to display near the arrow. Defaults to '', draw a single arrow.
+        start (list[float], optional): Starting point of the arrow (x, y). Defaults to None. 
+        end (list[float], optional): Ending point of the arrow (x, y). Defaults to None.
+        xycoords (str or tuple or callable, optional): Coordinate system for 
+            `start` and `end`. Defaults to `'data'`. Supported values include:
+
+            - 'figure points': Points from the lower left of the figure.
+            - 'figure pixels': Pixels from the lower left of the figure.
+            - 'figure fraction': Fraction of the figure from the lower left.
+            - 'subfigure points': Points from the lower left of the subfigure.
+            - 'subfigure pixels': Pixels from the lower left of the subfigure.
+            - 'subfigure fraction': Fraction of the subfigure from the lower left.
+            - 'axes points': Points from the lower left corner of the Axes.
+            - 'axes pixels': Pixels from the lower left corner of the Axes.
+            - 'axes fraction': Fraction of the Axes from the lower left.
+            - 'data': Data coordinates of the object being annotated 
+              (default).
+            - 'polar': (theta, r) if not in native 'data' coordinates.
+
+            Note:
+                'subfigure pixels' and 'figure pixels' are equivalent for the 
+                parent figure. To ensure compatibility when using subfigures, 
+                prefer 'subfigure pixels'.
+        textcoords (str or tuple or callable, optional): Coordinate system for 
+            the text position. If None, defaults to the value of `xycoords`.
+            All `xycoords` values are valid, plus the following:
+
+            - 'offset points': Offset in points from the xy value.
+            - 'offset pixels': Offset in pixels from the xy value.
+            - 'offset fontsize': Offset relative to the current font size 
+              from the xy value.
+        arrowprops (dict, optional): Properties used to draw a 
+            .FancyArrowPatch arrow between the start and end positions. 
+            Defaults to None, i.e., no arrow is drawn.
+
+            There are two ways to specify arrows:
+
+            Simple arrow (no 'arrowstyle' key):
+
+            - width (float): Width of the arrow in points.
+            - headwidth (float): Width of the base of the arrow head in points.
+            - headlength (float): Length of the arrow head in points.
+            - shrink (float): Fraction of the total arrow length to shrink from both ends.
+            - ?: Any valid .FancyArrowPatch property.
+
+            The arrow is attached to the edge of the text box. Its exact 
+            position (corner or center) depends on where it points.
+
+            Fancy arrow (when 'arrowstyle' is provided):
+
+            - arrowstyle (str): Arrow style.
+            - connectionstyle (str): Connection style.
+            - relpos (tuple): Relative coordinates of the text box where 
+              the arrow starts. Defaults to (0.5, 0.5).
+            - patchA: Defaults to bounding box of the text.
+            - patchB: Defaults to None.
+            - shrinkA (float): Shrink factor in points. Defaults to 2.
+            - shrinkB (float): Shrink factor in points. Defaults to 2.
+            - mutation_scale (float): Scaling of mutation, defaults to text size (points).
+            - mutation_aspect (float): Default is 1.
+            - ?: Any valid .FancyArrowPatch property.
+
+            Note:
+                The starting point of the arrow is defined by relpos, where 
+                (0, 0) is the lower left corner of the text box and (1, 1) is 
+                the upper right. Values outside [0, 1] are supported and 
+                indicate points outside the text box. Default is (0.5, 0.5), 
+                i.e., centered.
+        zorder (int, optional): Drawing order of the arrow/text. Defaults to 0.
+        **kwargs: Additional keyword arguments passed to `.Text`.
+
+    Returns:
+        matplotlib.text.Annotation: The created annotation object.
+
+    Example:
+    ```python
+        import matplotlib.pyplot as plt
+
+        fig, ax = my_plot()
+
+        # Add an arrow from (0.2, 0.2) to (0.8, 0.8) with high z-order
+        add_arrow(ax=ax, start=[0.2, 0.2], end=[0.8, 0.8], zorder=10)
+
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        plt.show()
+    ```
+    
+    See Also:
+        matplotlib.axes.Axes.annotate : Underlying annotation function.
+        matplotlib.patches.FancyArrowPatch : Arrow drawing object.
+    """
+    temp = ax.annotate(text, xy=end, xytext=start, 
+                xycoords=xycoords, textcoords=textcoords,
+                arrowprops=arrowprops, zorder=zorder, **kwargs)
+    return temp
 
 def general_adjust_text(texts: list = None, ax=None, x: list = None, y: list = None, 
                         ensure_inside_axes: bool = True, iter_lim: int = 1000, time_lim: float = None,
@@ -766,4 +878,310 @@ def general_subplots_adjust(fig: Figure,
     fig.subplots_adjust(left=left/fig_wh[0], right=(fig_wh[0]-right)/fig_wh[0], 
                         top=(fig_wh[1]-top)/fig_wh[1], bottom=(bottom)/fig_wh[1],
                         hspace= (hspace), wspace=(wspace))
+
+def general_set_all_rcParams(
+        # axes
+        axes_grid: bool = True,
+        axes_labelpad: float = 15,
+        axes_labelsize: float = 28,
+        axes_linewidth: float = 3,
+        axes_titlepad: float = 15,
+        axes_xmargin: float = 0.1,
+        axes_ymargin: float = 0.1,
+        axes_zmargin: float = 0.1,
+        # backend
+        backend: str = 'module://matplotlib_inline.backend_inline',
+        # boxplot, Todo
+
+        # contour
+        contour_linewidth: float = 3,
+
+        # errorbar
+        errorbar_capsize: float = 3,
+
+        # figure
+        figure_dpi: float = 300.0,
+        figure_edgecolor: str = "white",
+        figure_facecolor: str = "white",
+        # control figsize by subp and one_figsize
+        figure_subp: tuple = (1, 1),                # (rows, cols)
+        figure_one_figsize: tuple = (10.72, 8.205), # inches, (width, height) 
+
+        figure_frameon: bool = True,
+
+        # control subplot by left, right, top, bottom, hspace, wspace
+        figure_left: float = 1.918, # inches
+        figure_top: float = 0.9517, # inches
+        figure_wspace: float = 3.41, # inches
+        figure_hspace: float = 2.315, # inches
+
+        # font
+        font_family = [
+            "Arial",                # 无衬线，常用
+            "Times New Roman",      # 有衬线，经典论文字体
+            # "Computer Modern",      # LaTeX 默认字体
+            # "Latin Modern Roman",   # LaTeX 常用衬线字体
+            # "DejaVu Sans",          # Matplotlib 默认备选
+            # "DejaVu Serif"          # Matplotlib 默认备选
+        ],
+        fontsize: float = 28,
+
+        # grid
+        grid_alpha: float = 1.0,
+        grid_color: str = 'gray',
+        grid_linestyle: str = '--',
+        grid_linewidth: float = 2,
+
+        # legend
+        legend_loc: str = 'upper right', 
+        legend_frameon: bool = True, 
+        legend_borderpad: float=0.0,
+        legend_labelspacing: float=0.5,
+        legend_columnspacing:float=0.5,
+        legend_edgecolor: str = 'black',
+        legend_facecolor: str = 'white',
+        legend_framealpha: float = 1.0,
+        legend_boxstyle: str = 'Square',
+        legend_pad: float = 0.5,
+        legend_linewidth: float = 2.5,
+
+        # lines
+        lines_linestyle: str = '-',
+        lines_linewidth: float = 3,
+        lines_markeredgecolor = 'auto',
+        lines_markeredgewidth: float = 3,
+        lines_markerfacecolor = 'white',
+        lines_markersize: float = 20,
+
+        # mathtext
+        mathtext_fontset: str = 'custom',
+        mathtext_rm: str = 'Arial',  # 设置数学字体为 Arial
+        mathtext_it: str = 'Arial:italic', # 设置数学斜体为 Arial Italic
+        mathtext_bf: str = 'Arial:bold', # 设置数学粗体为 Arial Bold
+        mathtext_sf: str = 'Arial', # 设置数学无衬线为 Arial
+        mathtext_tt: str = 'Arial', # 设置数学等宽字体为 Arial
+        mathtext_cal: str = 'Arial', # 设置数学手写体为 Arial
+        mathtext_default: str = 'it', # it, rm, cal, sf, tt
+
+        # patch
+        patch_linewidth: float = 3.0,
+
+        # savefig
+        savefig_dpi: float = 300,
+        savefig_format: str = 'png',
+        savefig_transparent: bool = False,
+
+        # x-axis tick settings
+        xtick_bottom: bool = True,
+        xtick_top: bool = False,
+        xtick_direction: str = 'in',
+        xtick_labelbottom: bool = True,
+        xtick_labeltop: bool = False,
+        xtick_labelsize: float = 28,
+        xtick_major_bottom: bool = True,
+        xtick_major_top: bool = True,
+        xtick_major_size: float = 8,
+        xtick_major_width: float = 3.0,
+        xtick_major_pad: float = 10,
+        xtick_minor_bottom: bool = True,
+        xtick_minor_top: bool = True,
+        xtick_minor_size: float = 4,
+        xtick_minor_width: float = 3.0,
+        xtick_minor_pad: float = 10,
+        xtick_minor_ndivs: float = 2,
+        xtick_minor_visible: bool = True,
+
+        # y-axis tick settings
+        ytick_left: bool = True,
+        ytick_right: bool = False,
+        ytick_direction: str = 'in',
+        ytick_labelleft: bool = True,
+        ytick_labelright: bool = False,
+        ytick_labelsize: float = 28,
+        ytick_major_left: bool = True,
+        ytick_major_right: bool = True,
+        ytick_major_size: float = 8,
+        ytick_major_width: float = 3.0,
+        ytick_major_pad: float = 10,
+        ytick_minor_left: bool = True,
+        ytick_minor_right: bool = True,
+        ytick_minor_size: float = 4,
+        ytick_minor_width: float = 3.0,
+        ytick_minor_pad: float = 10,
+        ytick_minor_ndivs: str = 2,
+        ytick_minor_visible: bool = True,
+):
+    """
+    Configure global matplotlib rcParams for consistent figure styling.
+
+    This function can be used as a replacement for `my_plot()`, and the performance of the two 
+    functions is essentially identical. It modifies nearly all rcParams that are typically adjusted 
+    during plotting, but many parameters remain untouched.
+
+    This function centralizes the control of matplotlib's default rendering style 
+    for consistent and publication-quality figures.
+
+    Example:
+        >>> import matplotlib.pyplot as plt
+        >>> from mymetal.universal.plot.general import general_all_rcParams
+        >>> subp = (2, 2)
+        >>> lg = general_all_rcParams(figure_subp=subp)
+        >>> fig, axes = plt.subplots(subp[0], subp[1])
+        >>> ax = axes.flatten()[0]
+        >>> ax.plot([0, 1], [0, 1], marker='o', label='Line 1')
+        >>> ax.plot([0, 1], [1, 0], marker='s', label='Line 2')
+        >>> ax.set_xlabel("X Label")
+        >>> ax.set_ylabel("Y Label")
+        >>> rect = plt.Rectangle((0.1, 0.1), 0.5, 0.5)
+        >>> ax.add_patch(rect)
+        >>> lg(ax.legend())
+        >>> ax.set_title('Demo of rcParams setup')
+        >>> plt.savefig('demo_plot.png')
+
+    Note:
+        You need to call `plt._general_modify_legend(legend)` after creating a legend to apply
+        the custom legend styling.
+    """    
+
+    # backend: inline, TkAgg, Agg, etc.
+    plt.rcParams['axes.grid'] = axes_grid 
+    plt.rcParams['axes.labelpad'] = axes_labelpad
+    plt.rcParams['axes.labelsize'] = axes_labelsize
+    plt.rcParams['axes.linewidth'] = axes_linewidth
+    plt.rcParams['axes.titlepad'] = axes_titlepad
+
+    plt.rcParams['axes.xmargin'] = axes_xmargin
+    plt.rcParams['axes.ymargin'] = axes_ymargin
+    plt.rcParams['axes.zmargin'] = axes_zmargin
+
+    plt.rcParams['backend'] = backend
+
+    plt.rcParams['contour.linewidth'] = contour_linewidth
+
+    plt.rcParams['errorbar.capsize'] = errorbar_capsize
     
+    # figure
+    plt.rcParams['figure.dpi'] = figure_dpi
+    plt.rcParams['figure.edgecolor'] = figure_edgecolor
+    plt.rcParams['figure.facecolor'] = figure_facecolor
+
+    # calculate figsize and subplot params
+    figure_figsize = (figure_one_figsize[0] * figure_subp[1], figure_one_figsize[1] * figure_subp[0])
+    plt.rcParams['figure.figsize'] = figure_figsize
+    plt.rcParams['figure.frameon'] = figure_frameon
+    figure_right = figure_wspace - figure_left
+    figure_bottom = figure_hspace - figure_top
+    figure_subplot_left = figure_left / figure_figsize[0]
+    figure_subplot_right = 1 - figure_right / figure_figsize[0]
+    figure_subplot_top  = 1 - figure_top / figure_figsize[1]
+    figure_subplot_bottom = figure_bottom / figure_figsize[1]
+    figure_one_axes_width = figure_one_figsize[0] - figure_wspace # inches
+    figure_one_axes_height = figure_one_figsize[1] - figure_hspace # inches
+    figure_subplot_wspace = figure_wspace / figure_one_axes_width 
+    figure_subplot_hspace = figure_hspace / figure_one_axes_height
+    plt.rcParams['figure.subplot.left']   = figure_subplot_left
+    plt.rcParams['figure.subplot.right']  = figure_subplot_right
+    plt.rcParams['figure.subplot.top']    = figure_subplot_top
+    plt.rcParams['figure.subplot.bottom'] = figure_subplot_bottom
+    plt.rcParams['figure.subplot.hspace'] = figure_subplot_hspace
+    plt.rcParams['figure.subplot.wspace'] = figure_subplot_wspace
+
+    # font
+    plt.rcParams['font.family'] = font_family
+    plt.rcParams['font.size'] = fontsize
+
+    # grid
+    plt.rcParams['grid.alpha'] = grid_alpha
+    plt.rcParams['grid.color'] = grid_color
+    plt.rcParams['grid.linestyle'] = grid_linestyle
+    plt.rcParams['grid.linewidth'] = grid_linewidth
+
+    # legend
+    plt.rcParams['legend.loc'] = legend_loc
+    plt.rcParams['legend.frameon'] = legend_frameon
+    plt.rcParams['legend.borderpad'] = legend_borderpad
+    plt.rcParams['legend.labelspacing'] = legend_labelspacing
+    plt.rcParams['legend.columnspacing'] = legend_columnspacing
+    plt.rcParams['legend.edgecolor'] = legend_edgecolor
+    plt.rcParams['legend.facecolor'] = legend_facecolor
+    plt.rcParams['legend.framealpha'] = legend_framealpha
+
+    from mymetal.universal.plot.general import general_modify_legend
+    def _general_modify_legend(legend, ):
+        """general_modify_legend(ax.legend(loc='lower center', 
+        bbox_to_anchor=(0.5, 0.05), fontsize = 24))
+        """
+        general_modify_legend(legend, boxstyle=legend_boxstyle, pad=legend_pad,
+                            linewidth=legend_linewidth, 
+                            edgecolor=legend_edgecolor,
+                            facecolor=legend_facecolor,
+                            alpha=legend_framealpha)
+    
+    
+    # lines
+    plt.rcParams['lines.linestyle'] = lines_linestyle
+    plt.rcParams['lines.linewidth'] = lines_linewidth
+    plt.rcParams['lines.markeredgecolor'] = lines_markeredgecolor
+    plt.rcParams['lines.markeredgewidth'] = lines_markeredgewidth
+    plt.rcParams['lines.markerfacecolor'] = lines_markerfacecolor
+    plt.rcParams['lines.markersize'] = lines_markersize
+
+    # mathtext
+    plt.rcParams['mathtext.fontset'] = mathtext_fontset
+    plt.rcParams['mathtext.rm'] = mathtext_rm
+    plt.rcParams['mathtext.it'] = mathtext_it
+    plt.rcParams['mathtext.bf'] = mathtext_bf
+    plt.rcParams['mathtext.sf'] = mathtext_sf
+    plt.rcParams['mathtext.tt'] = mathtext_tt
+    plt.rcParams['mathtext.cal'] = mathtext_cal
+    plt.rcParams['mathtext.default'] = mathtext_default
+
+    # patch
+    plt.rcParams['patch.linewidth'] = patch_linewidth
+
+    # savefig
+    plt.rcParams['savefig.dpi'] = savefig_dpi
+    plt.rcParams['savefig.format'] = savefig_format
+    plt.rcParams['savefig.transparent'] = savefig_transparent
+
+    # x-axis tick settings
+    plt.rcParams['xtick.bottom'] = xtick_bottom
+    plt.rcParams['xtick.top'] = xtick_top
+    plt.rcParams['xtick.direction'] = xtick_direction
+    plt.rcParams['xtick.labelbottom'] = xtick_labelbottom
+    plt.rcParams['xtick.labeltop'] = xtick_labeltop
+    plt.rcParams['xtick.labelsize'] = xtick_labelsize
+    plt.rcParams['xtick.major.bottom'] = xtick_major_bottom
+    plt.rcParams['xtick.major.top'] = xtick_major_top
+    plt.rcParams['xtick.major.size'] = xtick_major_size
+    plt.rcParams['xtick.major.width'] = xtick_major_width
+    plt.rcParams['xtick.major.pad'] = xtick_major_pad
+    plt.rcParams['xtick.minor.bottom'] = xtick_minor_bottom
+    plt.rcParams['xtick.minor.top'] = xtick_minor_top
+    plt.rcParams['xtick.minor.size'] = xtick_minor_size
+    plt.rcParams['xtick.minor.width'] = xtick_minor_width
+    plt.rcParams['xtick.minor.pad'] = xtick_minor_pad
+    plt.rcParams['xtick.minor.ndivs'] = xtick_minor_ndivs
+    plt.rcParams['xtick.minor.visible'] = xtick_minor_visible
+
+    # y-axis tick settings
+    plt.rcParams['ytick.left'] = ytick_left
+    plt.rcParams['ytick.right'] = ytick_right
+    plt.rcParams['ytick.direction'] = ytick_direction
+    plt.rcParams['ytick.labelleft'] = ytick_labelleft
+    plt.rcParams['ytick.labelright'] = ytick_labelright
+    plt.rcParams['ytick.labelsize'] = ytick_labelsize
+    plt.rcParams['ytick.major.left'] = ytick_major_left
+    plt.rcParams['ytick.major.right'] = ytick_major_right
+    plt.rcParams['ytick.major.size'] = ytick_major_size
+    plt.rcParams['ytick.major.width'] = ytick_major_width
+    plt.rcParams['ytick.major.pad'] = ytick_major_pad
+    plt.rcParams['ytick.minor.left'] = ytick_minor_left
+    plt.rcParams['ytick.minor.right'] = ytick_minor_right
+    plt.rcParams['ytick.minor.size'] = ytick_minor_size
+    plt.rcParams['ytick.minor.width'] = ytick_minor_width
+    plt.rcParams['ytick.minor.pad'] = ytick_minor_pad
+    plt.rcParams['ytick.minor.ndivs'] = ytick_minor_ndivs
+    plt.rcParams['ytick.minor.visible'] = ytick_minor_visible
+
+    return _general_modify_legend
