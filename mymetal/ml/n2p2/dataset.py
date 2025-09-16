@@ -23,7 +23,7 @@ import pandas as pd
 import re
 from collections import defaultdict
 
-
+# ase to n2p2, only single frame
 def write_nnp_data_from_ase(fd: str=None, atoms: Atoms=None, index: int = 1, largest_index: int = 1,
                             file_name: str = '', tag: str = 'all', append: bool = True):
     """
@@ -83,7 +83,7 @@ def write_nnp_data_from_ase(fd: str=None, atoms: Atoms=None, index: int = 1, lar
     fd.write("charge {0:>10s}\n".format("0.0"))
     fd.write("end\n")
 
-
+# OUTCAR to n2p2
 def generate_dataset_from_outcar(outcarfile: str=None, outfile_name: str=None, append: bool=False,
                                     index: str = ':', tag: str = 'all'):
     """
@@ -222,7 +222,7 @@ def generate_dataset_from_outcar_n2p2(file_name: str=None, outfile_name: str=Non
         f.write("charge {0:s}\n".format("0.0"))
         f.write("end\n")
 
-
+# n2p2 to dict (include the atoms object)
 def read_nnp_dataset(file_path: str= None) -> dict:
     """
     Parses a NNP-format dataset file into a structured dictionary of ASE Atoms objects grouped by tag.
@@ -327,7 +327,7 @@ def read_nnp_dataset(file_path: str= None) -> dict:
         i = i+1
     return dict
 
-
+# dict to n2p2
 def generate_dataset_from_dict(dict: dict={}, outfile_name: str = 'input.data', append: bool = False):
     """
     Writes ASE Atoms structures from a grouped dictionary into a NNP-compatible dataset file.
