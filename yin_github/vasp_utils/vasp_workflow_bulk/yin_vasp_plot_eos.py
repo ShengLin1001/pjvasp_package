@@ -244,7 +244,7 @@ def plot_eos(V, Etot, fitres, p_dft, V1, ca, magtot):
 
 
 
-    plt.savefig('y_post_eos.pdf')
+    plt.savefig('y_post_eos.pdf')     
 
 
 
