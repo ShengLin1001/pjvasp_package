@@ -262,33 +262,35 @@ def stretch_along_direction_to_cell(atoms: Atoms = None ,stretch_factor: float =
                 temp[i,:] = my_cell[i,:] * factor
     else:
         if stretch_direction == 'x':
-            temp[:,0] = my_cell[:,0] * stretch_factor
+            temp[:, 0] = my_cell[:, 0] * stretch_factor
         elif stretch_direction == 'y':
-            temp[:,1] = my_cell[:,1] * stretch_factor
+            temp[:, 1] = my_cell[:, 1] * stretch_factor
         elif stretch_direction == 'z':
-            temp[:,2] = my_cell[:,2] * stretch_factor
-        elif stretch_direction == 'xy' or 'yx':
-            temp[:,:2] = my_cell[:,:2] * stretch_factor
-        elif stretch_direction == 'yz' or 'zy':
-            temp[:,1:] = my_cell[:,1:] * stretch_factor
-        elif stretch_direction == 'zx' or 'xz':
-            temp[:,::2] = my_cell[:,::2] * stretch_factor
-        elif stretch_direction == 'xyz' or 'xzy' or 'yzx' or 'yxz' or 'zxy' or 'zyx':
-            temp[:,2] = my_cell[:,2] * stretch_factor
+            temp[:, 2] = my_cell[:, 2] * stretch_factor
+        elif stretch_direction in ['xy', 'yx']:
+            temp[:, :2] = my_cell[:, :2] * stretch_factor
+        elif stretch_direction in ['yz', 'zy']:
+            temp[:, 1:] = my_cell[:, 1:] * stretch_factor
+        elif stretch_direction in ['xz', 'zx']:
+            temp[:, [0,2]] = my_cell[:, [0,2]] * stretch_factor
+        elif stretch_direction in ['xyz', 'xzy', 'yzx', 'yxz', 'zxy', 'zyx']:
+            temp[:, :] = my_cell[:, :] * stretch_factor
         elif stretch_direction == '1':
-            temp[0,:] = my_cell[0,:] * stretch_factor
+            temp[0, :] = my_cell[0, :] * stretch_factor
         elif stretch_direction == '2':
-            temp[1,:] = my_cell[1,:] * stretch_factor
+            temp[1, :] = my_cell[1, :] * stretch_factor
         elif stretch_direction == '3':
-            temp[2,:] = my_cell[2,:] * stretch_factor
-        elif stretch_direction == '12' or '21':
-            temp[:2,:] = my_cell[:2,:] * stretch_factor
-        elif stretch_direction == '23' or '32':
-            temp[1:,:] = my_cell[1:,:] * stretch_factor
-        elif stretch_direction == '13' or '31':
-            temp[::2,:] = my_cell[::2,:] * stretch_factor
-        elif stretch_direction == '123' or '132' or '213' or '231' or '312' or '321':
-            temp[:,:] = my_cell[:,:] * stretch_factor
+            temp[2, :] = my_cell[2, :] * stretch_factor
+        elif stretch_direction in ['12', '21']:
+            temp[:2, :] = my_cell[:2, :] * stretch_factor
+        elif stretch_direction in ['23', '32']:
+            temp[1:, :] = my_cell[1:, :] * stretch_factor
+        elif stretch_direction in ['13', '31']:
+            temp[[0,2], :] = my_cell[[0,2], :] * stretch_factor
+        elif stretch_direction in ['123', '132', '213', '231', '312', '321']:
+            temp[:, :] = my_cell[:, :] * stretch_factor
+        else:
+            raise ValueError(f"Unknown stretch_direction: {stretch_direction}")
     atoms_copy.set_cell(temp, scale_atoms=my_scale_atoms)
     if stretched_atoms_list is not None:
         stretched_atoms_list.append(atoms_copy)
@@ -340,6 +342,7 @@ def adjust_lattice_for_volume_conservation(lattice_before, lattice_after, change
     volume_after = np.abs(np.linalg.det(lattice_after))
     
     # Scaling factor to adjust the lattice_after to conserve volume
+    scaling_factor = None
     if len(change_axis) == 3:
         scaling_factor = (volume_before / volume_after) ** (1/3)
     elif len(change_axis) == 2:

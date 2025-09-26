@@ -130,29 +130,32 @@ POSTEINPLANE_CONFIG = [
 ]
 
 
-myroot = '/public3/home/scg6928/mywork/20230907_au_dft/convergence/fcc/y_convergence/test' 
-os.chdir(myroot)
 
-myroot = os.getcwd()
-os.chdir(myroot)
-dir_path = './y_dir/'
+def post_general(myroot='./', dir_path='./y_dir/'):
 
-# find all job lists
-job_list = [
-    name for name in listdir(dir_path) 
-    if path.isdir(path.join(dir_path, name))
-]
-job_list.sort()
+    # myroot = '/public3/home/scg6928/mywork/20230907_au_dft/convergence/fcc/y_convergence/test' 
+    # os.chdir(myroot)
 
-# find all computational files
-specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR']
+    # myroot = os.getcwd()
+    # os.chdir(myroot)
 
-sub_dir_path = os.path.join(dir_path, job_list[0])
-for file in os.listdir(sub_dir_path):
-    if file.startswith('sub') or file.startswith('Y'):
-        specified_file.append(file)
+    # dir_path = './y_dir/'
 
-def post_general():
+    # find all job lists
+    job_list = [
+        name for name in listdir(dir_path) 
+        if path.isdir(path.join(dir_path, name))
+    ]
+    job_list.sort()
+
+    # find all computational files
+    specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR']
+
+    sub_dir_path = os.path.join(dir_path, job_list[0])
+    for file in os.listdir(sub_dir_path):
+        if file.startswith('sub') or file.startswith('Y'):
+            specified_file.append(file)
+
 
     posttime = PostTime()
     posttime.read_OUTCAR()
@@ -182,13 +185,13 @@ def post_general():
 
 
 class PostTime:
-    def __init__(self, my_path=dir_path, post_path='./p_post_time.txt', name = 'Post Time', config = POSTTIME_CONFIG):
+    def __init__(self, my_path='./y_dir/', post_path='./p_post_time.txt', name = 'Post Time', config = POSTTIME_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1 job state: relaxed? time? CPUs? memory?', format = '%s'):
+    def read_OUTCAR(self, job_list= None, special_name='OUTCAR', title = 'i1 job state: relaxed? time? CPUs? memory?', format = '%s'):
         count_finish = 0
         count_relax = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
@@ -226,13 +229,13 @@ class PostTime:
             post_file.write('-------------------------\n')
 
 class PostData:
-    def __init__(self, my_path=dir_path, post_path='./p_post_data.txt', name = 'Post Data', config = POSTDATA_CONFIG):
+    def __init__(self, my_path='./y_dir/', post_path='./p_post_data.txt', name = 'Post Data', config = POSTDATA_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   energy(sigma->0)(eV)  EENTRO(eV)  -stress(kB)', format = '%s'):
+    def read_OUTCAR(self, job_list= None, special_name='OUTCAR', title = 'i1   energy(sigma->0)(eV)  EENTRO(eV)  -stress(kB)', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
         for i in job_list:
@@ -257,13 +260,13 @@ class PostData:
         file.seek(0)
 
 class PostData2:
-    def __init__(self, my_path=dir_path , post_path='./p_post_data_2.txt', name = 'Post Data2', config = POSTDATA2_CONFIG):
+    def __init__(self, my_path='./y_dir/' , post_path='./p_post_data_2.txt', name = 'Post Data2', config = POSTDATA2_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name 
         self.config = config
 
-    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   volume  pressure(kB)  Fmax', format = '%s'):
+    def read_OUTCAR(self, job_list= None, special_name='OUTCAR', title = 'i1   volume  pressure(kB)  Fmax', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
         for i in job_list:
@@ -287,12 +290,12 @@ class PostData2:
         file.seek(0)
 
 class PostDiff:
-    def __init__(self, my_path=dir_path  , post_path='./p_post_diff.txt', name = 'Post Diff'):
+    def __init__(self, my_path='./y_dir/'  , post_path='./p_post_diff.txt', name = 'Post Diff'):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
 
-    def read_diff(self, job_list= job_list, title = 'i1   diff  INCAR  KPOINTS  POSCAR  POTCAR  sub.vasp',
+    def read_diff(self, job_list= None, title = 'i1   diff  INCAR  KPOINTS  POSCAR  POTCAR  sub.vasp',
                   specified_file = ['INCAR', 'KPOINTS', 'POSCAR', 'POTCAR', 'sub.vasp', 'Y_CONSTR_CELL.IN'], format = '%s' ):
         write_content_to_file(title + '\n', self.post_path, 'w')
         for i in job_list:
@@ -319,13 +322,13 @@ class PostDiff:
                 post_file.write('\n' + f'{file}\n' + '\n')
             
 class PostParam:
-    def __init__(self, my_path=dir_path , post_path='./p_post_param.txt', name = 'POST Param',  config = POSTPARAM_CONFIG):
+    def __init__(self, my_path='./y_dir/' , post_path='./p_post_param.txt', name = 'POST Param',  config = POSTPARAM_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   input parameters', format = '%s'):
+    def read_OUTCAR(self, job_list= None, special_name='OUTCAR', title = 'i1   input parameters', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
         for i in job_list:
@@ -352,13 +355,13 @@ class PostParam:
         file.seek(0)
 
 class PostParam2:
-    def __init__(self, my_path=dir_path , post_path='./p_post_param_2.txt', name = 'POST Param 2',  config = POSTPARAM2_CONFIG):
+    def __init__(self, my_path='./y_dir/' , post_path='./p_post_param_2.txt', name = 'POST Param 2',  config = POSTPARAM2_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   input parameters 2', format = '%s'):
+    def read_OUTCAR(self, job_list= None, special_name='OUTCAR', title = 'i1   input parameters 2', format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
         for i in job_list:
@@ -382,14 +385,14 @@ class PostParam2:
         file.seek(0)
 
 class PostParamSta:
-    def __init__(self, my_path=dir_path , post_path='./p_post_param_statistics.txt', name = 'POST Param Statistics', config = POSTPARAMSTA_CONFIG,  config2 = POSTPARAMSTA_CHECK):
+    def __init__(self, my_path='./y_dir/' , post_path='./p_post_param_statistics.txt', name = 'POST Param Statistics', config = POSTPARAMSTA_CONFIG,  config2 = POSTPARAMSTA_CHECK):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
         self.config2= config2
 
-    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = '# VASP param statistics. OK = the same in all jobs. ',
+    def read_OUTCAR(self, job_list= None, special_name='OUTCAR', title = '# VASP param statistics. OK = the same in all jobs. ',
                     tag_split = '   ', tag_end = '\n\n', tag_begin='\n', left = False, num=13, format = '%s'):
         count_read = 0
         all_is_same_list = []
@@ -428,13 +431,13 @@ class PostParamSta:
         file.seek(0)
 
 class PostWarning:
-    def __init__(self, my_path=dir_path , post_path='./p_post_warning.txt', name = 'POST Warning',  config = POSTWARNING_CONFIG):
+    def __init__(self, my_path='./y_dir/' , post_path='./p_post_warning.txt', name = 'POST Warning',  config = POSTWARNING_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR(self, job_list= job_list, special_name='OUTCAR', title = 'i1   WARNING', move_list_down_up =[-10,5], format = '%s'):
+    def read_OUTCAR(self, job_list= None, special_name='OUTCAR', title = 'i1   WARNING', move_list_down_up =[-10,5], format = '%s'):
         count_read = 0
         write_content_to_file(title + '\n', self.post_path, 'w')
         for i in job_list:
@@ -459,13 +462,13 @@ class PostWarning:
         file.seek(0)
 
 class PostEinplane:
-    def __init__(self, my_path=dir_path , post_path='./p_post_E_in.txt', name = 'POST E INPLANE',  config = POSTEINPLANE_CONFIG):
+    def __init__(self, my_path='./y_dir/' , post_path='./p_post_E_in.txt', name = 'POST E INPLANE',  config = POSTEINPLANE_CONFIG):
         self.my_path = my_path
         self.post_path = post_path
         self.name = name
         self.config = config
 
-    def read_OUTCAR_POSCAR(self, job_list= job_list, special_name=['OUTCAR', 'CONTCAR'], title = 'In-plane straining of transversely isotropic materials/slabs: ',
+    def read_OUTCAR_POSCAR(self, job_list= None, special_name=['OUTCAR', 'CONTCAR'], title = 'In-plane straining of transversely isotropic materials/slabs: ',
                             format = '%.3f'):
     
         def read_OUTCAR(job_list= job_list, special_name='OUTCAR', format = format):
