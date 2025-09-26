@@ -15,7 +15,7 @@ Functions:
     - my_plot_convergence: Plot convergence data with options for encuts and kpoints.
     - my_plot_neb: Plot NEB data with spline fitting and energy/force calculations.
     - my_plot_xy: Create a simple XY plot with options for labels, limits, and saving.
-    
+    - my_ply_stretch: Plot stretch data and perform polynomial fitting.
 """
 from ase import Atoms
 
@@ -41,6 +41,7 @@ import itertools
 from typing import Callable
 
 from mymetal.universal.plot.general import *
+from mymetal.post.general import *
 
 __all__ = [
     'my_plot',
@@ -1197,4 +1198,74 @@ def my_plot_xy(xy_list: list = None, z_list: list = None, figxy_wh_lim: list = N
     return fig_xy, axes_xy
 
 
+# for workflow Stretch trajectory
+def my_plot_stretch(
+                jobn: list = None,
+                Etot: list = None,
+                natoms: int = 1,
+                stretch_type: str = '',
+                rvectors_ref = None,
+                lca: list = None,
+                if_save: bool=False,
+                savefile: str='p_post_stretch.pdf',
+                dpi: int=300,) -> tuple:
+    """
+    Fit quadratic energy-stretch curve, extract equilibrium values, and plot energy and c/a ratio.
 
+    Args:
+        jobn (list): List of stretch factors or job identifiers.
+        Etot (list): Total energies corresponding to jobn (eV).
+        natoms (int): Number of atoms in the system.
+        stretch_type (str): Type of stretch ('x', 'y', 'z', 'xy', etc.).
+        rvectors_ref (array): Reference row vectors of the lattice.
+        lca (list): c/a ratios for each stretch.
+        if_save (bool): Whether to save the plot. Default False.
+        savefile (str): Filename for saved plot. Default 'p_post_stretch.pdf'.
+        dpi (int): DPI for saved plot. Default 300.
+
+    Returns:
+        tuple: 
+            - (fig, axes): matplotlib Figure and Axes objects.
+            - (coeffs, extr_x, extr_y, extr_rvectors): Fitted quadratic coefficients, equilibrium factor, energy, and scaled row vectors.
+    """
+    fig, axes = my_plot(fig_subp=[2,1],fig_sharex =False)
+
+    x = np.array([float(job) for job in jobn])
+    y = np.array(Etot) / natoms  # eV per atom
+    coeffs, _ = my_ployfit(x, y, deg=2)
+    p = np.poly1d(coeffs)
+    a, b, c = coeffs
+    x_fit = np.linspace(min(x), max(x), 100)
+    y_fit = p(x_fit)
+    extr_x = -b / (2 * a)
+    extr_y = p(extr_x)
+    y = (y - extr_y) * 1000  # meV per atom
+    y_fit = (y_fit - extr_y) * 1000  # meV per atom
+
+    # row vector [a1, a2, a3]
+    extr_rvectors = rvectors_ref * extr_x
+
+
+    ax = axes[0]
+    ax.plot(x, y, marker = 'o', linestyle = '')
+    ax.plot(x_fit, y_fit)
+    ax.set_xlabel('Stretch factor (-)')
+    ax.set_ylabel(r'$E - E_0$ (meV per atom)')
+    textstr = (
+        f'Type: {stretch_type}\n' +
+        fr'$a_0$={extr_rvectors},' + "\n" +
+        fr'$E_0$={extr_y:.8f} eV/atom'
+    )
+    ax.text(0.5, 0.95, textstr, transform=ax.transAxes, ha='center', va='top', fontsize = 20)
+
+    ax = axes[1]
+    ax.plot(x, lca, marker = 'o', linestyle = '')
+    ax.set_xlabel('Stretch factor (-)')
+    ax.set_ylabel(r'$\dfrac{c}{a}$', rotation=0)
+    # if any(np.array(lca) < 2) and any(np.array(lca) > 0):
+    #     ax.set_ylim(0, 2)
+
+    if if_save:
+        plt.savefig(savefile, dpi=dpi)
+
+    return (fig, axes) , (coeffs, extr_x, extr_y, extr_rvectors) 

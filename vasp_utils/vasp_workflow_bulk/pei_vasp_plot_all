@@ -74,6 +74,12 @@ case "$1" in
         ;;
 
 
+    -stretch)
+        workdir=y_stretch
+        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_stretch.py
+        sub_plot_all  $workdir  $mycmd 
+        ;;
+
 
     *) 
         echo "==>  Option $1 not recognized. Abort!" 
