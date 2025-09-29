@@ -25,7 +25,7 @@ from collections import defaultdict
 
 # ase to n2p2, only single frame
 def write_nnp_data_from_ase(fd: str=None, atoms: Atoms=None, index: int = 1, largest_index: int = 1,
-                            file_name: str = '', tag: str = 'all', append: bool = True):
+                            file_name: str = '', tag: str = 'all', comment_file: str = None, append: bool = True):
     """
     Writes atomic configuration data from an ASE Atoms object to a file in NNP format.
 
@@ -36,7 +36,8 @@ def write_nnp_data_from_ase(fd: str=None, atoms: Atoms=None, index: int = 1, lar
         largest_index (int): Total number of frames in the dataset.
         file_name (str): Source OUTCAR file name, used in the comment line.
         tag (str): Custom tag for labeling the structure origin or category.
-        append (bool): If True, appends to the file; if False, overwrites it.
+        comment_file (str): Optional comment to include in the output file.
+        append (bool): If True, appends to the file; otherwise, overwrites.
         
     Writes:
         A single structure block including lattice vectors, atom positions, forces,
@@ -58,15 +59,18 @@ def write_nnp_data_from_ase(fd: str=None, atoms: Atoms=None, index: int = 1, lar
     chemical_symbols = atoms.get_chemical_symbols()
 
     # in one outcar file, there are multiple configurations
-    if append:
-        fd = open(fd, "a")
+    # 这里不应设置append, 因为在generate_dataset_from_outcar中已经设置了. 否则当generate中设置'w'时无法输出多帧frames
+    # 勘误：上层函数的append参数不要传到这个函数里就ok.
+    if not append:
+        fd = open(fd, 'w')
     else:
-        fd = open(fd, "w")
+        fd = open(fd, "a")
+
     # write to fd
     # "fd" is actually a file-descriptor thanks to @writer
     fd.write("begin\n")
-    fd.write("comment | tag={0:s} | structure_number={1:d}/{2:d} frames | source_file_name={3:s}\n"
-             .format(tag, index, largest_index, file_name))
+    fd.write("comment | tag={0:s} | frame={1:d}/{2:d} | file={3:s}\n"
+             .format(tag, index, largest_index, file_name if comment_file == None else comment_file))
     fmt1 = "18.9f"
     # {{}} for keeping {}. {0} is for the first argument - fmt1
     format1_str = "lattice {{0:{0}}} {{1:{0}}} {{2:{0}}}\n".format(fmt1)
@@ -85,7 +89,7 @@ def write_nnp_data_from_ase(fd: str=None, atoms: Atoms=None, index: int = 1, lar
 
 # OUTCAR to n2p2
 def generate_dataset_from_outcar(outcarfile: str=None, outfile_name: str=None, append: bool=False,
-                                    index: str = ':', tag: str = 'all'):
+                                    index: str = ':', tag: str = 'all', comment_file: str = None):
     """
     Extracts one or more atomic structure frames from a VASP OUTCAR file and writes them to a dataset file.
 
@@ -95,6 +99,7 @@ def generate_dataset_from_outcar(outcarfile: str=None, outfile_name: str=None, a
         append (bool): If False, clears the output file before writing; if True, appends to it.
         index (str): Frame selection string, e.g., ':' for all frames or '-1' for the last.
         tag (str): Label to identify the source or purpose of the data (used in the output comment).
+        comment_file (str): Optional comment to include in the output file.
 
     Writes:
         One or more frames of atomic data to the output file in NNP-compatible format.
@@ -109,12 +114,12 @@ def generate_dataset_from_outcar(outcarfile: str=None, outfile_name: str=None, a
     outcar = read_vasp_out(outcarfile, index=index)
     num = len(outcar)
     # remove the file if it exists
-    if not append == True:
+    if not append:
         open(outfile_name, 'w').close()
     for i, atom in enumerate(outcar):
         # use 'a' to append all configurations
         # in one outcar file, there are multiple configurations
-        write_nnp_data_from_ase(outfile_name, atom, i+1, num, outcarfile, tag)
+        write_nnp_data_from_ase(outfile_name, atom, i+1, num, outcarfile, tag, comment_file)
 
 # taken from n2p2 tools
 # The code structure remains unchanged, only encapsulated as a function
@@ -288,11 +293,11 @@ def read_nnp_dataset(file_path: str= None) -> dict:
             while i < n and lines[i].strip() != "end":
                 line = lines[i].strip()
                 if line.startswith('comment'):
-                    # Example format: comment | tag=xx | structure_number=1/12 frames | source_file_name=xxx
+                    # Example format: comment | tag=xx | frame=1/12 | file=xxx
                     comment = line
                     tag_match = re.search(r'tag=([^\s]+)', comment)
-                    struct_match = re.search(r'structure_number=(\d+)(?:/(\d+))?', comment)
-                    file_match = re.search(r'source_file_name=([^\s]+)', comment)
+                    struct_match = re.search(r'frame=(\d+)(?:/(\d+))?', comment)
+                    file_match = re.search(r'file=([^\s]+)', comment)
                     tag = tag_match.group(1) if tag_match else 'all'
                     struct_number = int(struct_match.group(1)) if struct_match else 1
                     full_struct_number = int(struct_match.group(2)) if struct_match and struct_match.group(2) else 1
