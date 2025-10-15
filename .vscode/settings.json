@@ -4,5 +4,6 @@
         "git",
         "vscode",
         "DFT"
-    ]
+    ],
+    "esbonio.server.enabled": false
 }
