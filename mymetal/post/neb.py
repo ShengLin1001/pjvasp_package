@@ -13,7 +13,7 @@ from scipy.interpolate import CubicHermiteSpline
 
 from mymetal.io.general import general_read
 from mymetal.io.extxyz import extxyz_to_atomlist
-from mymetal.universal.plot.plot import my_plot_neb, my_plot_xy
+from mymetal.universal.plot.workflow import my_plot_neb, my_plot_neb_xy
 
 from scipy.spatial import cKDTree
 from scipy.sparse.csgraph import connected_components
@@ -248,7 +248,7 @@ def analyze_neb_trajectory(file: str = None, if_save: bool = True, save_dir: str
     overlap_pairs, overlap_groups = save_overlap_pairs_groups(positions_xy_list, distance_threshold = distance_threshold, save_dir=save_dir)
 
     if if_plot:
-        my_plot_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
+        my_plot_neb_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
                 figxy_wh_lim = [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim],
                 fig_subp = fig_subp_list[0],
                 cellxypoints_special = cellxypoints_special, if_save=if_save, save_dir=save_dir,
@@ -256,7 +256,7 @@ def analyze_neb_trajectory(file: str = None, if_save: bool = True, save_dir: str
                 num_ax_legend=num_ax_legend_list[0], loc=loc_list[0],
                 bbox_to_anchor=bbox_to_anchor_list[0], ncol=ncol_list[0],
                 alpha=alpha[0],)
-        my_plot_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
+        my_plot_neb_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
                 figxy_wh_lim = [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim],
                 fig_subp=fig_subp_list[1],
                 cellxypoints_special = cellxypoints_special, if_save=if_save, save_dir=save_dir,
@@ -267,7 +267,7 @@ def analyze_neb_trajectory(file: str = None, if_save: bool = True, save_dir: str
                 alpha=alpha[1],
                 if_show_frame_overlap=True, overlap_groups=overlap_groups,
                 )
-        my_plot_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
+        my_plot_neb_xy(xy_list = [positions_xy_list, delta_xy_list, dist_xy_list], z_list = [positions_z_list],
                 figxy_wh_lim = [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim],
                 fig_subp=fig_subp_list[1],
                 cellxypoints_special = cellxypoints_special, if_save=if_save, save_dir=save_dir,

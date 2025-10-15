@@ -2,7 +2,7 @@ from ase.io.vasp import read_vasp
 import numpy as np
 import os
 from myvasp import vasp_func as vf 
-from mymetal.universal.plot.plot import my_plot_stretch
+from mymetal.universal.plot.workflow import my_plot_stretch
 from mymetal.post.general import my_read_y_dir_contcar, get_structure_info
 
 

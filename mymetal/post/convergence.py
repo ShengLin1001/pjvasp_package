@@ -2,7 +2,7 @@ from ase.io.vasp import read_vasp
 import numpy as np
 import os
 from myvasp import vasp_func as vf 
-from mymetal.universal.plot.plot import my_plot_convergence
+from mymetal.universal.plot.workflow import my_plot_convergence
 from mymetal.post.general import my_sort
 
 def post_convergence(dirsurf: str = 'y_convergence', dirlists = ['y_convergence_encuts', 'y_convergence_kpoints'], refcontcar: str='./y_full_relax/CONTCAR'):
