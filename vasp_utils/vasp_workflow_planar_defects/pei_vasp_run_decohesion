@@ -1,0 +1,113 @@
+#!/bin/bash
+# by B. Yin
+# Taken from https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_planar_defects/yin_vasp_plot_decohesion.py
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ -d "$srcdir0" ] ; then
+        sub_run_decohesion
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+
+
+sub_run_decohesion(){
+
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+    yin_vasp_univ_find_and_change  -nsw  0
+    # yin_vasp_univ_find_and_change  -algo  N
+    # yin_vasp_univ_find_and_change  -ediff  1E-6
+    # yin_vasp_univ_find_and_change  -isym  default
+
+
+    # yin_slurm_find_and_change  -srpl  H
+
+    cd ..
+
+
+    
+    a0=`sed -n '2,2p' $srcdir/POSCAR | awk '{printf "%.16f", $1}'`
+    
+    c1=`sed -n '5,5p' $srcdir/POSCAR | awk '{printf "%.16f", $1}'`
+    c2=`sed -n '5,5p' $srcdir/POSCAR | awk '{printf "%.16f", $2}'`
+    c3=`sed -n '5,5p' $srcdir/POSCAR | awk '{printf "%.16f", $3}'`
+    
+    echo $a0
+    echo $c1 $c2 $c3
+    
+   
+ 
+    workdir="./y_decohesion"  
+    rm -rI $workdir
+    mkdir  $workdir
+    cd     $workdir
+    
+    mkdir y_dir
+    cd y_dir
+   
+
+ 
+    #=====================
+    # Total 38 points
+    N1=38
+    echo "N1: " $N1
+    
+    for ((i1=0; i1<=$N1; i1=i1+1)) ; do
+        n1=20
+        n2=30
+        
+        # various interval settings: 0.1, 0.2, 0.5
+        # First 20 points: 0.0 to 2.0  (0.1)
+        # Next 10 points: 2.0 to 4.0  (0.2)
+        # Last 8 points: 4.0 to 8.0  (0.5)
+        if [ "$i1" -le "$n1" ]; then
+            k=`echo "scale=16; 0.0 + $i1*0.1" | bc`
+        elif [ "$i1" -le "$n2" ]; then
+            k=`echo "scale=16; 2.0 + ($i1-$n1)*0.2" | bc`
+        else 
+            k=`echo "scale=16; 4.0 + ($i1-$n2)*0.5" | bc`
+        fi
+        
+        kk=`echo "scale=16; $k/$a0" | bc`
+        
+
+        
+        dirn1=`printf "%1.2f" "$k"`
+        mkdir $dirn1
+        cd $dirn1
+        
+        echo $dirn1 '===================='
+        
+        cp $srcdir/{INCAR,KPOINTS,POSCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+        
+        c33=`echo "scale=16; $c3+$kk" | bc`
+        data1=`printf " %.16f  %.16f  %.16f" "$c1" "$c2" "$c33"`
+        echo $data1
+        
+        sed '5s/.*/'"$data1"'/' ./POSCAR > ./temp
+        mv temp POSCAR
+        
+        echo 'dir for submit:' `pwd`
+        sbatch sub.*
+        
+        cd ..
+    done
+    
+    rm -rf $srcdir
+}
+
+
+main "$@"; exit
+
+
+
+
