@@ -111,6 +111,8 @@ def generate_film(   symbols: str = None,                 # str
     Example:
         >>> slab = generate_film(symbols='Cu', structure='fcc', num_layers=10, my_vacuum=10)
         >>> print(slab)
+        >>> # If bulk_atoms is provided:
+        >>> generate_film(bulk_atoms= atoms_fcc, num_layers=12, slice_plane= (1, 1, 1))
     """
 
     if bulk_atoms:
@@ -357,7 +359,7 @@ def adjust_lattice_for_volume_conservation(lattice_before, lattice_after, change
     
     return adjusted_lattice_after, scaling_factor
 
-def generate_bulk_from_film(film: Atoms=None, if_find_prim: bool = False, vacuum: float=None) -> Atoms:
+def generate_bulk_from_film(film: Atoms=None, if_find_prim: bool = False, vacuum: float=None, number_per_layer: int = 1) -> Atoms:
     """
     Generates a bulk structure from a given thin film. The bulk structure is created by reducing z-vacuum layers to the thin film.
 
@@ -375,14 +377,15 @@ def generate_bulk_from_film(film: Atoms=None, if_find_prim: bool = False, vacuum
         >>> bulk_atoms = generate_bulk_from_film(film_atoms)
     """
     atoms = film.copy()
-    num = len(atoms)
-    if num <= 1:
+    numatom = len(atoms)
+    numlayer = numatom / number_per_layer
+    if numlayer <= 1:
         raise ValueError("The number of layers in the film must be greater than 1.")
     thick = my_extr_thick(atoms)
     if vacuum is not None:
         vacuum = vacuum
     else:
-        vacuum = thick/(num-1)/2
+        vacuum = thick/(numlayer-1)/2
     atoms.center(vacuum=vacuum, axis=2)
 
     if if_find_prim:
