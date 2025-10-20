@@ -54,6 +54,16 @@ class nnpdata:
         mydict = inputdata1.get_dict()
         ```
 
+    Attributes:
+        - latoms: List of ASE Atoms objects representing atomic configurations.
+        - ltags: List of tags corresponding to each configuration.
+        - lcomment_files: List of comment files for each configuration.
+        - lfiles: List of source files for each configuration.
+        - lstruct_numbers: List of structure numbers for each configuration.
+        - lfull_struct_numbers: List of total structure counts for each configuration.
+        - lforces: List of forces arrays for each configuration.
+        - lenergies: List of energies for each configuration.
+        
     Todo:
         - Add summary/statistics utilities for dataset inspection.
     """
@@ -308,7 +318,7 @@ class nnpdata:
 
         # write to fd
         fd.write("begin\n")
-        if comment_file != None:
+        if comment_file not in [None, '']:
             file_name = comment_file
         fd.write("comment | tag={0:s} | frame={1:d}/{2:d} | file={3:s}\n"
                 .format(tag, struct_num, full_struct_num, file_name))
