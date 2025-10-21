@@ -6,7 +6,17 @@ This module provides functions to calculate radial and angular symmetry function
 Classes:
     - mysfparams: Class to handle symmetry function parameters and calculations.
 
+Methods:
+    - cal_sf: Calculate SFs for a list of structures.
+    - cal_g2: Compute radial (g2) SF for a single structure.
+    - cal_g3_g9: Compute angular (g3 or g9) SF for a single structure.
+    - cal_cutoff: Evaluate the cutoff function for a given distance.
+    - write_settings_overview: Generate a summary of SF settings.
+    - write_parameter_strings: Generate formatted SF definitions.
+    - plot: Plot Gaussian functions for the SFs (supported 2, 3, 9).
+    
 Functions:
+    - load_from_npp_data: Load SF parameters from an NNP input file.
     - get_radial_pairs: Generate unique pairs of elements for radial SFs.
     - get_angular_pairs: Generate unique triplets of elements for angular SFs.
 
@@ -14,6 +24,7 @@ Change Log:
     - 2025.10.16: Fixed a bug in cal_g3_g9 where rc parameter was not passed, and added rc offset to Gaussian peaks.
     - 2025.10.15: Updated to support multi-element systems, but doesn't test.
     - 2025.10.14: Initial implementation for single-element systems.
+    - 2025.10.21: Move the plot_g2() funtion to class mysfparams, and add the load_from_nnp_data() function.
 
 Note:
     - The cal_sf() method in class mysfparams is computationally expensive for angular SFs,
@@ -21,10 +32,12 @@ Note:
 """
 
 import numpy as np
+import pandas as pd
 from ase import Atoms
 from ase.neighborlist import NeighborList
 from itertools import combinations_with_replacement, combinations
-
+from mymetal.universal.plot.plot import my_plot
+import matplotlib.pyplot as plt
 
 # For one pair of (center, neighbor: list = [neighbor1] or [neighbor1, neighbor2])  atoms
 class mysfparams:
@@ -43,6 +56,18 @@ class mysfparams:
         lzeta (list, optional): Zeta parameters for g3/g9.
         cutoff_type_id (int, optional): ID for cutoff function type. Default 6 (CT_POLY2).
         cutoff_alpha (float, optional): Inner radius scaling factor for cutoff.
+
+    Attributes:
+        g (str): Type of symmetry function.
+        center_atoms (str): Symbol of central atom.
+        neighbor_atoms (list): Symbols of neighbor atoms.
+        leta (list): List of eta parameters.
+        lrs (list): List of r_shift parameters.
+        lrc (list): List of cutoff radii.
+        llambd (list): Lambda parameters for g3/g9.
+        lzeta (list): Zeta parameters for g3/g9.
+        cutoff_type_id (int): ID for cutoff function type.
+        cutoff_alpha (float): Inner radius scaling factor for cutoff.
     """
 
     def __init__(self, g: str = 'g3', center_atoms: str = 'Au', neighbor_atoms: list = ['Au', 'Au'],   # ['Au', 'Ag'] same ['Ag', 'Au']
@@ -58,7 +83,7 @@ class mysfparams:
             if len(neighbor_atoms) != 1:
                 raise ValueError('For g2, length of neighbor_atoms must be 1.')
         elif g == 'g3' or g == 'g9':
-            if lrs is None:
+            if lrs is None or len(lrs) == 0:
                 lrs = [0.0] * len(leta)
             if llambd is None or lzeta is None:
                 raise ValueError('For g3/g9, llambd and lzeta must be provided')
@@ -380,7 +405,6 @@ class mysfparams:
             else:
                 raise ValueError(f'Not support cutoff function type: {type_str}')
 
-
     def write_settings_overview(self):
         content = ''
         if self.g == 'g2':
@@ -408,7 +432,6 @@ class mysfparams:
                 content += f'#{i:4d} {eta:12.4e} {my_lambda:12.4e} {zeta:12.4e} {rc:12.4e} {rs:12.4e}\n'
         return content
 
-
     def write_parameter_strings(self):
         """Generate a formatted string describing the symmetry functions.
 
@@ -435,6 +458,239 @@ class mysfparams:
                     
         return content
                 
+    # Gaussian functions plotting
+    def plot(   self,
+                fig_subp: tuple = None,
+                if_save: bool = False, save_path: str = 'symmetry_functions.pdf') -> tuple:
+
+        if self.g == 'g2':
+            parameters = [self.leta, self.lrs, self.lrc]
+        elif self.g == 'g3' or self.g == 'g9':
+            parameters = [self.leta, self.lrc, self.lrs, self.llambd, self.lzeta]
+        else:
+            raise ValueError(f'Not support this sf_type: {self.g}')
+
+        if fig_subp == None:
+            fig_subp = [2, len(self.leta) // 2 + len(self.leta) % 2]
+
+        fig, axes = my_plot(fig_subp=fig_subp, fig_sharex=False)
+        i = 0
+        j = 0
+        index = 0
+
+        for params in zip(*parameters):
+
+            ax = axes[i, j]
+
+            if self.g == 'g2':
+                eta, rs, rc = params
+                sigma = np.sqrt(1/(2*eta))
+                # Input: eta, rs, rc, r_ij
+                r = np.linspace(0, rc, 500)
+                y = np.exp(-eta * (r - rs) ** 2)
+                    #                    * self.cal_cutoff( rc, r)
+                xlabel = r'$r$ (Å)'
+                ylabel = r'$g_2$'
+                xlim = (0, rc)
+                ylim = (-0.05, 1.1)
+                formula = r'$e^{-\eta (r - r_s)^2}$'
+                x = r
+
+                text = (
+                    rf"{formula}" +"\n"
+                    rf"$r_{{c}}$ = {rc}" +"\n"
+                    rf"$r_{{s}}$ = {rs}" +"\n"
+                    rf"$\eta$ = {eta}" +"\n"
+                    rf"$r_c / \sigma$ = {rc/sigma:.3f}"
+                )
+
+
+            elif self.g == 'g3' or self.g == 'g9':
+                eta, rc, rs, my_lambda, zeta = params
+                sigma = np.sqrt(1/(2*eta))
+                # Don't multiply cutoff here
+                # Input: eta, zeta, my_lambda, rc, rs, r_ij, r_ik, r_jk, theta
+                # Here only consider various theta.
+                theta = np.linspace(0, 2 * np.pi, 500)  # 0 to pi
+                y = 2 ** (1 - zeta) *\
+                      (1 + my_lambda * np.cos(theta)) ** zeta
+                    # * np.exp(-eta * ( (r_ij - rs) ** 2 + (r_ik - rs) ** 2 + (r_jk - rs) ** 2 ))\
+                    # * self.cal_cutoff( rc, r_ij)\
+                    # * self.cal_cutoff( rc, r_ik)\
+                    # * self.cal_cutoff( rc, r_jk)
+                xlabel = r'$\theta (degree)$'
+                ylabel = r'$g_3$' if self.g == 'g3' else r'$g_9$'
+                xlim = (0, 360)
+                ylim = (-0.05, 2.1)
+                formula = r'$2^{1-\eta}(1+\lambda\cos\theta_{ijk})^\zeta$'
+                x = theta * 360 / (2 * np.pi)
+                
+                text = rf"{formula}" +"\n"     +\
+                    rf"$r_{{c}}$ = {rc}" +"\n" +\
+                    rf"$r_{{s}}$ = {rs}" +"\n" +\
+                    rf"$\eta$ = {eta}" +"\n"   +\
+                    rf"$r_c / \sigma$ = {rc/sigma:.3f}" +"\n" +\
+                    rf"$\zeta$ = {zeta}" +"\n" +\
+                    rf"$\lambda$ = {my_lambda}"
+
+            ax.plot(x, y)
+            ax.axvline(rs-sigma, linestyle='--')
+            ax.axvline(rs+sigma, linestyle='--')
+            ax.set_xlim(xlim[0], xlim[1])
+            ax.set_ylim(ylim[0], ylim[1])
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+            #print(ax.get_ylim())
+            ax.text(0.95, 0.05, text, 
+                    transform=ax.transAxes, verticalalignment='bottom', horizontalalignment='right')
+
+            index = index + 1
+            j =  index % fig_subp[1]
+            i = index // fig_subp[1]
+
+        if if_save:
+            plt.savefig(save_path)
+
+        return fig, axes
+
+
+def load_from_npp_data(nnp_file: str = 'input.nn') -> tuple:
+    """
+    Args:
+        nnp_file (str): Path to the NNP input file containing symmetry function definitions.
+    
+    Returns:
+        tuple: Three dictionaries for g2, g3, and g9 symmetry functions.
+            Each dictionary maps (center_atom, neighbor_atoms) to a DataFrame of parameters.
+    
+    Example:
+        ```python
+        g2sfs, g3sfs, g9sfs = load_from_npp_data('input.nn')
+
+        for (centor, neighbors), df in g2sfs.items():
+            temp_dict = {
+                'center_atoms': df['lcenter_atoms'].iloc[0],
+                'neighbor_atoms': df['lneighbor_atoms'].iloc[0],
+                'leta': df['leta'].tolist(),
+                'lrs': df['lrs'].tolist(),
+                'lrc': df['lrc'].tolist()
+            }
+            g2sfs = mysfparams(g = 'g2', **temp_dict)
+
+            g2sfs.plot()
+
+
+        for (centor, neighbors), df in g3sfs.items():
+            temp_dict = {
+                'center_atoms':  df['lcenter_atoms'].iloc[0],
+                'neighbor_atoms': df['lneighbor_atoms'].iloc[0],
+                'leta': df['leta'].tolist(),
+                'llambd': df['llambd'].tolist(),
+                'lzeta': df['lzeta'].tolist(),
+                'lrc': df['lrc'].tolist()
+            }
+            g3sfs = mysfparams(g = 'g3', **temp_dict)
+
+            g3sfs.plot()
+        ```
+    """
+
+    # For saving parameters
+    g2 = {
+        'lcenter_atoms': [],
+        'lneighbor_atoms': [],
+        'leta': [],
+        'lrs': [],
+        'lrc': []
+    }
+
+    g3 = {
+        'lcenter_atoms': [],
+        'lneighbor_atoms': [],
+        'leta': [],
+        'llambd': [],
+        'lzeta': [],
+        'lrc': [],
+        'lrs': [],
+    }
+
+    g9 = {
+        'lcenter_atoms': [],
+        'lneighbor_atoms': [],
+        'leta': [],
+        'llambd': [],
+        'lzeta': [],
+        'lrc': [],
+        'lrs': []
+
+    }
+
+    with open(nnp_file, 'r') as fd:
+        lines = fd.readlines()
+
+    for line in lines:
+        if 'symfunction_short' in line:
+            l = line.split()
+            if l[2] == '2':
+                # symfunction_short <element-central> 2 <element-neighbor> <eta> <rshift> <rcutoff>
+                g2['lcenter_atoms'].append(l[1])
+                g2['lneighbor_atoms'].append([l[3]])
+                g2['leta'].append(float(l[4]))
+                g2['lrs'].append(float(l[5]))
+                g2['lrc'].append(float(l[6]))
+            elif l[2] == '3':
+                # symfunction_short <element-central> 3 <element-neighbor1> <element-neighbor2> <eta> <lambda> <zeta> <rcutoff> <<rshift>>
+                g3['lcenter_atoms'].append(l[1])
+                g3['lneighbor_atoms'].append([l[3], l[4]])
+                g3['leta'].append(float(l[5]))
+                g3['llambd'].append(float(l[6]))
+                g3['lzeta'].append(float(l[7]))
+                g3['lrc'].append(float(l[8]))
+                # lrs is optional
+                if len(l) == 10:
+                    g3['lrs'].append(float(l[9]))
+                else:
+                    g3['lrs'].append(float(0.0))
+
+            elif l[2] == '9':
+                g9['lcenter_atoms'].append(l[1])
+                g9['lneighbor_atoms'].append([l[3], l[4]])
+                g9['leta'].append(float(l[5]))
+                g9['llambd'].append(float(l[6]))
+                g9['lzeta'].append(float(l[7]))
+                g9['lrc'].append(float(l[8]))
+                # lrs is optional
+                if len(l) == 10:
+                    g9['lrs'].append(float(l[9]))
+                else:
+                    g9['lrs'].append(float(0.0))
+
+    # Group parameters by center atom and neighbor atoms
+    lg_groups = []
+    for g in [g2, g3, g9]:
+        df = pd.DataFrame(g)
+        df['lneighbor_atoms'] = df['lneighbor_atoms'].apply(tuple)  # Convert lists to tuples for grouping
+        # iterator of (group_name, group_df)
+        dfgroups = df.groupby(['lcenter_atoms', 'lneighbor_atoms'])
+        # tuple() to convert iterator to tuple, (((lcentor, lneighbor), sub_df1),...), then dict() to convert to dict
+        g_groups = dict(tuple(dfgroups))
+
+        # Check correctness
+        for (centor, neighbors), sub_df in g_groups.items():
+
+            center_col = sub_df['lcenter_atoms']
+            neigh_col = sub_df['lneighbor_atoms'].apply(tuple)
+
+            if center_col.nunique() != 1 or center_col.iloc[0] != str(centor):
+                raise ValueError(f"Center atom mismatch! Expected {centor}, got {center_col.unique()}")
+
+            if neigh_col.nunique() != 1 or neigh_col.iloc[0] != tuple(neighbors):
+                raise ValueError(f"Neighbor atoms mismatch! Expected {neighbors}, got {neigh_col.unique()}")
+
+        lg_groups.append(g_groups)
+
+    #      g2,           g3,         , g9
+    return lg_groups[0], lg_groups[1], lg_groups[2]
 
 def get_radial_pairs(elements: list = None) -> list:
     """Generate unique radial atom pairs [center, neighbor] for symmetry functions.
