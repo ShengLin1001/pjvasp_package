@@ -5,6 +5,7 @@ This module provides a function to read delimited files into a pandas DataFrame 
 
 Functions:
     - general_read: Reads a delimited file into a DataFrame, allowing for custom headers and separators.
+    - general_write: Writes a DataFrame to a formatted plain text file.
 
 Change Log:
     - 2025.10.16: Added general_write function to write DataFrame to a formatted text file.
