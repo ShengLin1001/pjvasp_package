@@ -4,7 +4,8 @@ import os
 from myvasp import vasp_func as vf 
 from mymetal.universal.plot.workflow import my_plot_stretch
 from mymetal.post.general import my_read_y_dir_contcar, get_structure_info
-
+from ase.io import read
+from mymetal.io.general import general_read
 
 def post_stretch(dirsurf: str = 'y_stretch', refcontcar: str='./y_full_relax/CONTCAR'):
     """
@@ -64,6 +65,68 @@ def post_stretch(dirsurf: str = 'y_stretch', refcontcar: str='./y_full_relax/CON
     # my_read_stretch('p_post_stretch.txt')
 
 
+# Post-process LAMMPS stretch calculation
+def post_lammps_stretch(file: str = './stretch.txt', refcontcar: str = './CONTCAR', latoms_lammpstrj: str = None,
+                        save_fig_path: str = 'p_post_stretch.pdf', save_txt_path: str = 'p_post_stretch.txt'):
+    """
+    Post-process LAMMPS stretch calculations and extract strain information.
+
+    This function reads stretch data, compares it with a zero-strain reference
+    structure, calculates stretch types, and generates related plots and output files.
+
+    Args:
+        file (str): Path to the stretch data file (default: './stretch.txt').
+        refcontcar (str): Path to the zero-strain reference CONTCAR file (default: './CONTCAR').
+        latoms_lammpstrj (str): Path to the LAMMPS trajectory or dump file containing
+            strained atomic structures.
+        save_fig_path (str): Path to save the generated stretch plot (default: 'p_post_stretch.pdf').
+        save_txt_path (str): Path to save the processed stretch data and coefficients
+            (default: 'p_post_stretch.txt').
+
+    Returns:
+        None
+
+    Side Effects:
+        - Generates a plot of stretch vs energy using `my_plot_stretch` (saved as PDF if enabled).
+        - Writes processed stretch data and coefficients to an output file via `my_write_stretch`.
+    """
+
+    # read stretch data
+    df = general_read(file)
+    jobn = list(df['stretch'])
+    Etot = list(df.iloc[:, 3])  # eV
+
+    # zero-strain reference
+    atoms_ref = read(refcontcar, format='lammps-data')
+    cell_ref = np.array(atoms_ref.get_cell())
+    natoms = len(atoms_ref)
+    # Col vector [x, y, z]
+    cvectors_ref = np.linalg.norm(cell_ref, axis=0)
+    # row vector [a1, a2, a3]
+    rvectors_ref = np.linalg.norm(cell_ref, axis=1)
+
+    # list of atoms at different strains
+    latoms    = read(latoms_lammpstrj, format='lammps-dump-text', index=':')
+    lcvectors, lrvectors, lcellpars, lca = get_structure_info(latoms)
+    _, stretch_type = get_stretch_type(lcvectors, jobn, cvectors_ref)
+
+    _, (coeffs, extr_x, extr_y, extr_rvectors)  = my_plot_stretch(
+        jobn = jobn,
+        Etot = Etot,
+        natoms = natoms,
+        stretch_type = stretch_type,
+        rvectors_ref = rvectors_ref,
+        lca = lca,
+        if_save = True,
+        savefile = save_fig_path,
+        dpi = 300,
+    )
+    my_write_stretch(jobn, Etot, natoms, stretch_type,  rvectors_ref, lca,
+                     cell_ref,
+                     (coeffs, extr_x, extr_y, extr_rvectors),
+                     save_txt_path)
+
+
 def get_stretch_type(lcvectors: list = None, jobn: list = None, cvectors_ref: np.ndarray = None) -> str:
     """
     Determine stretched lattice axes compared to reference.
@@ -87,9 +150,15 @@ def get_stretch_type(lcvectors: list = None, jobn: list = None, cvectors_ref: np
         stretch = np.array(cvectors) / np.array(cvectors_ref)
         if_stretch = np.abs(stretch - float(job)) < 1e-5
         lif_stretch.append(if_stretch)
+        #print(if_stretch)
 
-    if all(np.array_equal(if_stretch, lif_stretch[0]) for if_stretch in lif_stretch):
-        if_stretch = lif_stretch[0]
+    lif_stretch_arr = np.array(lif_stretch)
+    # [[True, False, False],
+    #  [True, False, False]]
+    # => [True, False, False] (if_stretch )
+    if_stretch = np.all(lif_stretch_arr, axis=0)
+    
+    if not np.array_equal(if_stretch, np.array([False, False, False])):
         stretch_axes = ['x', 'y', 'z']
         stretch_type = ''.join([axis for axis, stretched in zip(stretch_axes, if_stretch) if stretched])
         # only those return value: 'x', 'y', 'z', 'xy', 'xz', 'yz', 'xyz'
