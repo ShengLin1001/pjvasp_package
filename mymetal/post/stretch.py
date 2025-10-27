@@ -94,7 +94,7 @@ def post_lammps_stretch(file: str = './stretch.txt', refcontcar: str = './CONTCA
     # read stretch data
     df = general_read(file)
     jobn = list(df['stretch'])
-    Etot = list(df.iloc[:, 3])  # eV
+    Etot = list(df['mype1(eV)'])  # eV
 
     # zero-strain reference
     atoms_ref = read(refcontcar, format='lammps-data')
