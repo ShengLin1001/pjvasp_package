@@ -257,7 +257,7 @@ def read_deform_data(dirn: str = None, atoms_ref: Atoms = None) -> dict:
         if np.abs(temp)<1e-10:
             iref = i 
 
-        temp = vf.calc_strain(atoms_ref.get_cell()[:], latoms[i].get_cell()[:])
+        temp = calc_strain(atoms_ref.get_cell()[:], latoms[i].get_cell()[:])
         e_ss_V = np.vstack([ e_ss_V, temp])
     
 
@@ -287,3 +287,21 @@ def read_deform_data(dirn: str = None, atoms_ref: Atoms = None) -> dict:
     data['s']  = s
     data['iref']  = iref 
     return data 
+
+
+
+def calc_strain(latt1, latt2):
+    # latt1 - ref
+    # latt2 - deformed 
+
+    F = np.linalg.solve(latt1, latt2)
+    F = F.T 
+   
+    # ================================
+    e_ss      = 1/2*( F+F.T ) - np.eye(3)
+    e_green   = 1/2*( F.T@F - np.eye(3) )
+    e_almansi = 1/2*( np.eye(3) - np.linalg.inv(F@F.T) )
+
+    e_ss_V = vf.calc_to_Voigt(e_ss)
+
+    return e_ss_V 
