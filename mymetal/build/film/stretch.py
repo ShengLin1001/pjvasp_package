@@ -65,56 +65,154 @@ def generate_film(   symbols: str = None,                 # str
                 my_vacuum: float = 7.5,           # float
                 slice_plane: tuple[int] = (0, 0, 1),  # Tuple of ints
                 my_tol: float = 1e-6,              # float
-                my_periodic: bool = False,          # bool
+                my_periodic: bool = True,          # bool
                 a_fcc: float = 2.95*sqrt(2.0),     # float
                 a_hcp: float = 2.95,               # float
                 my_covera: float = sqrt(8.0/3.0),  # float
-                move_atom: list = [0.1, 0.1, 0.0],
-                before_move_atom: list = [0.05, 0.05, 0.05],
+                move_atom: list = [1e-6, 1e-6, 1e-6],
+                before_move_atom: list = [1e-6, 1e-6, 1e-6],
                 number_per_layer: float = 1.0,
                 bulk_atoms: Atoms = None,
                 if_find_prim: bool = True,
+                if_fix_c: bool = False
                 ) -> Atoms:
-    """
-    please see the ASE/cut function\n
-    parameters : 1-8 line: general setting\n
-                  9 10-11 line: fcc, hcp parameters\n
-    when we use surface() function, my_bulk must be a conventional cell, not a primitive cell, so set cubic=True (except for hcp)\n
-    Generates a thin film structure (slab) from bulk material and applies modifications. Please see the ASE/cut function\n
+    """Generate a slab OR specified (ijk) plane-based bulk from a conventional ideal bulk crystal (supports FCC/HCP or a provided bulk).
 
-    The function allows the user to create a thin film from an bulk structure from `bulk_atoms` or specify the lattice constant of only supported hcp/fcc structure
-    , adjust the number of layers, apply vacuum padding, and move atoms before or after generating the slab. The slab is created along the given slice plane.
+    This utility wraps ASE-like operations (e.g. `bulk`, `surface`, `cut`) and custom
+    helpers (`my_find_prim`, `my_find_num_per_slab`, `move_atoms`) to produce a slab
+    oriented along a Miller plane, optionally with vacuum padding and atom translations.
+
+    The function supports two main modes:
+      * Build a conventional bulk cell internally from `symbols` + `structure` ('fcc' or 'hcp'),
+        then slice it.
+      * Use an externally supplied `bulk_atoms` ASE Atoms object.
+    It also supports generating a bulk cell that is aligned with an arbitrary (h,k,l)
+    plane by setting `vacuum=None`, `my_periodic=True`, `if_fix_c=True` (i.e., produce a periodic
+    bulk rather than a non-periodic slab with vacuum).
 
     Args:
-        symbols (str): The chemical symbol of the material to generate the bulk (e.g., 'Si'). So far, only one element is supported.
-        structure (str): The crystal structure type ('fcc' or 'hcp').
-        num_layers (int): The number of layers in the film. Either this or `replic_z` must be specified, superior to replic_z.
-        replic_z (int): The number of repetitions in the z direction (along the surface normal). Either this or `num_layers` must be specified.
-        my_vacuum (float): The amount of vacuum to add to the slab, two sizes of the vacuum are added to the top and bottom of the slab (default is 7.5).
-        slice_plane (tuple[int]): The slicing plane defined as a tuple of Miller indices (default is (0, 0, 1)).
-        my_tol (float): The tolerance for detecting layers in the slab (default is 1e-6).
-        my_periodic (bool): Whether to apply periodic boundary conditions to the slab (default is False).
-        a_fcc (float): The lattice constant for FCC structures (default is 2.95 * sqrt(2.0)).
-        a_hcp (float): The lattice constant for HCP structures (default is 2.95). 
-        my_covera (float): The c/a ratio for HCP structures (default is sqrt(8.0/3.0)).
-        move_atom (list): A list of x, y, z translations to apply to the atoms after slab generation (default is [0.1, 0.1, 0.0]), in lattice unit.
-        before_move_atom (list): A list of x, y, z translations to apply to the atoms before slab generation (default is [0.05, 0.05, 0.05]), in lattice unit.
-        number_per_layer (float): The number of atoms per layer (default is 1.0).
-        bulk_atoms (Atoms, optional): A pre-existing bulk structure to use. If not provided, a new bulk is generated.
+        symbols (str, optional):
+            Element symbol for internally-generated bulk (e.g. "Cu"). Only single-element
+            systems are supported when generating bulk internally. Required if `bulk_atoms`
+            is not provided.
+        structure (str, optional):
+            Crystal type for internal bulk generation. One of {'fcc', 'hcp'}. Required if
+            `bulk_atoms` is None.
+        num_layers (int, optional):
+            Desired number of atomic layers in the final slab. If provided, it takes precedence
+            over `replic_z`. The function determines the number of layers per primitive repeat
+            using `my_find_num_per_slab()` and computes the required z-repetitions.
+        replic_z (int, optional):
+            Direct number of repetitions along the surface normal (z-like direction). Used
+            if `num_layers` is not provided.
+        my_vacuum (float, optional):
+            Vacuum thickness (Å) to add above and below the slab. Default 7.5 Å.
+            If `my_vacuum` is `None`, no vacuum is added. Note: the implementation adds
+            *two* vacuum regions (top and bottom) equal to this value when creating non-periodic slabs.
+        slice_plane (tuple[int], optional):
+            Miller indices (h, k, l) defining the slicing plane / surface normal. Default (0,0,1).
+        my_tol (float, optional):
+            Numerical tolerance used for detecting layers and geometry checks (units: Å). Default 1e-6.
+        my_periodic (bool, optional):
+            If True (default), the produced slab/cell will keep periodic boundary conditions along the surface
+            normal (useful to produce a bulk-like (h,k,l)-based cell). If False, the slab
+            will be non-periodic along the surface normal with vacuum added (unless `my_vacuum is None`).
+            Be carefully when setting to False!
+        a_fcc (float, optional):
+            Lattice constant used when `structure == 'fcc'` and `bulk_atoms` not provided.
+            Default uses `2.95 * sqrt(2.0)` to form a conventional FCC cell.
+        a_hcp (float, optional):
+            Lattice `a` constant used when `structure == 'hcp'` and `bulk_atoms` not provided.
+        my_covera (float, optional):
+            c/a ratio for HCP crystals when building a bulk cell internally.
+        move_atom (list[float], optional):
+            Translation applied *after* slab generation. Given as fractional translation
+            in lattice (or internal coordinate) units (x, y, z). Default [1e-6, 1e-6, 1e-6].
+        before_move_atom (list[float], optional):
+            Translation applied *before* any slab creation (i.e., applied to the initial bulk).
+            Also fractional in lattice units. Default [1e-6, 1e-6, 1e-6].
+            Purpose: break symmetries / avoid atoms lying exactly on cutting planes.
+        number_per_layer (float, optional):
+            Expected number of atoms per layer used by `my_find_num_per_slab()` to determine
+            how many layers constitute one repeat. Default 1.0.
+        bulk_atoms (ase.Atoms, optional):
+            If provided, this Atoms object is used as the bulk from which to slice. The
+            function will call `my_find_prim(bulk_atoms, to_primitive=0)` to make a suitable
+            conventional/working cell before slicing.
+        if_find_prim (bool, optional):
+            If True (default), the resulting slab will be reduced to a primitive cell via
+            `my_find_prim()` after slab creation.
+        if_fix_c (bool, optional):
+            If True, when reducing to primitive cell, the c-axis and zpositions (surface normal) 
+            will be preserved/fixed. Default False.
 
     Returns:
-        Atoms: The final slab structure with applied modifications.
+        ase.Atoms:
+            The final slab / thin-film as an ASE Atoms object. The returned Atoms will have
+            been optionally reduced to primitive cell, translated by `move_atom`, and wrapped
+            (`Atoms.wrap()`) before return.
 
     Raises:
-        ValueError: If the `structure` is not 'fcc' or 'hcp', or if neither `num_layers` nor `replic_z` is provided.
+        ValueError:
+            * If `structure` is not 'fcc' or 'hcp' while `bulk_atoms` is None.
+            * If neither `num_layers` nor `replic_z` is provided.
+            The raised message contains the invalid argument(s).
 
-    Example:
-        >>> slab = generate_film(symbols='Cu', structure='fcc', num_layers=10, my_vacuum=10)
-        >>> print(slab)
-        >>> # If bulk_atoms is provided:
-        >>> generate_film(bulk_atoms= atoms_fcc, num_layers=12, slice_plane= (1, 1, 1))
+    Notes:
+        * Layer counting: `my_find_num_per_slab(my_bulk, slice_plane, my_tol, my_periodic, number_per_layer)`
+          is used to determine how many atomic layers appear per slab repeat. `num_layers` is converted
+          to `replic_z` with `num_rep_z = int(num_layers / layer_number_per_slab)`. If this division does not
+          produce an integer, the integer cast truncates — ensure `num_layers` is compatible with the
+          slab repeat or supply `replic_z` directly.
+        * `vacuum=None` + `my_periodic=True` + `if_fix_c=True`:
+            This produces a periodic (h,k,l)-based bulk cell (no vacuum added) suitable for calculations
+            where periodicity along the surface-normal is required (i.e., not a slab).
+        * `move_atom` and `before_move_atom` are applied in fractional/lattice units (not Å). They are used
+          to avoid atoms sitting exactly on the slicing plane or to intentionally displace atoms.
+        * The function expects helper utilities to exist in the same codebase:
+            - `my_find_prim(atoms, to_primitive=0)`
+            - `my_find_num_per_slab(...)`
+            - `move_atoms(atoms, translation_list)`
+            - ASE functions: `bulk()`, `surface()`, and `Atoms.wrap()`.
+        * If `bulk_atoms` is already primitive vs conventional, `my_find_prim(..., to_primitive=0)` is called
+          to ensure the correct conventional/predictable cell prior to slicing (except for HCP where cubic
+          flag is not applicable).
+        * It's importan to use `move_atom` and `before_move_atom` to avoid atoms exactly on the cutting plane,
+            which can lead to unpredictable behavior.
+
+    Examples:
+        # 1) Generate a 10-layer FCC Cu slab with vacuum (default behavior)
+        >>> slab = generate_film(symbols='Cu', structure='fcc', num_layers=10, my_vacuum=10.0)
+
+        # 2) Use an externally constructed bulk and make a (1,1,1) periodic cell (no vacuum)
+        >>> bulk_atoms = bulk('Au', 'fcc', a=4.08, cubic=True)
+        >>> surface_atoms = generate_film(bulk_atoms = bulk_atoms, slice_plane = (1, 1, 1), num_layers = 12,
+        ...                   my_vacuum=None, my_periodic = True, if_find_prim=True, if_fix_c=True,
+        ...                   before_move_atom = [1e-6, 1e-6, 1e-6], move_atom = [1e-6, 1e-6, 1e-6])
+
+        # 3) Shift atoms before cutting to avoid atoms on the cutting plane,
+        #    then apply a small post-generation shift and reduce to primitive
+        >>> slab = generate_film(symbols='Al', structure='fcc',
+        ...                      num_layers=6,
+        ...                      before_move_atom=[0.01, 0.01, 0.02],
+        ...                      move_atom=[0.05, 0.05, 0.0],
+        ...                      if_find_prim=True)
+
+    See Also:
+        ASE: `ase.build.bulk`, `ase.build.surface`, `ase.geometry.cut`
+        Local helpers: `my_find_prim`, `my_find_num_per_slab`, `move_atoms`
+
+    Implementation detail:
+        * The function will:
+            1. Build or accept a bulk (`my_bulk`).
+            2. Apply `before_move_atom` via `move_atoms(my_bulk, before_move_atom)`.
+            3. Compute `layer_number_per_slab = my_find_num_per_slab(...)`.
+            4. Convert `num_layers` -> `num_rep_z` or use `replic_z`.
+            5. Call `surface(my_bulk, slice_plane, num_rep_z, vacuum=my_vacuum, tol=my_tol, periodic=my_periodic)`.
+            6. Optionally call `my_find_prim(my_slab)`.
+            7. Apply `move_atoms(my_slab, move_atom)`, call `my_slab.wrap()`, and return.
+
     """
-
     if bulk_atoms:
         my_bulk = my_find_prim(bulk_atoms, to_primitive=0)
     else:
@@ -126,8 +224,8 @@ def generate_film(   symbols: str = None,                 # str
             raise ValueError('%s is an invalid structure' % structure)
     my_bulk = move_atoms(my_bulk, before_move_atom)
 
+    print('number_per_layer: %s' % number_per_layer)
     layer_number_per_slab = my_find_num_per_slab(my_bulk, slice_plane, my_tol, my_periodic, number_per_layer)
-    # print('layer_number_per_slab: %s' % layer_number_per_slab)
 
     if num_layers:
         num_rep_z = int(num_layers/layer_number_per_slab)
@@ -136,11 +234,13 @@ def generate_film(   symbols: str = None,                 # str
     else:
         raise ValueError('%s or %s is an invalid value' % num_layers % num_rep_z)
 
-    # print('rep_z: %s' %num_rep_z)
+    print('num_rep_z: %s' %num_rep_z)
     my_slab = surface(my_bulk, slice_plane , num_rep_z, vacuum = my_vacuum, tol=my_tol, periodic=my_periodic)
     # print(my_slab)
+
     if if_find_prim:
-        my_slab = my_find_prim(my_slab)
+        my_slab = my_find_prim(my_slab, check_direction_tag=False, if_fix_c = if_fix_c)
+    print('len(my_slab): %s' % len(my_slab))
 
     my_slab = move_atoms(my_slab, move_atom)
     my_slab.wrap()
@@ -315,11 +415,14 @@ def my_find_num_per_slab(my_bulk: Atoms = None,
                          slice_plane:  tuple[int] = (0, 0, 1),
                          my_tol: float = 1e-6,          
                          my_periodic: bool = False,
-                         number_per_layer: float = None) -> float:
+                         number_per_layer: float = 1) -> float:
     my_one_slab = surface(my_bulk, slice_plane , 1, vacuum = 20, tol=my_tol, periodic=my_periodic)
     prim_one_slab = my_find_prim(my_one_slab)
+    #print('prim_one_slab: %s' % prim_one_slab)
     atom_number_per_slab = len(prim_one_slab.get_positions())
+    print('atom_number_per_slab: %s' % atom_number_per_slab)
     layer_number_per_slab = atom_number_per_slab/number_per_layer
+    print('layer_number_per_slab: %s' % layer_number_per_slab)
     return layer_number_per_slab
 
 
@@ -359,9 +462,18 @@ def adjust_lattice_for_volume_conservation(lattice_before, lattice_after, change
     
     return adjusted_lattice_after, scaling_factor
 
+
 def generate_bulk_from_film(film: Atoms=None, if_find_prim: bool = False, vacuum: float=None, number_per_layer: int = 1) -> Atoms:
     """
-    Generates a bulk structure from a given thin film. The bulk structure is created by reducing z-vacuum layers to the thin film.
+    [Deprecated] Convert a thin film back into an approximate bulk structure.
+
+    ⚠️ **Deprecated:** This function has been replaced by the more general
+    `generate_film()` function with the setting:
+        `vacuum=None` and `my_periodic=True`.
+
+    The older approach attempted to reconstruct a bulk by removing the vacuum
+    regions from a given slab. It is kept for backward compatibility and testing
+    but is no longer recommended for production use.
 
     Args:
         film (Atoms, optional): The Atoms object representing the thin film. Defaults to None.
