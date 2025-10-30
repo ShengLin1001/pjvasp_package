@@ -14,19 +14,68 @@ from ase import Atoms
 import spglib
 from mymetal.universal.atom.moveatom import *
 
-def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag = True, scale_atoms = False, to_primitive = 1) -> Atoms:
+def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag = False, scale_atoms = False, to_primitive = 1,
+                 if_fix_c: bool = False) -> Atoms:
+    """Find the primitive or conventional cell of an ASE Atoms object using spglib.
+
+    This function standardizes the given structure using spglib, returning either
+    a primitive or conventional cell depending on `to_primitive`. For 2D systems or
+    slabs or specified (ijk) plane-based bulk, it can fix the c-axis (z-direction) during symmetry reduction by temporarily
+    adding vacuum and restoring the original height and zpositions afterward.
+
+    Args:
+        atoms (ase.Atoms): Input atomic structure.
+        move_list (list[float], optional): Translation to apply after transformation
+            (fractional coordinates). Default is [0, 0, 0].
+        check_direction_tag (bool, optional): Whether to check and correct lattice
+            orientation (recommended for 2D materials). Default is True. (Be carefully
+            when setting to True!)
+        scale_atoms (bool, optional): If True, scales atomic positions when changing
+            cell dimensions. Default is False.
+        to_primitive (int, optional): If 1, find the primitive cell; if 0, find the
+            conventional cell. Default is 1.
+        if_fix_c (bool, optional): If True, fix the c-axis (z-direction) for slabs or
+            2D materials or specified (ijk) plane-based bulk by preserving the original cell height. Default is False.
+
+    Returns:
+        ase.Atoms: The standardized primitive or conventional cell.
+
+    Notes:
+        - When `if_fix_c=True`, the function:
+            1. Temporarily centers the atoms with added vacuum along z.
+            2. Runs spglib standardization.
+            3. Restores the original z positions and c-axis length.
+            4. This setting should only be used for specified (ijk) plane-based bulk.
+        - When `check_direction_tag=True`, the lattice orientation is verified via
+          `check_direction()`.
+        - The final structure is sorted by atomic number, translated by `move_list`,
+          and wrapped into the periodic cell.
+
+    Example:
+        >>> prim = my_find_prim(atoms, to_primitive=1)
+        >>> conv = my_find_prim(atoms, to_primitive=0, if_fix_c=True)
     """
-    find primitive cell using spglib\n
-    Convert to a format suitable for spglib\n
-    if the material is not 2D material, please turn off the check_direction tag\n
-    this function could be used to find conventional cell by controlling the to_primitive tag\n
-    """
+
     
+
+    # only find prim in xy plane for bulk
+    # This part first add vacuum, then find prim, finally set back the cell[:,2] and move the atoms to original z positions
+    if if_fix_c:
+        # Find primitive cell of the slab
+        # Save original cell/original positions
+        old_cell = np.array(atoms.get_cell())
+        old_positions = np.array(atoms.get_positions())
+        old_min_z = np.min(old_positions[:, 2])
+        atoms.center(vacuum=7.5, axis=2)
+
+
+    # pass to spglib to find primitive cell
     lattice = array(atoms.get_cell())
     points = array(atoms.get_scaled_positions())
     numbers = array(atoms.get_atomic_numbers())
     pbc = array(atoms.get_pbc())
     cell = (lattice, points, numbers)
+    # Important: pbc = [True, True, True], else spglib may treat it as 0D or 1D system, and raise some unexpected error!
 
     primitive_cell = spglib.standardize_cell(cell, to_primitive=to_primitive, no_idealize=1)
     # Convert the spglib output back to an ASE Atoms object
@@ -34,6 +83,21 @@ def my_find_prim(atoms: Atoms = None, move_list = [0, 0, 0], check_direction_tag
                             scaled_positions = primitive_cell[1],
                             cell = primitive_cell[0],
                             pbc=pbc)
+    
+    if if_fix_c:
+        # Move the slab to original z positions
+        new_cell = np.array(primitive_atoms.get_cell())
+        new_positions = np.array(primitive_atoms.get_positions())
+        new_min_z = np.min(new_positions[:, 2])
+        shift_z = new_min_z - old_min_z
+        new_positions[:, 2] -= shift_z
+
+        # set cell, a, b unchanged, c changed to original c
+        new_cell[2, :] = old_cell[2, :]
+        primitive_atoms.set_cell(new_cell, scale_atoms=False)
+        primitive_atoms.set_positions(new_positions)
+
+
     if check_direction_tag:
         primitive_atoms = check_direction(primitive_atoms, scale_atoms)
     primitive_atoms = move_atoms(primitive_atoms, move_list)
