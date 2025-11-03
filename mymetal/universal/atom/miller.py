@@ -1,10 +1,23 @@
 """
-indextrans submodule
+miller submodule
 
 This submodule contains functions for converting between three-index and four-index notation for HCP crystals.
 
 Functions:
     - three_index_to_four_index: Converts a three-index notation to a four-index notation for HCP crystals, or vice versa.
+
+Notes:
+    atomman.tools.miller.py has some universal functions for index conversions that may be useful.
+    __all__ = ['plane3to4', 'plane4to3', 'vector3to4', 'vector4to3',
+            'plane_crystal_to_cartesian',
+            'vector_crystal_to_cartesian',
+            'vector_primitive_to_conventional', 
+            'vector_conventional_to_primitive',
+            'fromstring', 'tostring',
+            'all_indices', 'reduce_indices']
+    - plane3to4, plane4to3, vector3to4, vector4to3: functions for converting between three-index and four-index notation.
+    - plane_crystal_to_cartesian, vector_crystal_to_cartesian: functions for converting crystal indices to cartesian coordinates.
+    - vector_primitive_to_conventional, vector_conventional_to_primitive: functions for converting between primitive and conventional cell vectors.
 """
 
 
@@ -61,3 +74,5 @@ def three_index_to_four_index(index: list = None, reverse: bool = False) -> list
         four_index = np.array([index[0], index[1], -(index[0] + index[1]), index[2]])
         #print(four_index)
         return four_index.tolist()
+    
+
