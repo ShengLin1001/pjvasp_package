@@ -467,9 +467,16 @@ def generate_bulk_from_film(film: Atoms=None, if_find_prim: bool = False, vacuum
     """
     [Deprecated] Convert a thin film back into an approximate bulk structure.
 
-    ⚠️ **Deprecated:** This function has been replaced by the more general
-    `generate_film()` function with the setting:
-        `vacuum=None` and `my_periodic=True`.
+    ⚠️ **Deprecated:** This function has been replaced by:
+
+        1. `mymetal.film.stretch.generate_film()`  
+           - Use with settings `vacuum=None` and `my_periodic=True`.  
+           - Generates a bulk-like structure directly from (hkl) orientation.  
+           - No need to manually specify a1, a2, a3 lattice vectors.
+
+        2. `mymetal.bulk.create.create_*` functions  
+           - Requires specifying lattice vectors a1, a2, a3.  
+           - Provides more flexibility to create complex or customized bulk structures.
 
     The older approach attempted to reconstruct a bulk by removing the vacuum
     regions from a given slab. It is kept for backward compatibility and testing
