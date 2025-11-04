@@ -17,8 +17,8 @@ Functions:
 
 from ase.io.vasp import read_vasp
 import numpy as np
-from ase.dft.kpoints import *
-
+from ase.dft.kpoints import monkhorst_pack
+from ase import Atoms
 
 def get_kpoints_by_size(size: tuple=(1, 1, 1), offset: tuple=(0.5, 0.5, 0.5)):
     """
@@ -54,7 +54,7 @@ def get_kpoints_by_size(size: tuple=(1, 1, 1), offset: tuple=(0.5, 0.5, 0.5)):
     
     return mpkpoints, gkpoints
 
-def get_size_by_distance(file: str = None, rk: int = 100, kspacing: float =None) -> tuple:
+def get_size_by_distance(atoms: Atoms = None, rk: int = 100, kspacing: float =None) -> tuple:
     """
     Compute automatic k-point mesh based on RK or KSPACING scheme in VASP.
 
@@ -85,7 +85,6 @@ def get_size_by_distance(file: str = None, rk: int = 100, kspacing: float =None)
         kspacing = 2 * np.pi / rk  # units: 1/Å, rk - 2*pi/Å
     # kspacing (R_{k}) in R_k = 2π / KSPACING
     np.set_printoptions(precision=8, suppress=True)
-    atoms = read_vasp(file)
     reciprocal_cell_length = np.array(atoms.cell.reciprocal().cellpar())[:3] # units: 2*pi/Å
     
     # see here: https://www.vasp.at/wiki/index.php/KSPACING
