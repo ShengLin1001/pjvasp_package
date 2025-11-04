@@ -4,6 +4,9 @@ oldmain module
 Please don't use this module anymore. Use newmain instead.
 """
 
+# Written by J. P.
+# 2025.11.04
+
 # pre-function
 from re import findall, search, IGNORECASE
 from os import listdir

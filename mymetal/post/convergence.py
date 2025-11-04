@@ -1,3 +1,6 @@
+# Written by J. P.
+# 2025.11.04
+
 from ase.io.vasp import read_vasp
 import numpy as np
 import os

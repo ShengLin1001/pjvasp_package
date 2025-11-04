@@ -1,3 +1,8 @@
+
+# This page is taken from https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_bulk/yin_vasp_plot_cij_energy.py
+# Changed to fit the lammps output by J. P. 
+# 2025.11.04
+
 import numpy as np
 from myvasp import vasp_func as vf 
 import os

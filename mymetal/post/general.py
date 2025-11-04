@@ -1,3 +1,6 @@
+# Written by J. P.
+# 2025.11.04
+
 import numpy as np
 import os
 from myvasp import vasp_func as vf 

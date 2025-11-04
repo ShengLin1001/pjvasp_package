@@ -23,6 +23,8 @@ Functions:
     - write_check: Write the check results to a file.
 """
 
+# Written by J. P.
+# 2025.11.04
 
 # pre-function
 from re import findall, search, IGNORECASE

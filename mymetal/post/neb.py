@@ -1,3 +1,6 @@
+# Written by J. P.
+# 2025.11.04
+
 import os
 
 import shutil
