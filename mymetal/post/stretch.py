@@ -66,7 +66,7 @@ def post_stretch(dirsurf: str = 'y_stretch', refcontcar: str='./y_full_relax/CON
 
 
 # Post-process LAMMPS stretch calculation
-def post_lammps_stretch(file: str = './stretch.txt', refcontcar: str = './CONTCAR', latoms_lammpstrj: str = None,
+def post_lammps_stretch(post_data_file: str = './y_post_data.txt', refcontcar: str = './CONTCAR', latoms_lammpstrj: str = None,
                         save_fig_path: str = 'p_post_stretch.pdf', save_txt_path: str = 'p_post_stretch.txt'):
     """
     Post-process LAMMPS stretch calculations and extract strain information.
@@ -92,9 +92,7 @@ def post_lammps_stretch(file: str = './stretch.txt', refcontcar: str = './CONTCA
     """
 
     # read stretch data
-    df = general_read(file)
-    jobn = list(df['stretch'])
-    Etot = list(df['mype1(eV)'])  # eV
+    jobn, Etot, Eent, pres = vf.vasp_read_post_data(post_data_file)
 
     # zero-strain reference
     atoms_ref = read(refcontcar, format='lammps-data')
