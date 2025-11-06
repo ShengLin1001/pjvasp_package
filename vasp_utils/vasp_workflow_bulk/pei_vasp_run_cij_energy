@@ -1,16 +1,52 @@
 #!/bin/bash
 # B. Yin, 2021-09-16
-# Revised by J. Pei, 2025-09-28
-
+# Revised by J. Pei, 2025-11-04
+# pei_vasp_run_Cij_energy.sh
+#  >>> Default strain list: -0.003 -0.002 -0.001 0.000 0.001 0.002 0.003
+#  >>> Example usage:
+#      ./pei_vasp_run_Cij_energy.sh
+#      ./pei_vasp_run_Cij_energy.sh -e -0.005 -0.002 0.000 0.002 0.005
 
 main(){
+    # ---------- Colors ----------
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    NC='\033[0m'
+
     srcdir0=y_full_relax
 
-    if [ -d "$srcdir0" ]
-    then
-        sub_run_Cij_energy $1
+    # ---------- Help ----------
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        echo -e "${GREEN}pei_vasp_run_Cij_energy${NC} - Calculate Cij energy variations"
+        echo ""
+        echo -e "${YELLOW}Usage:${NC}"
+        echo -e "  $0 [-e <list_of_strain_values>]"
+        echo ""
+        echo -e "${YELLOW}Default strain list:${NC} -0.003 -0.002 -0.001 0.000 0.001 0.002 0.003"
+        echo ""
+        echo -e "${YELLOW}Example:${NC}"
+        echo -e "  $0"
+        echo -e "  $0 -e -0.005 -0.002 0.000 0.002 0.005"
+        echo -e "  $0 -no-submit"
+        exit 0
+    fi
+
+    script_name=$(basename "$0")
+    logfile="${script_name}.log"
+
+    # 📜 Log everything to file and terminal
+    exec > >(tee "$logfile") 2>&1
+
+    echo -e "🟢 ===== ${GREEN}Run started${NC} at: $(date) ====="
+    echo -e "📌 Command: ${BLUE}$0${NC} $@"
+    echo "==============================="
+
+    # ---------- Check source directory ----------
+    if [ -d "$srcdir0" ]; then
+        sub_run_Cij_energy "$@"
     else
-        echo "==> no $srcdir0 found! Abort!"
+        echo -e "❌ ${YELLOW}ERROR${NC}: No ${BLUE}$srcdir0${NC} found! Abort!"
         exit
     fi
 }
@@ -20,39 +56,73 @@ main(){
 
 
 sub_run_Cij_energy(){
-    srcdir=`pwd`/y_full_relax_temp
-    rm -rf $srcdir
+    myroot=$(pwd)
+    srcdir=$myroot/y_full_relax_temp
 
+    echo -e "🧹 Preparing working directory..."
+    rm -rf $srcdir
     cp -r $srcdir0  $srcdir 
     cd $srcdir
 
+    echo -e "${GREEN}pei_vasp_run_Cij_energy${NC} - Calculate Cij energy variations"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $0 [-e <list_of_strain_values>]"
+    echo ""
+    echo -e "${YELLOW}Default strain list:${NC} -0.003 -0.002 -0.001 0.000 0.001 0.002 0.003"
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $0"
+    echo -e "  $0 -e -0.005 -0.002 0.000 0.002 0.005"
+    echo -e "  $0 -no-submit"
 
-    myfile=./CONTCAR
-    if [ -f "$myfile" ]; then
-        echo "$myfile exists."
+    # ---------- Check CONTCAR ----------
+    if [ -f "CONTCAR" ]; then
+        echo -e "✅ ${GREEN}CONTCAR exists.${NC}"
     else
-        echo "$myfile does not exist. cp POSCAR CONTCAR "
+        echo -e "⚠️  ${YELLOW}CONTCAR not found. Copy POSCAR → CONTCAR${NC}"
         cp POSCAR CONTCAR
     fi
 
-
+    # ---------- VASP setup ----------
     #yin_vasp_univ_find_and_change  -isym  0 
     yin_vasp_univ_find_and_change  -isif  2
+    pei_vasp_univ_find_and_change  -lcharg F
 
     #yin_slurm_find_and_change  -srpl  H
 
     echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT #Y_CONSTR_CELL.IN
 
+    # ---------- Parse -e option ----------
+    # read -e list
+    le_default=(-0.003 -0.002 -0.001 0.000 0.001 0.002 0.003)
+    le=("${le_default[@]}")
+    submit_task=true  # 默认提交任务
 
-    case "$1" in
-        -elem) echo "==> run Cij for elements "
-            # yin_slurm_find_and_change  -time  2          
-            # yin_slurm_find_and_change  -partition  default 
-            ;;
-        
-        *) echo "==> run Cij for supercell " 
-            ;;   
-    esac
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -e)
+                shift
+                le=()
+                # 只把真正的选项跳过，负数不跳过
+                while [[ $# -gt 0 && ! "$1" =~ ^-[^0-9] ]]; do
+                    le+=("$1")
+                    shift
+                done
+                ;;
+            -no-submit)
+                submit_task=false
+                shift
+                ;;
+            *)
+                echo -e "❌ ${YELLOW}Unknown option${NC}: $1"
+                exit 1
+                ;;
+        esac
+    done
+
+
+    echo -e "📏 Strain list: ${BLUE}${le[*]}${NC}"
     
     cd ..
 
@@ -76,9 +146,9 @@ sub_run_Cij_energy(){
     echo $c1 $c2 $c3
     
     
-    #=====================
-    
+    # ---------- Create output directory ----------
     dirCij=y_cij_energy
+    echo -e "🧹 Creating output directory: ${BLUE}$dirCij${NC}"
 
     rm -rI  $dirCij
     mkdir   $dirCij
@@ -95,31 +165,32 @@ sub_run_Cij_energy(){
     "
 
 
-    #=====================
+    # ---------- Loop over Cij directions ----------
 
     for i1 in $dirlist;  do
     
         dirn=$i1
-        echo ================ $dirn
+        echo -e "\n================ ${BLUE}$dirn${NC} ================"
         
         mkdir   $dirn
         cd      $dirn
-        
+        cp $srcdir/sub*sequential.sh ./
+
         mkdir y_dir
         cd    y_dir
     
 
         #=====================
-    
-        for e in  -0.003  -0.002  -0.001  0.000  0.001  0.002  0.003 ;  do
+        for e in "${le[@]}"; do
             el=`echo "scale=16; $e+1" | bc`
-            dirn2=`printf "%.3f" "$el"`
-            echo ================ $dirn2
+            dirn2=`printf "%.4f" "$el"`
+            echo -e "➡️  Processing strain: ${BLUE}$e${NC} → dir: $dirn2"
 
             mkdir $dirn2
             cd $dirn2
     
-            cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+            echo -e "🧹 Copying working directory from ${BLUE}$srcdir${NC}"
+            cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,Y_*,CHGCAR} ./
             mv CONTCAR POSCAR
         
 
@@ -196,18 +267,25 @@ sub_run_Cij_energy(){
             sed '4s/.*/'"$lattb"'/' ./temp1 > ./temp2
             sed '5s/.*/'"$lattc"'/' ./temp2 > ./POSCAR
             rm ./temp*
-    
-    
-            echo 'submit dir:' `pwd`
-            sbatch sub.*
+
+
             cd ..
         done
 
         cd ..
+        echo -e "📤 Submit directory: $(pwd)"
+        echo 'submit dir:' `pwd`
+        if [ "$submit_task" = true ]; then
+            sbatch sub.*
+            echo -e "✅ ${GREEN}Job submitted.${NC}"
+        else
+            echo -e "⚠️ ${YELLOW}Job submission skipped (dry run).${NC}"
+        fi
+
         cd ..
     done
 
-
+    echo -e "🧹 Cleaning temporary directory: $srcdir"
     rm -rf $srcdir
 }
 
