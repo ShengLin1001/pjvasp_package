@@ -1,0 +1,12 @@
+#!/bin/bash
+# Only test
+echo "==> sbatch all jobs under y_dir"
+for dir in y_dir/*/; do
+    cd $dir
+    echo ================ $dir
+    #sbatch sub.sh
+    echo 'submit dir:' `pwd`
+    sbatch sub.*
+    cd - > /dev/null
+done
+echo "done!"
