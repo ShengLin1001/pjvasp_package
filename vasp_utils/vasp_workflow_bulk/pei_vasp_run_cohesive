@@ -1,0 +1,95 @@
+#!/bin/bash
+# B. Yin, 2015-11-28
+
+# a_0 should be 1.0, because dirn=`printf "%1.2f" "$k"`
+# 不然会丢失精度
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ -d "$srcdir0" ] ; then
+        sub_run_cohesive
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+
+
+sub_run_cohesive(){
+
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+    yin_vasp_univ_find_and_change  -nsw  0
+    pei_vasp_univ_find_and_change  -ibrion  -1
+    pei_vasp_univ_find_and_change  -lcharg   F
+    yin_vasp_univ_find_and_change  -nelm  200
+    yin_vasp_univ_find_and_change  -isif  2
+
+    echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT #Y_CONSTR_CELL.IN
+
+
+    cd ..
+   
+ 
+    a0=`sed -n '2,2p' $srcdir/POSCAR | awk '{printf "%.16f", $1}'`
+    echo 'a0' $a0
+
+   
+    #=====================
+    
+    rm -rI y_cohesive
+    mkdir  y_cohesive
+    cd     y_cohesive
+    cp $srcdir/sub*sequential.sh ./
+
+    mkdir y_dir
+    cd    y_dir
+ 
+    
+    for ((i=-2; i<=39; i=i+1)) ; do
+    
+        n1=12
+        
+        if [ "$i" -le "$n1" ]; then
+            k=`echo "scale=16; 0.7+$i*(0.6/$n1)" | bc`
+        else
+            k=`echo "scale=16; 1.3+($i-$n1)*0.1" | bc`
+        fi
+        
+        a0k=`echo "scale=16; $a0*$k" | bc`
+        echo $k $a0k 
+        
+        
+        dirn=`printf "%1.2f" "$k"`
+        mkdir $dirn
+        cd $dirn
+        
+        cp $srcdir/{INCAR,KPOINTS,POSCAR,POTCAR,Y_*} ./
+        
+        yin_vasp_univ_find_and_change  -a0  $a0k 
+ 
+        
+        cd ..
+        
+    done
+
+    cd ..
+    echo -e "📤 Submit directory: $(pwd)"
+    sbatch sub.*
+    echo -e "✅ ${GREEN}Job submitted.${NC}"
+
+    rm -rf $srcdir
+}
+
+
+main "$@"; exit
+
+
+
+ 

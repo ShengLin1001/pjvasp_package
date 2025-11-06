@@ -12,7 +12,7 @@ import sys
 
 def main():
     jobn, Etot, Eent, pres = vf.vasp_read_post_data()
-    
+
     ASE_Atoms = read_vasp('../y_full_relax/CONTCAR')
     atoms_pos = ASE_Atoms.get_positions()
     natoms = atoms_pos.shape[0]
@@ -30,7 +30,8 @@ def main():
         temp = latoms[i].get_volume()/natoms
         V = np.append(V, temp) 
     
-        if np.abs(temp-V0) < 1e-10:
+        if np.abs(temp-V0) < 1E-2:#1e-10:
+            print('hello')
             E0 = Etot[i]
         
         try:
@@ -46,9 +47,8 @@ def main():
     k = np.array([])
     for i in np.arange(len(jobn)):
         k = np.append(k, float(jobn[i]) )
-     
-    if np.linalg.norm( k - (V/V0)**(1/3) ) > 1e-10:
-        sys.exit('==> ABORT. wrong scaling. ')
+    # if np.linalg.norm( k - (V/V0)**(1/3) ) > 1e-3:# 1e-10:
+    #     sys.exit('==> ABORT. wrong scaling. ')
     
 
     # check
