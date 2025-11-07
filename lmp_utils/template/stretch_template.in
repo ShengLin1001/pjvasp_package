@@ -1,0 +1,18 @@
+# Find equlibrium lattice constant of gold
+
+# For dump dir
+shell rmdir ../dump
+shell mkdir ../dump
+
+############################ Full relax ############################
+# To get equlibrium lattice constant
+
+include general_init.mod
+include stretch_model.mod
+include general_potential.mod
+
+include stretch_full_relax.mod
+
+# stretch in-plane and/or out-of-plane lattice
+include stretch.mod
+

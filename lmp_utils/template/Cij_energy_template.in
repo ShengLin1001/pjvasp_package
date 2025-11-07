@@ -1,0 +1,40 @@
+# Find equlibrium lattice constant of gold
+
+# For dump dir
+shell rmdir ../dump
+shell mkdir ../dump
+
+############################ Full relax ############################
+# To get equlibrium lattice constant
+
+include general_init.mod
+include stretch_model.mod
+include general_potential.mod
+
+include stretch_constrained_relax.mod
+
+write_data    ../dump/data.full_relax
+write_restart ../dump/restart.equil
+
+############################ Displace ############################
+# dirn = 
+# 1: y_cij_energy_c11
+# 2: y_cij_energy_c12
+# 3: y_cij_energy_c13
+# 4: y_cij_energy_c33
+# 5: y_cij_energy_c44
+
+variable dirn equal 1
+include Cij_energy.mod
+
+variable dirn equal 2
+include Cij_energy.mod
+
+variable dirn equal 3
+include Cij_energy.mod
+
+variable dirn equal 4
+include Cij_energy.mod
+
+variable dirn equal 5
+include Cij_energy.mod
