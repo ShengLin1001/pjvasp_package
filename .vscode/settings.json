@@ -3,7 +3,8 @@
         "n2p2",
         "git",
         "vscode",
-        "DFT"
+        "DFT",
+        "Lammps"
     ],
     "esbonio.server.enabled": false
 }
