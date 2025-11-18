@@ -2,7 +2,7 @@
 # B. Yin, 2022-03-09
 # Revised by J. Pei, 2024-12-20
 # echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
-# example: pei_vasp_run_E_in_1_2_bulk_large_strain -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1
+# example: pei_vasp_run_E_in_1_2_bulk -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1
 
 main(){
     srcdir0=y_full_relax
@@ -26,7 +26,7 @@ cd $srcdir
 
 echo "==> uniaxial / biaxial stretch for bulk hexagonal system"
 echo "    Change a1, a2 to two lists, $ a0 is aref"
-echo "example: pei_vasp_run_E_in_1_2_bulk_large_strain -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1"
+echo "example: pei_vasp_run_E_in_1_2_bulk -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1"
 
 # read -a1 -a2 list, units in Angs
 a1=()
@@ -79,7 +79,7 @@ cd ..
 
 #=====================
 
-dirCij=y_E_in_1_2_bulk_large_strain
+dirCij=y_E_in_1_2_bulk
 
 rm -rI  $dirCij
 mkdir   $dirCij
