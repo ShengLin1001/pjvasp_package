@@ -17,6 +17,7 @@ parser.add_argument("--interval", type = float, default = 0.5/1000, help = "Stra
 # other methods to set up stretch list
 parser.add_argument("--strains", type = str, default = None, help = "Comma-separated strain list (e.g., -0.004,-0.002,0.0,0.002,0.004)")
 parser.add_argument("--keepvolume", action = "store_true", help = "Adjust the unstretched directions to keep the volume unchanged")
+parser.add_argument("--deleteold", action = "store_true", help="Whether to delete existing directory automatically.")
 args = parser.parse_args()
 
 # deformed 'x' => unstretched 'y' and 'z' => [1, 2]
@@ -60,7 +61,12 @@ print(f"Total {len(films_stretch)} structures generated.")
 
 workdir = os.path.join(myroot, "y_stretch")
 # Check if the directory already exists
-rm_i(workdir = workdir)
+#rm_i(workdir = workdir)
+if args.deleteold:
+    if os.path.exists(workdir):
+        print(f"The directory {workdir} already exists. Deleting it automatically as per --deleteold y.")
+        shutil.rmtree(workdir)
+
 os.makedirs(os.path.join(workdir, "y_dir"), exist_ok=True)
 
 for film, stretch in zip(films_stretch, stretch_list):
