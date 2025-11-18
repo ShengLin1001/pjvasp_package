@@ -1,0 +1,116 @@
+#!/bin/sh
+# by B. Yin
+
+main(){
+    srcdir0=y_full_relax
+
+    if [ -d "$srcdir0" ]
+    then
+        sub_run_dimer $@
+    else
+        echo "==> no $srcdir0 found! Abort!"
+        exit
+    fi
+}
+
+
+
+sub_run_dimer(){
+    srcdir=`pwd`/y_full_relax_temp
+    rm -rf $srcdir
+
+    cp -r $srcdir0  $srcdir 
+    cd $srcdir
+
+    myfile=./CONTCAR 
+    if [ -f "$myfile" ]; then
+        echo "$myfile exists."
+    else 
+        echo "$myfile does not exist. cp POSCAR CONTCAR "
+        cp POSCAR CONTCAR
+    fi
+
+    a0=`sed -n '2,2p' $srcdir/CONTCAR | awk '{printf "%.16f", $1}'`
+
+    echo $a0
+
+    pei_vasp_univ_find_and_change  -isif  2
+    pei_vasp_univ_find_and_change  -ibrion -1
+    pei_vasp_univ_find_and_change  -nsw   0
+    pei_vasp_univ_find_and_change  -lcharg F
+    pei_vasp_univ_find_and_change  -algo   Fast
+    echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+
+    cd ..
+
+
+    #=====================
+
+    dirCij=y_dimer
+
+    rm -rI  $dirCij
+    mkdir   $dirCij
+    cd      $dirCij
+
+    cp $srcdir/sub.*.sequential.sh ./
+
+    mkdir y_dir
+    cd    y_dir
+
+    #=====================
+
+
+    #=====================
+    # loop
+    #=====================
+
+    N1=39
+    echo "N1: " $N1
+
+
+    for ((i1=0; i1<=$N1; i1=i1+1)); do
+        n1=20
+
+        if [ "$i1" -le "$n1" ]; then
+            k=`echo "scale=16; 1.0+$i1*(0.2)" | bc`
+        else
+            k=`echo "scale=16; 5.0+($i1-$n1)*0.4" | bc`
+        fi
+
+        kk=`echo "scale=16; $k/$a0" | bc`
+
+
+        dirn1=`printf "%04.1f" "$k"`
+        mkdir $dirn1
+        cd $dirn1
+
+        echo ================ $dirn1
+
+
+        cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
+
+        newx=`echo "scale=16; $kk" | bc`
+
+        data1=`printf " %.16f  0.0000000000000000  0.0000000000000000" "$newx"`
+        echo $data1
+
+        sed '10s/.*/'"$data1"'/' $srcdir/POSCAR > ./POSCAR
+
+
+        echo 'submit dir:' `pwd`
+        #sbatch sub.*
+
+        cd ..
+
+    done
+
+    cd ..
+    sbatch sub.*
+    
+    rm -rf $srcdir
+}
+
+
+
+main "$@"; exit
+
