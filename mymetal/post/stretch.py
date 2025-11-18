@@ -1,3 +1,20 @@
+"""
+stretch submodule
+
+This module provides functions to post-process VASP stretch calculations,
+generate plots, and summarize results in formatted text files.
+
+Functions:
+    - post_stretch: Main function to process stretch data and generate outputs.
+    - post_lammps_stretch: Post-process LAMMPS stretch calculations.
+    - get_stretch_type: Determine stretched lattice axes compared to reference.
+    - my_write_stretch: Write stretch results to a formatted text file.
+    - my_read_stretch: Read stretch data from the result file.
+
+Change log:
+    - Written by J. P. on 2025.11.04.
+"""
+
 # Written by J. P.
 # 2025.11.04
 

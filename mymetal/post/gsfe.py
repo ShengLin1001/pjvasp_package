@@ -1,4 +1,20 @@
+"""
+gsfe post-processing submodule
 
+This module provides functions to post-process generalized stacking fault energy (GSFE)
+data from VASP or LAMMPS calculations, generate plots, and summarize results in formatted text files.
+
+Functions:
+    - post_gsfe: Main function to process GSFE data and generate outputs.
+    - check_constraints: Verify structural constraints for GSFE calculations.
+    - find_sf_usf: Identify local minima and maxima in GSFE data.
+    - write_output: Write GSFE results to a formatted text file.
+    - plot_GSFE: Plot GSFE energy curve, displacement, and shear stress evolution.
+
+Change log:
+    - Written by Binglun Yin on unkown time (https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_planar_defects/yin_vasp_plot_gsfe.py).
+    - Modified by J. P. on 2025.11.04 to fit LAMMPS output.
+"""
 # This page is taken from https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_planar_defects/yin_vasp_plot_gsfe.py
 # Changed to fit the lammps output by J. P. 
 # 2025.11.04

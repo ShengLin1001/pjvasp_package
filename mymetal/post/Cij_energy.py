@@ -1,4 +1,20 @@
+"""
+Cij_energy post-processing submodule.
 
+This module provides functions to post-process LAMMPS deformation calculations to extract elastic constants (Cij) from energy data.
+
+
+Functions:
+    - post_lammps_Cij_energy: Main function to process deformation data and generate plots
+    - check_ldata: Check consistency of reference states
+    - plot_cij_energy: Fit energy-strain curves and plot results
+    - write_cij_energy: Write calculated Cij values to a text file
+    - read_deform_data: Read deformation data from a specified directory
+
+Change log:
+    - Written by B. Y. (https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_bulk/yin_vasp_plot_cij_energy.py).
+    - Revised by J. P. on 2025-11-04 to adapt to LAMMPS output format.
+"""
 # This page is taken from https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_bulk/yin_vasp_plot_cij_energy.py
 # Changed to fit the lammps output by J. P. 
 # 2025.11.04

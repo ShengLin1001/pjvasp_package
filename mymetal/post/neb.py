@@ -1,3 +1,27 @@
+"""
+neb submodule
+
+This module provides functions to post-process NEB (Nudged Elastic Band) calculations,
+generate plots, and summarize results in formatted text files.
+
+Functions:
+    - post_neb: Main function to process NEB data and generate outputs.
+    - my_copy_neb_files: Copy and convert NEB result files to standardized formats.
+    - my_write_neb: Write NEB spline results to a formatted text file.
+    - my_add_head: Add formatted headers to NEB data files.
+    - my_read_neb: Read NEB data from result files.
+    - my_spline_neb: Generate cubic spline interpolation of NEB path.
+    - analyze_neb_trajectory: Analyze NEB trajectory data and visualize results.
+    - remove_translation: Remove translational motion from atomic trajectories (NOT USE !!!).
+    - get_delta_dist_list: Calculate displacements and distances for NEB trajectory.
+    - get_figxy_wh_lim: Determine figure dimensions and limits for plotting.
+    - save_overlap_pairs_groups: Identify and save overlapping atom pairs and groups.
+    - find_overlap_pairs_groups: Find overlapping atom pairs and groups in atomic positions.
+
+Change log:
+    - Writed by J. P. on 2025.11.04.
+"""
+
 # Written by J. P.
 # 2025.11.04
 
