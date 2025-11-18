@@ -56,7 +56,8 @@ def general_read(filepath: str = None, has_header: bool = True, header_names: Op
     return df
 
 # write dataframe
-def general_write(filename: str = None, dfc: pd.DataFrame = None, int_format: str = '>16d', str_format: str = '>16s',
+def general_write(filename: str = None, if_append: bool = False, 
+                        dfc: pd.DataFrame = None, int_format: str = '>16d', str_format: str = '>16s',
                         bool_format: str = ':>16', float_format: str = '16.10f', 
                         if_write_col_num: bool = False,
                         if_write_row_num: bool = False):
@@ -101,7 +102,12 @@ def general_write(filename: str = None, dfc: pd.DataFrame = None, int_format: st
     if if_write_row_num == False:
         df.index = ['']*len(df)
 
-    with open(filename, 'w') as f:
+    if if_append:
+        read_mode = 'a'
+    else:
+        read_mode = 'w'
+
+    with open(filename, read_mode) as f:
         f.write(df.to_string(index=True, header= True if if_write_col_num else False))
 
 
