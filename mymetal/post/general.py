@@ -1,3 +1,17 @@
+"""
+general submodule
+
+This module provides general utility functions for post-processing VASP calculations,
+including sorting data, polynomial fitting, reading CONTCAR files from directories,
+and extracting structural information.
+
+Functions:
+    - my_sort: Sort convergence data based on input parameters.
+    - my_ployfit: Perform polynomial fitting of given x-y data.
+    - my_read_y_dir_contcar: Read CONTCAR files from y_dir subfolders.
+    - get_structure_info: Extract lattice vectors, cell parameters, and c/a ratios.
+"""
+
 # Written by J. P.
 # 2025.11.04
 
@@ -70,20 +84,22 @@ def my_ployfit(x: np.array = None, y: np.array = None, deg: int = 2) -> tuple:
     return coeffs, y_fit
 
 
-def my_read_y_dir_contcar(dir: str = '.') -> list:
+def my_read_y_dir_contcar(dir: str = '.', post_data_file: str = './y_post_data.txt', file: str = 'CONTCAR') -> list:
     """
     Read CONTCAR files from y_dir subfolders.
 
     Args:
         dir (str): Directory containing subfolders with CONTCAR files. Default current directory.
+        post_data_file (str): Path to post data file listing job names. Default './y_post_data.txt'.
+        file (str): Name of the atoms file in each subfolder. Default 'CONTCAR'.
 
     Returns:
         list: List of ASE Atoms objects corresponding to each job.
     """
-    jobn, Etot, Eent, pres = vf.vasp_read_post_data()
+    jobn, Etot, Eent, pres = vf.vasp_read_post_data(post_data_file)
     latoms = []
     for job in jobn:
-        contcar_path = os.path.join(dir, f"{dir}/{job}/CONTCAR")
+        contcar_path = os.path.join(dir, job, file)
         if os.path.isfile(contcar_path):
             atoms = read_vasp(contcar_path)
             latoms.append(atoms)

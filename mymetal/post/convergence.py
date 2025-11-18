@@ -1,3 +1,18 @@
+"""
+convergence post-processing submodule
+
+This module provides functions to post-process VASP convergence calculations,
+generate plots, and summarize results in formatted text files.
+
+Functions:
+    - post_convergence: Main function to process convergence data and generate outputs.
+    - my_write_convergence: Write convergence results to a formatted text file.
+    - my_read_convergence: Read convergence data from the result file.
+
+Change log:
+    - Written by J. P. on 2025.11.04.
+"""
+
 # Written by J. P.
 # 2025.11.04
 

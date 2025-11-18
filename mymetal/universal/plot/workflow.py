@@ -10,6 +10,7 @@ Functions:
     - my_plot_neb: Plot NEB (Nudged Elastic Band) energy and force profiles.
     - my_plot_neb_xy: Plot atomic trajectories in 2D with customizable visualization options.
     - my_plot_stretch: Fit quadratic energy-stretch curve, extract equilibrium values, and plot energy and c/a ratio.
+    - my_plot_E_in_1_2_bulk: Generate 2D contour and profile plots for E_in_1_2 bulk analysis.
 """
 
 import os
@@ -21,11 +22,12 @@ import numpy as np
 import pandas as pd
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 
 from typing import Callable
 
 from mymetal.post.general import my_ployfit
-from mymetal.universal.plot.plot import my_plot
+from mymetal.universal.plot.plot import my_plot, my_plot_colorbar
 from mymetal.universal.plot.general import general_adjust_text, general_modify_legend
 
 
@@ -529,3 +531,175 @@ def my_plot_stretch(
         plt.savefig(savefile, dpi=dpi)
 
     return (fig, axes) , (coeffs, extr_x, extr_y, extr_rvectors) 
+
+
+# for workflow E_in_1_2_bulk
+def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
+                          lenergy: list = None,
+                          lca: list = None,
+                          save_fig_path: str = 'p_post_E_in_1_2_bulk.pdf',
+                          save_fig_path2: str = 'p_post_E_in_1_2_bulk2.pdf'):
+    """Generate 2D contour and profile plots for E_in_1_2 bulk analysis.
+    
+    Args:
+        la1: List of a1 lattice parameters
+        la2: List of a2 lattice parameters  
+        lenergy: List of energies per atom
+        lca: List of c/a ratios
+        save_fig_path: Path for contour plot
+        save_fig_path2: Path for profile plots
+        
+    Returns:
+        tuple: Equilibrium (a1, a2, energy) values
+    """
+    a1_range = np.unique(np.concatenate([la1]))
+    a2_range = np.unique(np.concatenate([la2]))
+    # a1 - xlabel, 1*m;
+    # a2 - ylabel, 1*n;
+    # a1_grid - n*m, every row is a1_range
+    #           [a1_range; a1_range; ...]
+    # a2_grid - n*m, every column is a2_range
+    #           [a2_range; a2_range; ...].T
+    a1_grid, a2_grid = np.meshgrid(a1_range, a2_range)
+    # (E - E0) * 1e3, meV per atom
+    energy_grid = np.zeros(a1_grid.shape)  
+    ca_grid = np.zeros(a1_grid.shape)    
+
+    eq_energy = min(lenergy)
+    leq_a1 = []
+    leq_a2 = []
+    # energy_grid[i, j] corresponds to a2_range[i], a1_range[j]
+    for i in range(energy_grid.shape[0]):
+        for j in range(energy_grid.shape[1]):
+            a1 = a1_grid[i, j]
+            a2 = a2_grid[i, j]
+
+            # Check in la1, la2
+            if abs(a1 - a1_range[j]) > 1e-10:
+                raise ValueError("a1 mismatch!")
+            if abs(a2 - a2_range[i]) > 1e-10:
+                raise ValueError("a2 mismatch!")
+
+            # Found energy
+            lid = [k for k, (v1, v2) in enumerate(zip(la1, la2)) 
+                    if abs(v1 - a1) < 1e-10 and abs(v2 - a2) < 1e-10]
+            
+            # Check count of idx
+            if len(lid) == 0:
+                raise ValueError("No matching a1, a2 found!")
+            elif len(lid) > 1:
+                raise ValueError("Multiple matching a1, a2 found!")
+            elif len(lid) == 1:
+                energy_grid[i, j] = (lenergy[lid[0]] - eq_energy) * 1e3  # meV per atom
+                ca_grid[i, j] = lca[lid[0]]
+
+            if abs(energy_grid[i, j]) < 1e-10:
+                leq_a1.append(a1)
+                leq_a2.append(a2)
+
+    if len(leq_a1) == 1 and len(leq_a2) == 1:
+        eq_a1 = leq_a1[0]
+        eq_a2 = leq_a2[0]
+    else:
+        raise ValueError(f"len(leq) = {len(leq_a1)}, {len(leq_a2)} is not 1! ")
+
+    # First figure
+    fig, axes = my_plot_colorbar(original_figsize = [10.72, 10.72], axsize = [7.31, 7.31], colorbar_size=[0.5, 7.31],
+                                 grid = False)
+    ax = axes[0]
+    ax2 = axes[1]
+
+    for a1 in a1_range:
+        ax.axvline(x=a1, color='gray', linestyle='--', linewidth=2, alpha=0.5)
+    for a2 in a2_range:
+        ax.axhline(y=a2, color='gray', linestyle='--', linewidth=2, alpha=0.5)
+
+    contourf = ax.contourf(a1_grid, a2_grid, energy_grid, 100, cmap='coolwarm')
+    ax.scatter(eq_a1, eq_a2, color='red', marker='o', s=150, edgecolor='black', zorder=5)
+    ax.set_xlabel(r"$a_1$ (Å)")
+    ax.set_ylabel(r"$a_2$ (Å)")
+    ax.set_xlim([np.min(a1_range), np.max(a1_range)])
+    ax.set_ylim([np.min(a2_range), np.max(a2_range)])
+    ax.text(0.05, 0.95, 
+            f'Equilibrium:\n$a_1$={eq_a1:.4f} Å\n$a_2$={eq_a2:.4f} Å\n$E_0$={eq_energy:.6f} eV/atom',
+            transform=ax.transAxes, fontsize = 18, verticalalignment='top', horizontalalignment='left',
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+    cbar = fig.colorbar(contourf, cax=ax2, label=r'$E-E_0$ (meV per atom)')
+    cbar.locator = ticker.MaxNLocator(nbins=7) # 最多7个刻度
+    cbar.update_ticks()
+
+    plt.savefig(save_fig_path)
+
+    # Second figure
+    fig, axes = my_plot(fig_subp = [energy_grid.shape[0] + energy_grid.shape[1] + 1, 2], fig_sharex=False)
+    lax = axes.flatten()
+
+    min_energy = np.min(energy_grid)
+    max_energy = np.max(energy_grid)
+    range_energy = max_energy - min_energy
+    ylim_energy = (min_energy - 0.05 * range_energy, max_energy + 0.05 * range_energy)
+    min_c_a = np.min(ca_grid)
+    max_c_a = np.max(ca_grid)
+    range_c_a = max_c_a - min_c_a
+    ylim_c_a = (min_c_a - 0.05 * range_c_a, max_c_a + 0.05 * range_c_a)
+    id_fig = 0
+
+    # Plot a2 fixed, a1 varied: every profile along the every row
+    for i in range(energy_grid.shape[0]):
+        ax = lax[id_fig]
+        ax.plot(a1_range, energy_grid[i, :], '-o', color='C0', label=f'$a_2$={a2_range[i]:.2f} Å')
+        ax.set_xlabel(r"$a_1$ (Å)")
+        ax.set_ylabel(r'$E-E_0$ (meV per atom)')
+        ax.set_ylim(ylim_energy)
+        general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
+        ax = lax[id_fig+1]
+        ax.plot(a1_range, ca_grid[i, :], '-o', color='C0', label=f'$a_2$={a2_range[i]:.2f} Å')
+        ax.set_xlabel(r"$a_1$ (Å)")
+        ax.set_ylabel(r'$c/a$')
+        ax.set_ylim(ylim_c_a)
+        general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
+        id_fig += 2
+    
+    # Plot a1 fixed, a2 varied: every profile along the every column
+    for j in range(energy_grid.shape[1]):
+        ax = lax[id_fig]
+        ax.plot(a2_range, energy_grid[:, j], '-o', color='C1', label=f'$a_1$={a1_range[j]:.2f} Å')
+        ax.set_xlabel(r"$a_2$ (Å)")
+        ax.set_ylabel(r'$E-E_0$ (meV per atom)')
+        ax.set_ylim(ylim_energy)
+        general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
+        ax = lax[id_fig+1]
+        ax.plot(a2_range, ca_grid[:, j], '-o', color='C1', label=f'$a_1$={a1_range[j]:.2f} Å')
+        ax.set_xlabel(r"$a_2$ (Å)")
+        ax.set_ylabel(r'$c/a$')
+        ax.set_ylim(ylim_c_a)
+        general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
+        id_fig += 2
+    
+    # Plot diagonal line a1 = a2
+    lx = []
+    temp_lenergy = []
+    temp_lca = []
+    for i in range(energy_grid.shape[0]):
+        for j in range(energy_grid.shape[1]):
+            if a1_grid[i, j] == a2_grid[i, j]:
+                lx.append(a1_grid[i, j])
+                temp_lenergy.append(energy_grid[i, j])
+                temp_lca.append(ca_grid[i, j])
+    ax = lax[id_fig]
+    ax.plot(lx, temp_lenergy, '-o', color='C2', label=f'$a_1=a_2$')
+    ax.set_xlabel(r"$a$ (Å)")
+    ax.set_ylabel(r'$E-E_0$ (meV per atom)')
+    ax.set_ylim(ylim_energy)
+    general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
+    ax = lax[id_fig+1]
+    ax.plot(lx, temp_lca, '-o', color='C2', label=f'$a_1=a_2$')
+    ax.set_xlabel(r"$a$ (Å)")
+    ax.set_ylabel(r'$c/a$')
+    ax.set_ylim(ylim_c_a)
+    general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
+    plt.savefig(save_fig_path2)
+
+    return (eq_a1, eq_a2, eq_energy)
+
+
