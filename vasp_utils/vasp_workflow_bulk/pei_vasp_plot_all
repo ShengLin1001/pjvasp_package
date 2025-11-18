@@ -80,6 +80,11 @@ case "$1" in
         sub_plot_all  $workdir  $mycmd 
         ;;
 
+    -E_in_1_2_bulk_large_strain)
+        workdir=y_E_in_1_2_bulk_large_strain
+        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_E_in_1_2_bulk.py
+        sub_plot_all  $workdir  $mycmd 
+        ;;
 
     *) 
         echo "==>  Option $1 not recognized. Abort!" 

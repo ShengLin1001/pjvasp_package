@@ -16,11 +16,11 @@ fi
 rm $output_file
 # Prepare output file
 col_width=20
-printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
-"Directory" "a(Å)" "c(Å)" "c3(Å)" "energy(eV)" "atoms number"> $output_file
+printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
+"Directory" "a1(Å)" "a2(Å)" "a3(Å)" "c(Å)" "c3(Å)" "energy(eV)" "atoms number"> $output_file
 
-echo "==> Extracting a, c from VASP outputs (OUTCAR, CONTCAR)"
-echo "    strict: a << a0, c << max(positions)-min(positions), c3 << cell(2,2)"
+echo "==> Extracting a, c, energy from VASP outputs (OUTCAR, CONTCAR)"
+echo "    strict: a1 << np.linalg.norm(cell[0]), c << max(positions)-min(positions), c3 << cell(2,2)"
 # ====================
 # Loop through all subdirectories in workdir
 # ====================
@@ -34,19 +34,24 @@ find "$workdir" -mindepth 1 -maxdepth 1 -type d | awk -F '/' '{print $NF}' | sor
         cd "$subdir" || continue  # Enter the subdirectory
 
         energy=$(grep '  without' OUTCAR | tail -n 1 | awk '{print $7}')
-        a0=$(sed -n '2,2p' CONTCAR | awk '{printf "%.16f", $1}')
-        read c num c3 <<< $(python3 -c "
+        read a1 a2 a3 c num c3 <<< $(python3 -c "
 from ase.io.vasp import read_vasp
 from mymetal.build.film.extrfilm import my_extr_thick
+import numpy as np
 
 atoms = read_vasp('CONTCAR')
+cell = np.array(atoms.get_cell().copy())
+a1 = np.linalg.norm(cell[0])
+a2 = np.linalg.norm(cell[1])
+a3 = np.linalg.norm(cell[2])
+
 num = len(atoms)
 thick = my_extr_thick(atoms)
-print(thick, num, atoms.get_cell()[2,2])
+print(a1, a2, a3, thick, num, atoms.get_cell()[2,2])
         ")
 
-        printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s \n" \
-            "$dirname" "$a0" "$c" "$c3" "$energy" "$num">> "../../$output_file"
+        printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s \n" \
+            "$dirname" "$a1" "$a2" "$a3" "$c" "$c3" "$energy" "$num">> "../../$output_file"
 
         # Return to the parent directory
         cd ../..
