@@ -89,7 +89,7 @@ mistune==3.0.2
 ml-dtypes==0.3.2
 monty==2024.5.24
 mpmath==1.3.0
--e git+https://github.com/ShengLin1001/pjvasp_package.git@91d21e3d7b8a56e5fb3f335ad9dcdb778f03b3eb#egg=mymetal_pkg
+#-e git+https://github.com/ShengLin1001/pjvasp_package.git@91d21e3d7b8a56e5fb3f335ad9dcdb778f03b3eb#egg=mymetal_pkg
 namex==0.0.8
 nbclient==0.10.0
 nbconvert==7.16.4
