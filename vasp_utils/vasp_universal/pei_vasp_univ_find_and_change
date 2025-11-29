@@ -253,6 +253,11 @@ case "$1" in
         sub_change  INCAR  "LELF"  "$str"
         ;;
 
+    -potim)
+        str=" POTIM= $2      # defeault 0.5. "
+        sub_change  INCAR  "POTIM"  "$str"
+        ;;
+
     *)  echo "==>  Option $1 not recognized. Abort!" 
         exit
         ;;   

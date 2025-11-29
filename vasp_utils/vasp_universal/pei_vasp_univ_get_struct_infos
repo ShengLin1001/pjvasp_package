@@ -4,7 +4,7 @@
 # Check if work directory exists
 # ====================
 workdir="./y_dir"
-output_file="p_post_a_c.txt"
+output_file="p_post_struct_infos.txt"
 
 if [ ! -d "$workdir" ]; then
     echo "==========================================================="
@@ -16,8 +16,8 @@ fi
 rm $output_file
 # Prepare output file
 col_width=20
-printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
-"Directory" "a1(Å)" "a2(Å)" "a3(Å)" "c(Å)" "c3(Å)" "energy(eV)" "atoms number"> $output_file
+printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
+"jobn" "a1(Å)" "a2(Å)" "a3(Å)" "c(Å)" "c3(Å)" "energy(eV)" "atoms_num" "FCC" "HCP" "BCC" "ICO" "OTHER"> $output_file
 
 echo "==> Extracting a, c, energy from VASP outputs (OUTCAR, CONTCAR)"
 echo "    strict: a1 << np.linalg.norm(cell[0]), c << max(positions)-min(positions), c3 << cell(2,2)"
@@ -34,24 +34,41 @@ find "$workdir" -mindepth 1 -maxdepth 1 -type d | awk -F '/' '{print $NF}' | sor
         cd "$subdir" || continue  # Enter the subdirectory
 
         energy=$(grep '  without' OUTCAR | tail -n 1 | awk '{print $7}')
-        read a1 a2 a3 c num c3 <<< $(python3 -c "
+        read a1 a2 a3 c num c3 fcc hcp bcc ico other <<< $(python3 -c "
 from ase.io.vasp import read_vasp
 from mymetal.build.film.extrfilm import my_extr_thick
 import numpy as np
+from ovito.io import import_file
+from ovito.modifiers import CommonNeighborAnalysisModifier
 
-atoms = read_vasp('CONTCAR')
+filepath = 'CONTCAR'
+
+# Read in ASE
+atoms = read_vasp(filepath)
 cell = np.array(atoms.get_cell().copy())
 a1 = np.linalg.norm(cell[0])
 a2 = np.linalg.norm(cell[1])
 a3 = np.linalg.norm(cell[2])
 
+# Read in OVITO for CNA analysis
+pipeline = import_file(filepath)
+cna_modifier = CommonNeighborAnalysisModifier(mode=CommonNeighborAnalysisModifier.Mode.AdaptiveCutoff)
+pipeline.modifiers.append(cna_modifier)
+results = pipeline.compute()
+
+fcc_count = results.attributes['CommonNeighborAnalysis.counts.FCC']
+hcp_count = results.attributes['CommonNeighborAnalysis.counts.HCP']
+bcc_count = results.attributes['CommonNeighborAnalysis.counts.BCC']
+ico_count = results.attributes['CommonNeighborAnalysis.counts.ICO']
+other_count = results.attributes['CommonNeighborAnalysis.counts.OTHER']
+
 num = len(atoms)
 thick = my_extr_thick(atoms)
-print(a1, a2, a3, thick, num, atoms.get_cell()[2,2])
+print(a1, a2, a3, thick, num, atoms.get_cell()[2,2], fcc_count, hcp_count, bcc_count, ico_count, other_count)
         ")
 
-        printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s \n" \
-            "$dirname" "$a1" "$a2" "$a3" "$c" "$c3" "$energy" "$num">> "../../$output_file"
+        printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
+            "$dirname" "$a1" "$a2" "$a3" "$c" "$c3" "$energy" "$num" "$fcc" "$hcp" "$bcc" "$ico" "$other" >> "../../$output_file"
 
         # Return to the parent directory
         cd ../..

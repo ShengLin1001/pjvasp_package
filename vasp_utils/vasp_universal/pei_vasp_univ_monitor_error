@@ -1,0 +1,136 @@
+#!/bin/bash
+# J. Pei, 2025-11-19
+# To monitor output file for errors and cancel the job if any error found
+# First, monitor 1 slurm files
+# Last, monitor many slurm files in a loop (to be done)
+
+main(){
+    
+    echo "========================================================================================"
+    echo "Usage: pei_vasp_univ_monitor_error -id JOBID -o OUTPUT_FILE"
+    echo "Example: pei_vasp_univ_monitor_error -id 33914391"
+    echo "     or: pei_vasp_univ_monitor_error -o  slurm-33914391.out"
+    echo "     or: pei_vasp_univ_monitor_error -id 33914391 -o slurm-33914391.out"
+    echo "     or: pei_vasp_univ_monitor_error (will find latest slurm-*.out file in current dir)"
+    echo "========================================================================================"
+
+    sub_monitor_error $@
+
+}
+
+
+sub_monitor_error(){
+    echo hello
+
+    ######### This part maybe need to be changed, if you use other softwares.
+    # output_file format
+    default_file_format="slurm-*.out"
+
+
+    ######### TO HERE
+
+
+    # save two parameters
+    job_id=""
+    output_file=""
+    file_format=$default_file_format
+
+    # check parameters count. $#
+
+    # if no input parameters, find latest slurm-*.out file in current dir
+    if [[ $# -eq 0 ]]; then
+        echo "No parameters provided. Finding latest $default_file_format file in current dir."
+        # ls -t: newest file is on the top
+        # head -n 1: get the first file
+        output_file=$(ls -t $default_file_format 2>/dev/null | head -n 1)
+
+        # -z: blank conditional
+        if [[ -z "$output_file" ]]; then
+            echo "No $default_file_format files found in current directory. Abort!"
+            exit 1
+        fi
+        echo "Monitoring file: $output_file"
+    else
+        # parse input parameters
+        # shift will minus the first parameter
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                -id)
+                    shift
+                    job_id="$1"
+                    ;;
+                -o)
+                    shift
+                    output_file="$1"
+                    ;;
+                -f)
+                    shift
+                    file_format="$1"
+                    ;;
+                *)
+                    echo "Unknown option: $1"
+                    exit 1
+                    ;;
+            esac
+            shift
+        done
+    fi
+
+    # if output_file is given but job_id is not, extract job_id from output_file
+    if [[ -n "$output_file" && -z "$job_id" ]]; then
+        # extract job_id using parameter expansion
+        job_id="${output_file#slurm-}"
+
+    echo $job_id
+    echo $output_file
+    #output_file="slurm-${job_id}.out"
+# srcdir=`pwd`/y_full_relax_temp
+# rm -rf $srcdir
+
+# cp -r $srcdir0  $srcdir 
+# cd $srcdir
+
+# echo "==> uniaxial / biaxial stretch for bulk hexagonal system"
+# echo "    Change a1, a2 to two lists, $ a0 is aref"
+# echo "example: pei_vasp_run_E_in_1_2_bulk -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1"
+
+# # read -a1 -a2 list, units in Angs
+# a1=()
+# a2=()
+
+# while [[ $# -gt 0 ]]; do
+#   case "$1" in
+#     -a1)
+#       shift
+#       while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+#         a1+=("$1") 
+#         shift
+#       done
+#       ;;
+#     -a2)
+#       shift
+#       while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
+#         a2+=("$1")  
+#         shift
+#       done
+#       ;;
+#     *)
+#       echo "Unknown option: $1"
+#       exit 1
+#       ;;
+#   esac
+# done
+
+# echo "a1 = ${a1[@]}"
+# echo "a2 = ${a2[@]}"
+
+
+}
+
+
+
+main "$@"; exit
+
+
+
+
