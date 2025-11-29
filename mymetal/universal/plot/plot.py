@@ -415,6 +415,9 @@ def my_plot_colorbar(original_figsize: tuple=(10.72, 8.205),
         import matplotlib.pyplot as plt
         import matplotlib.colors as mcolors
 
+        fig, axes = my_plot_colorbar(original_figsize = [10.72, 10.72], axsize = [7.31, 7.31], colorbar_size=[0.5, 7.31],
+                                    grid = False)
+                                    
         fig, axes = my_plot_colorbar(layout="none", grid= False)
         ax = axes[0]   # Main axis for plotting
         ax2 = axes[1]  # Colorbar axis
