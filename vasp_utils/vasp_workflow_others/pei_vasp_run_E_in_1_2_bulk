@@ -74,6 +74,10 @@ fi
 yin_vasp_univ_find_and_change  -isif  3
 echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 
+# # sometime, we dont't want to relax the cell shape during the ionic relaxation
+# yin_vasp_univ_find_and_change  -isif  2
+# echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+
 cd ..
 
 
