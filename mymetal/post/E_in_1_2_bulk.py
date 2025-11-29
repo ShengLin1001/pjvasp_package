@@ -102,13 +102,23 @@ def my_read_E_in_1_2_bulk(filename: str = 'p_post_E_in_1_2_bulk.txt'):
         
     Returns:
         tuple: (natoms, eq_info, df) containing system info and data
+
+    Note:
+        df is a DataFrame with the following columns:
+            - jobn: Job name
+            - a1: Lattice parameter a1
+            - a2: Lattice parameter a2
+            - Etot_eV: Total energy in eV
+            - Etot_eV_per_atom: Total energy per atom in eV
+            - lca: Lattice constant a
+        eq_info is a tuple (eq_a1, eq_a2, eq_energy)
     """
     with open(filename, 'r') as f:
         lines = f.readlines()
 
     i = 0
     while lines[i].startswith('#') or lines[i].strip() == '':
-        print(lines[i].strip())
+        # print(lines[i].strip())
         i += 1
     # natoms header line now
     i += 1
