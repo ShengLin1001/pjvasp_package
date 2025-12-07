@@ -80,12 +80,12 @@ def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CON
     # general post and move / change the file
     os.chdir(dirsurf)
     if repost:
-        os.system("(pei_vasp_univ_clean_all_files && rm -rf vaspgr) > /dev/null 2>&1")
+        # os.system("(pei_vasp_univ_clean_all_files && rm -rf vaspgr) > /dev/null 2>&1")
         # general post
         # you need to module load gunplot
         os.chdir(workdir)
         os.system("(module load gnuplot/5.2.8 && pei_vasp_univ_neb_nebresults.pl && pei_vasp_univ_neb_nebmovie 0 && pei_vasp_univ_neb_nebmovie 1)")
-        os.system("mv ./*.dat ./*.eps ./vaspgr ./movie* ../")
+        os.system("rm -rf ../vaspgr/* && mv ./*.dat ./*.eps ./vaspgr ./movie* ../")
         os.chdir(dirsurf)
 
     my_copy_neb_files()
