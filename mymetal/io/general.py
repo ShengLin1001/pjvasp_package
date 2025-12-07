@@ -18,7 +18,7 @@ import numpy as np
 
 # read a delimited file into a DataFrame with flexible header handling
 def general_read(filepath: str = None, has_header: bool = True, header_names: Optional[List[str]] = None, sep: str = r"\s+", comment_char='#',
-                 index_col: int = None, header_row: int = 0) -> pd.DataFrame:
+                 index_col: int = None, header_row: int = 0, **kwargs) -> pd.DataFrame:
     """Reads a delimited file into a DataFrame with flexible header handling.
 
     Args:
@@ -29,13 +29,35 @@ def general_read(filepath: str = None, has_header: bool = True, header_names: Op
         comment_char: Lines starting with this character are skipped. Defaults to '#'.
         index_col: Column to set as index. Defaults to None (no index).
         header_row: Row number to use as header when has_header=True. Defaults to 0 (first line).
+        **kwargs: Additional keyword arguments passed to pandas.read_csv().
+            Common useful arguments:
+            - skiprows: int or list-like, rows to skip (0-indexed)
+            - na_values: scalar, str, list-like, or dict, additional strings to recognize as NA/NaN
+            - skip_blank_lines: bool, whether to skip blank lines (default True)
+            - nrows: int, number of rows of file to read
+            - dtype: Type name or dict of column -> type, data type for data or columns
+            - encoding: str, encoding to use for UTF when reading/writing
+            - usecols: list-like or callable, subset of columns to read
+            - skipfooter: int, number of lines at bottom of file to skip
+            - memory_map: bool, use memory mapping for file reading (default False)
+            - delim_whitespace: bool, alternative to sep='\\s+' (default False)
+            - converters: dict, functions for converting values in certain columns
 
     Returns:
         pd.DataFrame: Parsed data with appropriate column headers.
 
+    Examples:
+    ```python
+        df = general_read('data.txt')
+        df = general_read('data.txt', has_header=False, header_names=['x', 'y', 'z'])
+        df = general_read('data.txt', has_header=False, header_names=['x', 'y', 'z'], skiprows=0) # Jump first line
+    ```
+
     Note:
         - Uses Python engine for regex separator support. For large files, consider specifying engine='c'.
         - has_header = True, index_col = None, header_row = 0 (default) is the most common case.
+        - When using regex separators with engine='python', performance may be slower for large files.
+        - For CSV files with standard comma separators, consider using sep=',' instead of the default.
     """
 
     if has_header:
@@ -44,7 +66,8 @@ def general_read(filepath: str = None, has_header: bool = True, header_names: Op
                          header=header_row,
                          comment=comment_char,
                          engine='python',
-                         index_col=index_col)
+                         index_col=index_col,
+                         **kwargs)
     else:
         df = pd.read_csv(filepath, 
                          sep=sep,
@@ -52,7 +75,8 @@ def general_read(filepath: str = None, has_header: bool = True, header_names: Op
                          names=header_names,
                          comment=comment_char,
                          engine='python',
-                         index_col=index_col)
+                         index_col=index_col,
+                         **kwargs)
     return df
 
 # write dataframe
