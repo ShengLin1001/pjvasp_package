@@ -135,7 +135,8 @@ def get_points_on_markers_boundary(ax: plt.Axes = None, x: list = None, y: list 
     
     return np.array(avoid_points)
 
-def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, cmap: str = 'coolwarm', alpha: float = 0.5, origin: str='lower') -> None:
+def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, cmap: str = 'coolwarm', 
+                   alpha: float = 0.5, origin: str='lower', **kwargs) -> None:
     """Adds a colored gradient band to an existing matplotlib Axes object.
 
     This function creates a semi-transparent color band on the specified axes using
@@ -155,7 +156,21 @@ def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, 
             Defaults to 0.5.
         origin (str, optional): Origin of the gradient image. Matches matplotlib's 
             imshow origin parameter. Defaults to 'lower'.
+        **kwargs: Additional keyword arguments passed to matplotlib.axes.Axes.imshow().
+            Common useful arguments:
+            - interpolation: str, interpolation method (e.g., 'nearest', 'bilinear', 'bicubic')
+            - zorder: float, set the zorder for the color band (controls drawing order)
+            - filternorm: bool, normalize the filter kernel (default True)
+            - filterrad: float, filter radius for antialiasing
+            - resample: bool, whether to resample the input image
+            - url: str, set the url for the image
+            - interpolation_stage: str, 'rgba' or 'data', when to apply interpolation
+            - rasterized: bool, whether to rasterize the image for vector output
+            - norm: matplotlib.colors.Normalize, normalization for colormap
+            - vmin, vmax: float, data range for colormap normalization
+            - aspect: str or float, aspect ratio of the axes (default 'auto' in this function)
 
+            
     Returns:
         None: The function modifies the Axes object in place.
 
@@ -169,7 +184,8 @@ def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, 
         >>> gradient_colors = generate_gradient_colors(if_cmap_color=True, 
         ...                                          if_reshape=True, 
         ...                                          reshape_M_N_L=[1, 1000, 4], 
-        ...                                          if_reverse=True)
+        ...                                          if_reverse=True, 
+        ...                                          zorder = 10) # color band maybe behind other plot elements
         >>> add_color_band(ax=ax, extent=extent, gradient=gradient_colors, alpha=0.5)
         >>> plt.show()
 
@@ -180,7 +196,7 @@ def add_color_band(ax: Axes = None, extent: list = None, gradient: list = None, 
 
     # Fill the gradient region
     ax.imshow(X=gradient, extent=extent, aspect='auto',
-            cmap=cmap, origin=origin, alpha=alpha)
+            cmap=cmap, origin=origin, alpha=alpha, **kwargs)
 
 def add_circle_number(ax: Axes = None, positions: List[float]=None, color: str='steelblue', number: int=0,
                                radiusx_ratio: float = 0.05, 
@@ -213,7 +229,7 @@ def add_circle_number(ax: Axes = None, positions: List[float]=None, color: str='
     Examples:
         Basic usage:
         >>> fig, ax = plt.subplots()
-        >>> add_circle_number([0.5, 0.5], ax, number=1, color='red')
+        >>> add_circle_number([0.5, 0.5], ax, number=1, color='red', facecolor='white')
 
         Annotating energy diagram features:
         >>> add_circle_number(
@@ -260,7 +276,7 @@ def add_circle_number(ax: Axes = None, positions: List[float]=None, color: str='
         radiusx = xlength * markersize_inch / ax_width_inches
         radiusy = ylength * markersize_inch / ax_height_inches 
         
-    ax.add_patch(Ellipse(positions, width=2*radiusx, height=2*radiusy, edgecolor=color, facecolor='none', lw=lw,
+    ax.add_patch(Ellipse(positions, width=2*radiusx, height=2*radiusy, edgecolor=color, lw=lw,
                          **circle_kwargs))
     ax.text(positions[0], positions[1]+text_y_offset, str(number), fontsize=fontsize, ha='center', va='center', color=color)
 
