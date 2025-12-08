@@ -1,3 +1,4 @@
+#!/public3/home/scg6928/mysoft/env/pyenv/dft/bin/python
 import os
 from ase.io import write, read
 from myvasp import vasp_func as vf 

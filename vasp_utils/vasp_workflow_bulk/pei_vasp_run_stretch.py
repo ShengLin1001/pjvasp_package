@@ -32,6 +32,7 @@ print("Final   strain  :", args.final)
 print("Strain  interval:", args.interval)
 print("Strain  list    :", args.strains)
 print("Keep volume     :", args.keepvolume)
+print("Delete old      :", args.deleteold)
 
 myroot = os.getcwd()
 os.makedirs("y_full_relax_temp", exist_ok=True)
