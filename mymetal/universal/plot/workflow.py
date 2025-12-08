@@ -8,6 +8,7 @@ and stretch energy curves.
 Functions:
     - my_plot_convergence: Plot convergence test results for energy cutoff or k-point grids.
     - my_plot_neb: Plot NEB (Nudged Elastic Band) energy and force profiles.
+    - my_plot_neb_full: Plot NEB full energy profiles with optional frame slicing.
     - my_plot_neb_xy: Plot atomic trajectories in 2D with customizable visualization options.
     - my_plot_stretch: Fit quadratic energy-stretch curve, extract equilibrium values, and plot energy and c/a ratio.
     - my_plot_E_in_1_2_bulk: Generate 2D contour and profile plots for E_in_1_2 bulk analysis.
@@ -28,7 +29,10 @@ from typing import Callable
 
 from mymetal.post.general import my_ployfit
 from mymetal.universal.plot.plot import my_plot, my_plot_colorbar
-from mymetal.universal.plot.general import general_adjust_text, general_modify_legend
+from mymetal.universal.plot.general import general_adjust_text, general_modify_legend, generate_gradient_colors
+
+from scipy.interpolate import CubicHermiteSpline
+
 
 
 # For workflow convergence test
@@ -216,7 +220,7 @@ def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,
     ax = axes[0, 0]
     ax.plot(coord_scale, energy_rel, marker = 'o', linestyle = '')
     ax.plot(spline_coord_scale, spline_energy)
-    ax.set_xlabel('Scaled coordinate')
+    ax.set_xlabel('Scaled coordinate (-)')
     ax.set_ylabel('Energy (meV per atom)')
 
     ax = axes[0, 1]
@@ -228,7 +232,7 @@ def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,
     ax = axes[0, 2]
     ax.plot(coord_scale, force, marker = 'o', linestyle = '')
     ax.plot(spline_coord_scale, spline_force)
-    ax.set_xlabel('Scaled coordinate')
+    ax.set_xlabel('Scaled coordinate (-)')
     ax.set_ylabel('Force (eV/Å)')
 
     ax = axes[1, 0]
@@ -239,17 +243,105 @@ def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,
     ax = axes[1, 1]
     ax.plot(coord_scale, energy_rel, marker = 'o', linestyle = '')
     ax.plot(my_spline_coord_scale, my_spline_energy_rel)
-    ax.set_xlabel('Scaled coordinate')
+    ax.set_xlabel('Scaled coordinate (-)')
     ax.set_ylabel('Energy (meV per atom)')
 
     ax = axes[1, 2]
     ax.plot(coord_scale, force, marker = 'o', linestyle = '')
     ax.plot(my_spline_coord_scale, my_spline_force)
-    ax.set_xlabel('Scaled coordinate')
+    ax.set_xlabel('Scaled coordinate (-)')
     ax.set_ylabel('Force (eV/Å)')
 
     if if_save:
         plt.savefig(savefile, dpi=dpi)
+
+    return fig, axes
+
+
+
+def my_plot_neb_full(neb_full_df: pd.DataFrame = None, 
+                     if_savefig: bool = True, savefig_path: str = './p_post_neb_full.pdf',
+                     slice_start: int = -10, slice_end: int = None
+                     ) -> tuple:
+    """
+    Plot NEB (Nudged Elastic Band) full energy profiles with optional frame slicing.
+
+    This function generates two subplots for energy vs. scaled coordinate and
+    energy vs. absolute coordinate, optionally saving the figure to a file. It
+    supports slicing the frames to plot and dynamically adjusts the legend columns.
+
+    Args:
+        neb_full_df (pd.DataFrame): DataFrame containing NEB results. Must include
+            columns 'frame', 'dist_cum(Å)', 'energy_rel(eV)', 'force_b(eV/Å)', 'natoms'.
+        if_savefig (bool, optional): Whether to save the figure. Defaults to True.
+        savefig_path (str, optional): File path to save the figure. Defaults to './p_post_neb_full.pdf'.
+        slice_start (int, optional): Start index for frames slicing. Defaults to -10.
+        slice_end (int, optional): End index for frames slicing. Defaults to None.
+
+    Returns:
+        tuple: (fig, axes)
+    """
+    df = neb_full_df.copy()
+    frames = sorted(df['frame'].unique())
+    frames = frames[slice_start:slice_end]
+    lcolors = generate_gradient_colors(if_cmap_color = True, num_colors = len(frames))
+    
+    # Don't plot too many frames
+    # one col has 35 blank
+    ncol_legend = (len(frames) + 35 - 1) // 35
+    # 10.72 * 2 * 0.55 has 4 cols
+    one_fig_wh = [10.72 + ncol_legend * (10.72 * 2 * 0.55) / 4, 8.205]
+
+
+    fig, axes = my_plot(fig_subp = [2, 1], grid = False, fig_sharex = False,
+                        one_fig_wh=one_fig_wh)
+    lax = axes.flatten()
+    
+    ax = lax[0]
+    ax.set_xlabel('Scaled coordinate (-)')
+    ax.set_ylabel('Energy (meV per atom)')
+
+    ax = lax[1]
+    ax.set_xlabel('Coordinate (Å)')
+    ax.set_ylabel('Energy (meV per atom)')
+
+    for i, frame in enumerate(frames):
+        dfc = df.copy()
+        df_frame = dfc[dfc['frame'] == frame].copy()
+        # print(df_frame)
+        # print(df_frame['dist_cum(Å)'])
+        # print(df_frame['energy_rel(eV)'])
+
+        # Use coord, energy or energy_rel, force_b to spline
+        # Don't use coord_scale, will cause error
+        x = df_frame['dist_cum(Å)']
+        y = df_frame['energy_rel(eV)']
+        natoms = df_frame['natoms'].iloc[0]
+        force = df_frame['force_b(eV/Å)']
+        my_spline = CubicHermiteSpline(x, y, -force)
+        xnew = np.linspace(np.min(x), np.max(x), 1000)
+        my_spline_y = my_spline(xnew)
+
+        ax = lax[0]
+        ax.plot(x / np.max(x), y * 1e3 /natoms , 'o', label=f'Frame {frame}', color = lcolors[i])
+        ax.plot(xnew / np.max(x), my_spline_y * 1e3 /natoms , linestyle='-', color = lcolors[i])
+
+        ax = lax[1]
+        ax.plot(x   , y * 1e3 /natoms , 'o', label=f'Frame {frame}', color = lcolors[i])
+        ax.plot(xnew, my_spline_y * 1e3 /natoms , linestyle='-', color = lcolors[i])
+
+    ax = lax[0]
+
+    # For < 150 frames, I think it's good
+    general_modify_legend(ax.legend( loc = 'center right',
+                                        bbox_to_anchor = (0.98, 0.5),
+                                        bbox_transform=fig.transFigure,
+                                        ncol = ncol_legend,
+                                        fontsize = 20),)
+
+    if if_savefig:
+        fig.savefig(savefig_path)
+    #print(df)
 
     return fig, axes
 

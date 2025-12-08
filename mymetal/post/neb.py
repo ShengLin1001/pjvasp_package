@@ -40,7 +40,9 @@ from scipy.interpolate import CubicHermiteSpline
 
 from mymetal.io.general import general_read
 from mymetal.io.extxyz import extxyz_to_atomlist
-from mymetal.universal.plot.workflow import my_plot_neb, my_plot_neb_xy
+from mymetal.universal.plot.workflow import my_plot_neb, my_plot_neb_xy, my_plot_neb_full
+from mymetal.universal.plot.plot import my_plot
+from mymetal.universal.plot.general import generate_gradient_colors, general_modify_legend
 
 from scipy.spatial import cKDTree
 from scipy.sparse.csgraph import connected_components
@@ -85,6 +87,7 @@ def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CON
         # you need to module load gunplot
         os.chdir(workdir)
         os.system("(module load gnuplot/5.2.8 && pei_vasp_univ_neb_nebresults.pl && pei_vasp_univ_neb_nebmovie 0 && pei_vasp_univ_neb_nebmovie 1)")
+        os.system("pei_vasp_univ_neb_nebbarrier_full.py")
         os.system("rm -rf ../vaspgr/* && mv ./*.dat ./*.eps ./vaspgr ./movie* ../")
         os.chdir(dirsurf)
 
@@ -94,11 +97,16 @@ def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CON
 
     nebdf, nebefdf, spline_df, extsdf = my_read_neb()
 
+    neb_full_df = general_read('./p_neb_full.dat')
+
     mysplinedf = my_spline_neb(nebdf, nebefdf)
 
     my_plot_neb(nebdf, nebefdf, spline_df, extsdf, mysplinedf, natoms, if_save=True)
 
+    my_plot_neb_full(neb_full_df)
+
     my_write_neb(mysplinedf)
+
 
 def my_copy_neb_files() -> None:
     """Copies and converts NEB result files to standardized formats.

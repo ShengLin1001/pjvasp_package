@@ -6,6 +6,7 @@
 # he need to stay with other original vtst scripts, so that it can be used by vtst scripts.
 
 
+
 use FindBin qw($Bin);
 use lib "$Bin";
 use Vasp;
@@ -30,6 +31,8 @@ if (@args==0) {
 } else {
     @directories = @args;
 }
+# @directories: 00, 01, 02, ..., xx
+
 #  check for ssneb
 $ssneb_flag = `grep 'LNEBCELL' 01/OUTCAR|tail -1`;
 @ssneb_flag = split(/\s+/,$ssneb_flag);
@@ -39,6 +42,7 @@ $nions = `grep 'NIONS' 01/OUTCAR|tail -1`;
 $nions = $nions[@nions-1];
 $nions_more = $nions+1;
 
+# =~ match operator
 if ($ssneb_flag =~ /T/){
     open NEBSS , ">nebss.dat" ;
     #print "$ssneb_flag \n";
@@ -83,6 +87,7 @@ for ($i=0; $i<@directories; $i++) {
     @energy = split(/\s+/,$energy);
     $energy = $energy[@energy-1];
 
+    # Set energy reference to first image
     if ($i==0) { $energy0 = $energy; }
     $energy -= $energy0;
 
