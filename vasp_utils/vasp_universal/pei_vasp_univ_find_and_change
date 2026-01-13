@@ -235,7 +235,7 @@ case "$1" in
 
     -nbands)
         str=" NBANDS= $2      # max: 0.5*NELEC+2*NIONS"
-        sub_change  INCAR  "LMAXMIX"  "$str"
+        sub_change  INCAR  "NBANDS"  "$str"
         ;;
 
     -lwave)
