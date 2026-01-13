@@ -209,7 +209,6 @@ def my_plot_complete_dos(file:str = "./vasprun.xml", xlim: list=None, ylim:list=
         plt.savefig(save_path, dpi=300)
     return fig, axes
 
-
 def my_plot_idos(file: str = None, xlim: list=None, ylim:list=None, label:str="Integrated DOS", zero_at_efermi: bool = True, 
                  one_fig_wh: list = [8.205*1.5, 8.205], if_save: bool = True, save_path: str = './idos.jpg',
                 grid: bool = True,  left: float = 1.918, top: float = 0.3, orientation: str = 'horizontal', color: str = 'darkblue',
