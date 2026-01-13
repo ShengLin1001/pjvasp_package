@@ -24,7 +24,8 @@ sub_plot_all(){
     
         # move to $cmd
         #pei_vasp_univ_post 
-        python3  $mycmd
+        #python3  $mycmd
+        $mycmd
     
         cd $d0
     done
