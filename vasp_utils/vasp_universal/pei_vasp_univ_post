@@ -51,6 +51,7 @@ main(){
                 python3  $YIN_GITHUB/vasp_utils/vasp_universal/yin_vasp_plot_dos.py
                 python3  $YIN_GITHUB/vasp_utils/vasp_universal/yin_vasp_plot_statistics.py
                 python3  $YIN_GITHUB/vasp_utils/vasp_universal/yin_vasp_plot_param_statistics.py
+                python3  $PJ_VASP_UTILS/vasp_universal/pei_vasp_plot_convergence.py
                 ;;
         esac
 
