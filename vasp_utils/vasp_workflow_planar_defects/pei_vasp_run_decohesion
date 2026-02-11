@@ -98,7 +98,7 @@ sub_run_decohesion(){
         mv temp POSCAR
         
         echo 'dir for submit:' `pwd`
-        sbatch sub.*
+        # sbatch sub.*
         
         cd ..
     done
