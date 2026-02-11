@@ -25,45 +25,60 @@ echo $c1 $c2 $c3
 
 
 case "$1" in
-    -basal) echo "==> run GSFE for basal: "
-        workdir=y_gsfe_basal               
-        N1=6 
+    -HCP_basal) echo "==> run GSFE for HCP_basal: "
+        workdir=y_gsfe_HCP_basal               
+        N1=10
         bp1=-0.5 
         bp2=`echo "scale=16;  1.0/3.0" | bc`                 
         ;;
    
 
-    -prism1w) echo "==> run GSFE for prism1w: "
-        workdir=y_gsfe_prism1w
+    -HCP_prism1w) echo "==> run GSFE for HCP_prism1w: "
+        workdir=y_gsfe_HCP_prism1w
         N1=10
         bp1=0.5
         bp2=0.0 
         ;;
 
 
-    -pyr1n) echo "==> run GSFE for pyr1n: "
-        workdir=y_gsfe_pyr1n
+    -HCP_pyr1n) echo "==> run GSFE for HCP_pyr1n: "
+        workdir=y_gsfe_HCP_pyr1n
         N1=10
         bp1=0.5
         bp2=-0.11
         ;;
 
 
-    -pyr1w) echo "==> run GSFE for pyr1w: "
-        workdir=y_gsfe_pyr1w
+    -HCP_pyr1w) echo "==> run GSFE for HCP_pyr1w: "
+        workdir=y_gsfe_HCP_pyr1w
         N1=10
         bp1=0.0
         bp2=0.5
         ;;
 
 
-    -pyr2) echo "==> run GSFE for pyr2: "
-        workdir=y_gsfe_pyr2
+    -HCP_pyr2) echo "==> run GSFE for HCP_pyr2: "
+        workdir=y_gsfe_HCP_pyr2
         N1=10
         bp1=0.0
         bp2=0.5
         ;;
 
+
+    -FCC_111) echo "==> run GSFE for FCC_111: "
+        workdir=y_gsfe_FCC_111
+        N1=10
+        bp1=-0.5 
+        bp2=`echo "scale=16;  1.0/3.0" | bc`   
+        ;;
+
+
+    -FCC_100) echo "==> run GSFE for FCC_100: "
+        workdir=y_gsfe_FCC_100
+        N1=10
+        bp1=0.5
+        bp2=0.5
+        ;;
 
 
     -a1) echo "==> run GSFE for a1: "
