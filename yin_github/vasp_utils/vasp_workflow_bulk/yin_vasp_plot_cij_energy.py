@@ -1,4 +1,4 @@
-#!/home/yin/opt/bin/python3
+#!/public3/home/scg6928/mysoft/env/pyenv/dft/bin/python
 
 
 import numpy as np
@@ -32,7 +32,7 @@ def main():
         data = read_deform_data(dirn, atoms_ref)
         ldata.append(data) 
 
-    check_ldata(ldata)
+    #check_ldata(ldata)
 
     plot_cij_energy(ldata)
    
@@ -101,10 +101,20 @@ def read_deform_data(dirn, atoms_ref):
 def check_ldata(ldata):
 
     iref0 = ldata[0]['iref']
+    #print(iref0)
 
     for i in np.arange(len(ldata)):
+        #print("\n")
         iref1 = ldata[i]['iref']
-        
+        #print(iref1)
+        # 不同ALGO计算同一构型的stress有一些区别
+        # 下面中C11和C13, C44的ALGO是Fast, C12和C33的ALGO是Normal
+        # scg6928@ln1:~/mywork/20250521_au_n2p2/construct_dataset/calculate/A11-2/y_cij_energy/y_cij_energy_c13/y_dir/1.0000$ grep "in kB" ../../../y_cij_energy_c*/y_dir/1.0000/OUTCAR
+        # ../../../y_cij_energy_c11/y_dir/1.0000/OUTCAR:  in kB       1.70558     1.70558    -0.95020     0.00000    -0.00000     0.00000
+        # ../../../y_cij_energy_c12/y_dir/1.0000/OUTCAR:  in kB       1.00278     1.00278     0.02108     0.00000     0.00000     0.00000
+        # ../../../y_cij_energy_c13/y_dir/1.0000/OUTCAR:  in kB       1.70558     1.70558    -0.95020     0.00000    -0.00000     0.00000
+        # ../../../y_cij_energy_c33/y_dir/1.0000/OUTCAR:  in kB       1.00278     1.00278     0.02108     0.00000     0.00000     0.00000
+        # ../../../y_cij_energy_c44/y_dir/1.0000/OUTCAR:  in kB       1.70558     1.70558    -0.95020     0.00000    -0.00000     0.00000
         vf.confirm_0( ldata[0]['e'][iref0]  - ldata[i]['e'][iref1]  )
         vf.confirm_0( ldata[0]['ed'][iref0] - ldata[i]['ed'][iref1] )
         vf.confirm_0( ldata[0]['s'][iref0]  - ldata[i]['s'][iref1]  )
