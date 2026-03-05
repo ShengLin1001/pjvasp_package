@@ -29,144 +29,175 @@
 #|      observed, try to decrease AMIN to a smaller values (e.g. 0.01).        |
 #|      Note: this warning only applies if the selfconsistency cycle is used.  |
 
-errorkeywords=("hermitian" "sloshing" "DAV: 100" "RMM: 100" )
-skip_jobid="$1" # Set this to a specific JobID to skip it (e.g., if you know it's already being handled), or leave empty to check all jobs
+main(){
+    errorkeywords=("hermitian" "sloshing" "DAV: 100" "RMM: 100" )
+    skip_jobid="$1" # Set this to a specific JobID to skip it (e.g., if you know it's already being handled), or leave empty to check all jobs
 
-canceled_jobs=()
-canceled_stdout=()
-stdout_missing_jobs=()
-stdout_missing_stdout=()
+    canceled_jobs=()
+    canceled_stdout=()
+    stdout_missing_jobs=()
+    stdout_missing_stdout=()
 
-time_interval=60 
+    time_interval=300 # Check every 5 minutes (300 seconds)
 
-# List current user's jobs and their stdout file (sorted)
-#
-# Notes:
-# - We use "squeue -o %A" to print the JobID. "%A" is the canonical JobID field
-#   and is generally safer than "%i" when dealing with job arrays.
-# - "StdOut" from "scontrol show job" is the effective stdout path (honors #SBATCH -o).
-# - If StdOut is a relative path, Slurm interprets it relative to the job's WorkDir,
-#   so we manually prepend WorkDir to make it an absolute path.
+    # List current user's jobs and their stdout file (sorted)
+    #
+    # Notes:
+    # - We use "squeue -o %A" to print the JobID. "%A" is the canonical JobID field
+    #   and is generally safer than "%i" when dealing with job arrays.
+    # - "StdOut" from "scontrol show job" is the effective stdout path (honors #SBATCH -o).
+    # - If StdOut is a relative path, Slurm interprets it relative to the job's WorkDir,
+    #   so we manually prepend WorkDir to make it an absolute path.
 
-# time loop part
-loop_count=0
-while true; do
+    # time loop part
+    loop_count=0
+    while true; do
 
-    echo
-    echo
-    echo "🕒 $(date '+%F %T') Starting check No.${loop_count}"
-    echo "────────────────────────────────────────"
+        echo
+        echo
+        echo "🕒 $(date '+%F %T') Starting check No.${loop_count}"
+        echo "────────────────────────────────────────"
 
-    # ---- Exit condition: no RUNNING jobs except skip_jobid ----
-    if [[ -n "$skip_jobid" ]]; then
-        running_num=$(squeue -u "$USER" -h -t R -o "%A" | grep -v "^${skip_jobid}$" | wc -l)
-    else
-        running_num=$(squeue -u "$USER" -h -t R -o "%A" | wc -l)
-    fi
+        # ---- Exit condition: no RUNNING jobs except skip_jobid ----
+        # -u "$USER"：只看当前用户的作业（$USER 是环境变量，比如 scg6928）。
+        # -h：no header，不输出表头那一行（方便统计行数）。
+        # -t R：只看状态为 R 的作业（Running）。（Slurm 状态里 R=RUNNING，PD=PENDING 等）
+        # -o "%A"：指定输出格式，只输出 JobID。
+        # %A：作业 ID（对 job array 也更“规范”，会输出主 job id）
 
-    if [[ "$running_num" -eq 0 ]]; then
-        echo "✅ No running jobs left (except skip_jobid=${skip_jobid:-none}). Exiting monitor loop."
-        break
-    fi
-    # To here
+        squeue_out=$(squeue -u "$USER" -h -o "%A %T" 2>/dev/null)
+        squeue_rc=$?
 
-    # Check part
-    for jobid in $(squeue -u "$USER" -h -t R -o "%A" | sort -n); do
-        [[ -n "$skip_jobid" && "$jobid" == "$skip_jobid" ]] && continue
-
-        # Get the effective StdOut path for the jobid
-        stdout=$(scontrol show job "$jobid" -o | sed -n 's/.*StdOut=\([^ ]*\).*/\1/p')
-        workdir=$(scontrol show job "$jobid" -o | sed -n 's/.*WorkDir=\([^ ]*\).*/\1/p')
-
-        if [[ -n "$stdout" && "$stdout" != /* && -n "$workdir" ]]; then
-            stdout="$workdir/$stdout"
+        if [[ $squeue_rc -ne 0 ]]; then
+            echo "⚠️  squeue failed (rc=$squeue_rc). Slurm may be temporarily unavailable. Will retry next round."
+            sleep "$time_interval"
+            loop_count=$((loop_count + 1))
+            continue
         fi
 
-        printf "🧾 JobID: %s\t📄 StdOut: %s\n" "$jobid" "$stdout"
+        # Split RUNNING / PENDING job IDs
+        squeue_r_out=$(echo "$squeue_out"  | awk '$2=="RUNNING"{print $1}')
+        squeue_pd_out=$(echo "$squeue_out" | awk '$2=="PENDING"{print $1}')
 
-        # Check if the stdout file exists and contains any of the error keywords
-        # Only check running jobs
-        if [[ -f "$stdout" ]]; then
-            # echo "🔎 Checking stdout keywords…"
-            for kw in "${errorkeywords[@]}"; do
-                # -i: case-insensitive search
-                # -q: quiet mode (no output, just exit code)
-                if grep -qi "$kw" "$stdout"; then
-                    echo "🚨 >>> FOUND keyword: $kw"
-                    grep -ni "$kw" "$stdout" | head -n 10 | sed 's/^/      📌 /'
-                    echo "🛑 >>> scancel job: $jobid"
-                    scancel "$jobid"
-                    canceled_jobs+=("$jobid")
-                    canceled_stdout+=("$stdout")
-                    break
-                fi
-            done
+        # Exclude skip_jobid from both lists (if set)
+        if [[ -n "$skip_jobid" ]]; then
+            squeue_r_out=$(echo "$squeue_r_out" | grep -v "^${skip_jobid}$")
+            squeue_pd_out=$(echo "$squeue_pd_out" | grep -v "^${skip_jobid}$")
+        fi
 
-            # -------------------- Progress check (ionic + electronic) --------------------
-            # Goal:
-            #   - last completed ionic step: locate the last "F=" summary line
-            #   - electronic steps used in that ionic step: read the previous line (N-1) and extract DAV/RMM iteration index
-            #   - current/latest electronic iteration index: take the last DAV:/RMM: line in the file
-            #
-            # Notes:
-            #   - If "F=" has not appeared yet (job just started), Nionic will be empty.
-            #   - The "N-1 line" method assumes VASP prints the last DAV/RMM line immediately before the "F=" line.
-            # Line number of the last "F=" line
-            Nionic=$(grep -n "F=" "$stdout" | tail -n 1 | awk '{print $2}')
-            N=$(grep -n "F=" "$stdout" | tail -n 1 | cut -d: -f1)
+        running_num=$(echo "$squeue_r_out" | wc -l)
+        pending_num=$(echo "$squeue_pd_out" | wc -l)
 
-            if [[ -n "$N" && "$N" -gt 1 ]]; then
-                # Extract DAV/RMM iteration index from line (N-1)
-                Nelectronic=$(sed -n "$((N-1))p" "$stdout" \
-                    | grep -oE '(DAV|RMM):[[:space:]]*[0-9]+' \
-                    | grep -oE '[0-9]+')
-            else
-                Nelectronic="-"
+        # Exit only when BOTH are zero
+        if [[ "$running_num" -eq 0 && "$pending_num" -eq 0 ]]; then
+            echo "✅ No RUNNING and no PENDING jobs left (except skip_jobid=${skip_jobid:-none}). Exiting monitor loop."
+            break
+        fi
+        # To here
+
+        # Check part
+        for jobid in $(echo "$squeue_r_out" | sort -n); do
+            [[ -n "$skip_jobid" && "$jobid" == "$skip_jobid" ]] && continue
+
+            # Get the effective StdOut path for the jobid
+            jobinfo=$(scontrol show job "$jobid" -o)
+            stdout=$(echo "$jobinfo" | sed -n 's/.*StdOut=\([^ ]*\).*/\1/p')
+            workdir=$(echo "$jobinfo" | sed -n 's/.*WorkDir=\([^ ]*\).*/\1/p')
+
+            if [[ -n "$stdout" && "$stdout" != /* && -n "$workdir" ]]; then
+                stdout="$workdir/$stdout"
             fi
 
-            # Latest electronic iteration index currently printed (DAV or RMM)
-            Nelectronicnow=$(grep -E '^(DAV|RMM):' "$stdout" | tail -n 1 | awk '{print $2}')
-            [[ -z "$Nelectronicnow" ]] && Nelectronicnow="-"
-            
-            echo "🧮 Progress: last_F_line=$Nionic  prev_elstep=$Nelectronic  last_elstep=$Nelectronicnow"
+            printf "🧾 JobID: %s\t📄 StdOut: %s\n" "$jobid" "$stdout"
 
-        else
-            echo "⏳ >>> stdout file not found yet."
-            stdout_missing_jobs+=("$jobid")
-            stdout_missing_stdout+=("$stdout")
-        fi
+            # Check if the stdout file exists and contains any of the error keywords
+            # Only check running jobs
+            if [[ -f "$stdout" ]]; then
+                # echo "🔎 Checking stdout keywords…"
+                for kw in "${errorkeywords[@]}"; do
+                    # -i: case-insensitive search
+                    # -q: quiet mode (no output, just exit code)
+                    if grep -qi "$kw" "$stdout"; then
+                        echo "🚨 >>> FOUND keyword: $kw"
+                        grep -ni "$kw" "$stdout" | head -n 10 | sed 's/^/      📌 /'
+                        echo "🛑 >>> scancel job: $jobid"
+                        scancel "$jobid"
+                        canceled_jobs+=("$jobid")
+                        canceled_stdout+=("$stdout")
+                        break
+                    fi
+                done
 
-        echo "────────────────────────────────────────"
+                # -------------------- Progress check (ionic + electronic) --------------------
+                # Goal:
+                #   - last completed ionic step: locate the last "F=" summary line
+                #   - electronic steps used in that ionic step: read the previous line (N-1) and extract DAV/RMM iteration index
+                #   - current/latest electronic iteration index: take the last DAV:/RMM: line in the file
+                #
+                # Notes:
+                #   - If "F=" has not appeared yet (job just started), Nionic will be empty.
+                #   - The "N-1 line" method assumes VASP prints the last DAV/RMM line immediately before the "F=" line.
+                # Line number of the last "F=" line
+                Nionic=$(grep -n "F=" "$stdout" | tail -n 1 | awk '{print $2}')
+                N=$(grep -n "F=" "$stdout" | tail -n 1 | cut -d: -f1)
+
+                if [[ -n "$N" && "$N" -gt 1 ]]; then
+                    # Extract DAV/RMM iteration index from line (N-1)
+                    Nelectronic=$(sed -n "$((N-1))p" "$stdout" \
+                        | grep -oE '(DAV|RMM):[[:space:]]*[0-9]+' \
+                        | grep -oE '[0-9]+')
+                else
+                    Nelectronic="-"
+                fi
+
+                # Latest electronic iteration index currently printed (DAV or RMM)
+                Nelectronicnow=$(grep -E '^(DAV|RMM):' "$stdout" | tail -n 1 | awk '{print $2}')
+                [[ -z "$Nelectronicnow" ]] && Nelectronicnow="-"
+                
+                echo "🧮 Progress: last_F_line=$Nionic  prev_elstep=$Nelectronic  last_elstep=$Nelectronicnow"
+
+            else
+                echo "⏳ >>> stdout file not found yet."
+                stdout_missing_jobs+=("$jobid")
+                stdout_missing_stdout+=("$stdout")
+            fi
+
+            echo "────────────────────────────────────────"
+        done
+        print_summary
+        # To here
+        
+        # echo "😴 Sleep 60s..."
+        sleep $time_interval
+        loop_count=$((loop_count + 1))
     done
-    # To here
-    
-    # echo "😴 Sleep 60s..."
-    sleep $time_interval
-    loop_count=$((loop_count + 1))
-done
+}
 
-echo
-echo
-echo "==================== SUMMARY (all rounds) ===================="
+print_summary() {
+    echo
+    echo "==================== SUMMARY (so far) ===================="
+    echo "🏃 RUNNING: $running_num   ⏳ PENDING: $pending_num   (skip_jobid=${skip_jobid:-none})"
+    echo
+    echo "🛑 CANCELED jobs: ${#canceled_jobs[@]}"
+    if (( ${#canceled_jobs[@]} > 0 )); then
+        for i in "${!canceled_jobs[@]}"; do
+            echo "  - JobID=${canceled_jobs[$i]}  StdOut=${canceled_stdout[$i]}"
+        done
+    else
+        echo "  (none)"
+    fi
 
-echo "🛑 CANCELED jobs: ${#canceled_jobs[@]}"
-if (( ${#canceled_jobs[@]} > 0 )); then
-    for i in "${!canceled_jobs[@]}"; do
-        echo "  - JobID=${canceled_jobs[$i]}  StdOut=${canceled_stdout[$i]}"
-    done
-else
-    echo "  (none)"
-fi
+    echo
+    echo "⏳ STDOUT NOT FOUND YET jobs: ${#stdout_missing_jobs[@]}"
+    if (( ${#stdout_missing_jobs[@]} > 0 )); then
+        for i in "${!stdout_missing_jobs[@]}"; do
+            echo "  - JobID=${stdout_missing_jobs[$i]}  StdOut=${stdout_missing_stdout[$i]}"
+        done
+    else
+        echo "  (none)"
+    fi
+    echo "=========================================================="
+}
 
-echo
-echo "⏳ STDOUT NOT FOUND YET jobs: ${#stdout_missing_jobs[@]}"
-if (( ${#stdout_missing_jobs[@]} > 0 )); then
-    for i in "${!stdout_missing_jobs[@]}"; do
-        echo "  - JobID=${stdout_missing_jobs[$i]}  StdOut=${stdout_missing_stdout[$i]}"
-    done
-else
-    echo "  (none)"
-fi
 
-echo "=============================================================="
-
+main "$@"; exit
