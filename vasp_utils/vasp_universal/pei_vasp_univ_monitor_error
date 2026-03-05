@@ -85,8 +85,10 @@ main(){
             squeue_pd_out=$(echo "$squeue_pd_out" | grep -v "^${skip_jobid}$")
         fi
 
-        running_num=$(echo "$squeue_r_out" | wc -l)
-        pending_num=$(echo "$squeue_pd_out" | wc -l)
+        # grep -c . 统计非空行数，即作业数量
+        # because wc -l, will count even empty lines, so we use grep -c . to count only non-empty lines (valid job IDs)
+        running_num=$(echo "$squeue_r_out"  | grep -c .)
+        pending_num=$(echo "$squeue_pd_out" | grep -c .)
 
         # Exit only when BOTH are zero
         if [[ "$running_num" -eq 0 && "$pending_num" -eq 0 ]]; then
