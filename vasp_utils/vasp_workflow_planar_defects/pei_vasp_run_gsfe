@@ -1,11 +1,40 @@
 #!/bin/bash
 
+###################### For GSFE:
+# os.system("echo -e '3\n0.0  0.0  0.0  0.0  0.0  0.0' > Y_CONSTR_LATT")
+# os.system("yin_vasp_univ_find_and_change -isif 3")
+# # fix x, y scaled coordinates
+# atoms = read("POSCAR", format="vasp")
+# c = FixScaled(cell=atoms.get_cell(), a=range(0, len(atoms)), mask=[True, True, False])
+# atoms.set_constraint(c)
+# write("POSCAR", atoms, format="vasp")
+
+###################### For SSF:
+# os.system("echo -e '356\n0.0  0.0  0.0  0.0  0.0  0.0' > Y_CONSTR_LATT")
+# os.system("yin_vasp_univ_find_and_change -isif 3")
+# # fix x, y scaled coordinates
+# atoms = read("POSCAR", format="vasp")
+# c = FixScaled(cell=atoms.get_cell(), a=range(0, len(atoms)), mask=[False, False, False])
+# atoms.set_constraint(c)
+# write("POSCAR", atoms, format="vasp")
 
 if [ -z "$1" ]; then      # empty is true 
     echo "==>  Please indicate which GSFE to compute. Abort!"
     exit 
 fi
 
+cat << 'EOF'
+For GSFE:
+
+os.system("echo -e '3\n0.0  0.0  0.0  0.0  0.0  0.0' > Y_CONSTR_LATT")
+os.system("yin_vasp_univ_find_and_change -isif 3")
+
+# fix x, y scaled coordinates
+atoms = read("POSCAR", format="vasp")
+c = FixScaled(cell=atoms.get_cell(), a=range(0, len(atoms)), mask=[True, True, False])
+atoms.set_constraint(c)
+write("POSCAR", atoms, format="vasp")
+EOF
 
 
 srcdir=`pwd`/y_full_relax
@@ -131,7 +160,7 @@ for ((i1=0; i1<=$N1; i1=i1+1)) ;  do
     mv temp POSCAR
     
     echo 'submit dir:' `pwd`
-    sbatch sub.*
+    #sbatch sub.*
     
     cd ..
 done
