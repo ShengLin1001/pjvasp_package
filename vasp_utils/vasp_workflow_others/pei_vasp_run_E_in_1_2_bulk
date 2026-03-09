@@ -123,23 +123,27 @@ a1 = atoms_cell[0]
 a2 = atoms_cell[1]
 a3 = atoms_cell[2]
 
+# a1 和 a2 此时必须对应的是 a0 的cell, 可以不是六方胞，可以是正交胞
 # initial ratio for a1 != a2
-iratiox = np.linalg.norm(a1)/$a0
-iratioy = np.linalg.norm(a2)/$a0
 
-aref1=np.linalg.norm(a1)/iratiox
-aref2=np.linalg.norm(a2)/iratioy
-print('aref1:',aref1)
-print('aref2:',aref2)
-strainx = $val1/aref1
-strainy = $val2/aref2
+strainx = $val1/$a0
+strainy = $val2/$a0
 #print('strainx:',strainx)
 #print('strainy:',strainy)
 
-for temp in atoms_cell:
-    temp[0] *= strainx
-    temp[1] *= strainy
-    temp[2] /= (strainx*strainy)
+atom_cell[:, 0] *= strainx
+atom_cell[:, 1] *= strainy
+atom_cell[:, 2] /= (strainx*strainy)
+
+# other stretch cell method.
+# Same as the aforementioned method.
+#################### Not !!!!! Wrong set
+# for temp in atoms_cell:
+#     temp[0] *= strainx
+#     temp[1] *= strainy
+#     temp[2] /= (strainx*strainy)
+#################### To here
+
 atoms.set_cell(atoms_cell, scale_atoms=True)
 atoms_cell2 = np.array(atoms.get_cell().copy())
 volume2 = atoms.get_volume()
@@ -148,7 +152,7 @@ a1_new = atoms_cell2[0]
 a2_new = atoms_cell2[1]
 a3_new = atoms_cell2[2]
 
-my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0, label = f'aref1:{aref1} aref1:{aref2} strainx:{strainx} strainy:{strainy} val1:$val1  val2:$val2')
+my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0, label = f'strainx:{strainx} strainy:{strainy} val1:$val1  val2:$val2')
 
 # Uniform bixial strain check
 if abs($val1 - $val2) < 1e-6:
