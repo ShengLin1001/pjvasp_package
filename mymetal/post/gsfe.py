@@ -20,6 +20,9 @@ Change log:
 # Changed to fit the lammps output by J. P. 
 # 2025.11.04
 
+# must be firstly imported
+from __future__ import annotations
+
 import numpy as np
 from myvasp import vasp_func as vf 
 import sys
@@ -29,7 +32,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 from mymetal.universal.plot.general import general_set_all_rcParams
 from pathlib import Path
-from __future__ import annotations
 from typing import Union, Any, Dict, Optional, List
 import re
 
