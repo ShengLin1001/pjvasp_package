@@ -30,7 +30,7 @@
 #|      Note: this warning only applies if the selfconsistency cycle is used.  |
 
 main(){
-    errorkeywords=("hermitian" "sloshing" "DAV: 100" "RMM: 100" )
+    errorkeywords=("hermitian" "sloshing")  # "DAV: 100" "RMM: 100" )
     skip_jobid="$1" # Set this to a specific JobID to skip it (e.g., if you know it's already being handled), or leave empty to check all jobs
 
     canceled_jobs=()
@@ -38,7 +38,7 @@ main(){
     stdout_missing_jobs=()
     stdout_missing_stdout=()
 
-    time_interval=300 # Check every 5 minutes (300 seconds)
+    time_interval=60 # Check every 5 minutes (300 seconds)
 
     # List current user's jobs and their stdout file (sorted)
     #
@@ -66,6 +66,7 @@ main(){
         # %A：作业 ID（对 job array 也更“规范”，会输出主 job id）
 
         squeue_out=$(squeue -u "$USER" -h -o "%A %T" 2>/dev/null)
+        # 上一条命令的退出状态（exit status）, squeue_rc
         squeue_rc=$?
 
         if [[ $squeue_rc -ne 0 ]]; then
@@ -102,7 +103,15 @@ main(){
             [[ -n "$skip_jobid" && "$jobid" == "$skip_jobid" ]] && continue
 
             # Get the effective StdOut path for the jobid
-            jobinfo=$(scontrol show job "$jobid" -o)
+            # If jobid already end, it will return "slurm_load_jobs error: Invalid job id specified"
+            jobinfo=$(scontrol show job "$jobid" -o 2>/dev/null)
+
+            if [ $? -ne 0 ] || [ -z "$jobinfo" ]; then
+                echo "Job $jobid not found or already finished"
+                continue
+            fi
+
+            # jobinfo=$(scontrol show job "$jobid" -o)
             stdout=$(echo "$jobinfo" | sed -n 's/.*StdOut=\([^ ]*\).*/\1/p')
             workdir=$(echo "$jobinfo" | sed -n 's/.*WorkDir=\([^ ]*\).*/\1/p')
 
@@ -173,13 +182,116 @@ main(){
         sleep $time_interval
         loop_count=$((loop_count + 1))
     done
+
+    echo 
+    echo
+    print_summary
 }
 
+## More complex print function
 print_summary() {
     echo
     echo "==================== SUMMARY (so far) ===================="
+
+    local user_name="${USER}"
+
+    # ---------- Assoc limits ----------
+    local assoc_line
+    assoc_line=$(sacctmgr -nP show assoc user="$user_name" format=GrpTRES,MaxSubmit,QOS 2>/dev/null | head -n 1)
+
+    local grp_tres max_submit qos_name
+    IFS='|' read -r grp_tres max_submit qos_name <<< "$assoc_line"
+
+    # ---------- QOS limits ----------
+    local qos_line
+    qos_line=$(sacctmgr -nP show qos "${qos_name:-normal}" format=Name,GrpTRES,MaxTRES,MaxTRESPU,MaxSubmitPU 2>/dev/null | head -n 1)
+
+    local qos_name2 qos_grptres qos_maxtres qos_maxtrespu qos_maxsubmitpu
+    IFS='|' read -r qos_name2 qos_grptres qos_maxtres qos_maxtrespu qos_maxsubmitpu <<< "$qos_line"
+
+    # ---------- Current job counts ----------
+    # running_num pending_num already get in the main function
+    # local running_num pending_num
+    # running_num=$(squeue -h -u "$user_name" -t RUNNING 2>/dev/null | wc -l)
+    # pending_num=$(squeue -h -u "$user_name" -t PENDING 2>/dev/null | wc -l)
+
+    # ---------- Current requested CPUs ----------
+    local used_cpus
+    used_cpus=$(squeue -h -u "$user_name" -o "%C" 2>/dev/null | awk '{sum+=$1} END{print sum+0}')
+
+    # ---------- Current requested memory ----------
+    # Based on ReqMem from squeue, approximate total requested memory
+    local used_mem_mb
+    used_mem_mb=$(
+        squeue -h -u "$user_name" -o "%m" 2>/dev/null | \
+        awk '
+        function to_mb(x,    n,u) {
+            if (x == "" || x == "N/A") return 0
+
+            # strip per-node/per-cpu suffix: n / c
+            sub(/[cn]$/, "", x)
+
+            n = x
+            gsub(/[KMGTP]$/, "", n)
+            u = substr(x, length(x), 1)
+
+            if (u == "K") return n / 1024
+            if (u == "M") return n
+            if (u == "G") return n * 1024
+            if (u == "T") return n * 1024 * 1024
+            if (u == "P") return n * 1024 * 1024 * 1024
+
+            return n
+        }
+        { sum += to_mb($1) }
+        END { printf "%.0f", sum }
+        '
+    )
+
+    local used_mem_gib
+    used_mem_gib=$(awk -v mb="${used_mem_mb:-0}" 'BEGIN { printf "%.2f", mb/1024 }')
+
+    # ---------- Derive memory limit text ----------
+    local mem_limit_text cpu_limit_text submit_limit_text
+
+    submit_limit_text="${max_submit:-unknown}"
+
+    # CPU limit: prefer assoc GrpTRES
+    cpu_limit_text="unknown"
+    if [[ -n "${grp_tres}" && "${grp_tres}" != "" ]]; then
+        cpu_limit_text="${grp_tres}"
+    elif [[ -n "${qos_grptres}" && "${qos_grptres}" != "" ]]; then
+        cpu_limit_text="${qos_grptres}"
+    elif [[ -n "${qos_maxtrespu}" && "${qos_maxtrespu}" != "" ]]; then
+        cpu_limit_text="${qos_maxtrespu}"
+    fi
+
+    # Memory limit: try to find mem=... from assoc/qos fields
+    mem_limit_text="not set / not visible"
+    for field in "$grp_tres" "$qos_grptres" "$qos_maxtres" "$qos_maxtrespu"; do
+        if echo "$field" | grep -q 'mem='; then
+            mem_limit_text="$field"
+            break
+        fi
+    done
+
     echo "🏃 RUNNING: $running_num   ⏳ PENDING: $pending_num   (skip_jobid=${skip_jobid:-none})"
     echo
+
+    echo "👤 USER LIMITS"
+    echo "  - User                 : $user_name"
+    echo "  - QOS                  : ${qos_name:-unknown}"
+    echo "  - Max submit jobs      : $submit_limit_text"
+    echo "  - Max CPU cores        : $cpu_limit_text"
+    echo "  - Memory limit         : $mem_limit_text"
+    echo
+
+    echo "📊 CURRENT USAGE"
+    echo "  - Jobs in queue        : $((running_num + pending_num))"
+    echo "  - CPUs requested       : ${used_cpus:-0}"
+    echo "  - Memory requested     : ${used_mem_gib:-0} GiB"
+    echo
+
     echo "🛑 CANCELED jobs: ${#canceled_jobs[@]}"
     if (( ${#canceled_jobs[@]} > 0 )); then
         for i in "${!canceled_jobs[@]}"; do
@@ -198,8 +310,36 @@ print_summary() {
     else
         echo "  (none)"
     fi
+
     echo "=========================================================="
 }
+
+## Simple print function 
+# print_summary() {
+#     echo
+#     echo "==================== SUMMARY (so far) ===================="
+#     echo "🏃 RUNNING: $running_num   ⏳ PENDING: $pending_num   (skip_jobid=${skip_jobid:-none})"
+#     echo
+#     echo "🛑 CANCELED jobs: ${#canceled_jobs[@]}"
+#     if (( ${#canceled_jobs[@]} > 0 )); then
+#         for i in "${!canceled_jobs[@]}"; do
+#             echo "  - JobID=${canceled_jobs[$i]}  StdOut=${canceled_stdout[$i]}"
+#         done
+#     else
+#         echo "  (none)"
+#     fi
+
+#     echo
+#     echo "⏳ STDOUT NOT FOUND YET jobs: ${#stdout_missing_jobs[@]}"
+#     if (( ${#stdout_missing_jobs[@]} > 0 )); then
+#         for i in "${!stdout_missing_jobs[@]}"; do
+#             echo "  - JobID=${stdout_missing_jobs[$i]}  StdOut=${stdout_missing_stdout[$i]}"
+#         done
+#     else
+#         echo "  (none)"
+#     fi
+#     echo "=========================================================="
+# }
 
 
 main "$@"; exit
