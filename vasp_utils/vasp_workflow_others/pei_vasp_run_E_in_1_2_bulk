@@ -131,9 +131,9 @@ strainy = $val2/$a0
 #print('strainx:',strainx)
 #print('strainy:',strainy)
 
-atom_cell[:, 0] *= strainx
-atom_cell[:, 1] *= strainy
-atom_cell[:, 2] /= (strainx*strainy)
+atoms_cell[:, 0] *= strainx
+atoms_cell[:, 1] *= strainy
+atoms_cell[:, 2] /= (strainx*strainy)
 
 # other stretch cell method.
 # Same as the aforementioned method.
