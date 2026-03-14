@@ -139,15 +139,19 @@ for id, folder in enumerate(lfolder):
 
 # adjust to same length
 print("\nAdjusting to same length for all images...")
-max_nframes = max(lframes)
 
-if len(set(lframes[1:-1])) != 1:
-    raise ValueError("Middle images have different number of frames!")
+# max - min = 1, or max = min
+temp = max(lframes[1:-1]) - min(lframes[1:-1])
+if abs(temp - 1.0) < 1e-10 or abs(temp) < 1e-10:
+    max_nframes = min(lframes[1:-1])
+else: 
+    raise ValueError(f"Wrong unexpected lframes! {lframes}")
 
 print("Lframes       :", lframes)
 print("Max nframes   :", max_nframes)
 # For lenergies
 # In line 55-58, already maked sure the 0, and -1 index only have the last energies
+# [ a_number ] * N = [a, a, ...]
 lenergies[0] = lenergies[0] * max_nframes
 lenergies[-1] = lenergies[-1] * max_nframes
 lenergies_absolute[0] = lenergies_absolute[0] * max_nframes
