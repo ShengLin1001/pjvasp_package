@@ -46,7 +46,7 @@ case "$1" in
 
     -a0) 
         echo "==> changing a0 in POSCAR to" $2 ": "
-        for filen in ` find ./ -type f -name "POSCAR*" `; do
+        for filen in ` find ./ -type f -name "POSCAR" `; do
             echo $filen 
             sed '2s/.*/'" $2"'/' $filen > temp
             mv temp $filen

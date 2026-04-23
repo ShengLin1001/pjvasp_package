@@ -131,6 +131,7 @@ strainy = $val2/$a0
 #print('strainx:',strainx)
 #print('strainy:',strainy)
 
+
 atoms_cell[:, 0] *= strainx
 atoms_cell[:, 1] *= strainy
 atoms_cell[:, 2] /= (strainx*strainy)

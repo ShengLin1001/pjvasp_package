@@ -29,8 +29,11 @@
 #|      observed, try to decrease AMIN to a smaller values (e.g. 0.01).        |
 #|      Note: this warning only applies if the selfconsistency cycle is used.  |
 
+# When ALGO= Fast
+#  ERROR in subspace rotation PSSYEVX: I2,IFAIL=            1           8
+
 main(){
-    errorkeywords=("hermitian" "sloshing")  # "DAV: 100" "RMM: 100" )
+    errorkeywords=("hermitian" "sloshing" "ERROR in subspace rotation PSSYEVX")  # "DAV: 100" "RMM: 100" )
     skip_jobid="$1" # Set this to a specific JobID to skip it (e.g., if you know it's already being handled), or leave empty to check all jobs
 
     canceled_jobs=()
