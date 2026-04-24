@@ -71,12 +71,12 @@ else
     cp POSCAR CONTCAR
 fi
 
-yin_vasp_univ_find_and_change  -isif  3
-echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+# yin_vasp_univ_find_and_change  -isif  3
+# echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 
 # # sometime, we dont't want to relax the cell shape during the ionic relaxation
-# yin_vasp_univ_find_and_change  -isif  2
-# echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+yin_vasp_univ_find_and_change  -isif  2
+echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 
 cd ..
 
@@ -134,16 +134,8 @@ strainy = $val2/$a0
 
 atoms_cell[:, 0] *= strainx
 atoms_cell[:, 1] *= strainy
-atoms_cell[:, 2] /= (strainx*strainy)
-
-# other stretch cell method.
-# Same as the aforementioned method.
-#################### Not !!!!! Wrong set
-# for temp in atoms_cell:
-#     temp[0] *= strainx
-#     temp[1] *= strainy
-#     temp[2] /= (strainx*strainy)
-#################### To here
+################### Sometimes, you don't want to change c basis vector
+# atoms_cell[:, 2] /= (strainx*strainy)
 
 atoms.set_cell(atoms_cell, scale_atoms=True)
 atoms_cell2 = np.array(atoms.get_cell().copy())
@@ -163,11 +155,11 @@ if abs($val1 - $val2) < 1e-6:
       print('a2_new:',np.linalg.norm(a2_new))
       raise Exception('Error in setting lattice vectors!')
 
-if abs(volume2 - volume) > 1e-6:
-    print('Error in volume conservation!')
-    print('volume old:',volume)
-    print('volume new:',volume2)
-    raise Exception('Error in volume conservation!')
+# if abs(volume2 - volume) > 1e-6:
+#     print('Error in volume conservation!')
+#     print('volume old:',volume)
+#     print('volume new:',volume2)
+#     raise Exception('Error in volume conservation!')
 
 
 "
