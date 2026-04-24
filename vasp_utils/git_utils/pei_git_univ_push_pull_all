@@ -4,6 +4,7 @@
 # Git Multi-Repository Sync Script
 # Author: ChatGPT
 # Version: 1.0
+# Notes: 使用该命令时，你应该commit所有本地的change. 该命令的逻辑是先pull再push
 # ================================
 
 # ---- Configurable paths ----
