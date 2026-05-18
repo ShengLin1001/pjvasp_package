@@ -1,6 +1,10 @@
 ## This file didn't strict the version of the packages, because some packages are not compatible with the latest version, and it may cause some issues when installing the packages. 
 ## So we recommend you to use `setup/requirements2.txt` for installing the packages, because it will install the compatible version of the packages.
 
+# Python 3.10.7 is recommended for the best performance.
+# pip install -r ./setup/strict_requirements2.txt
+# pip install -e . 
+# cd myalloy && pip install -e .
 
 ############## core package
 numpy
