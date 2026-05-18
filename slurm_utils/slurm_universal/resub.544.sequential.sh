@@ -25,6 +25,8 @@ for dir in ./y_dir/*/; do
         else
             echo "❌ Calculation not completed, resubmitting..."
             tag_resub=T
+            # sometime you need to change ediff to a smaller value, change algo from Normal to Fast, or change algo from Fast to Normal, etc.
+            
         fi
     else
         # if OUTCAR does not exist, resubmit the job

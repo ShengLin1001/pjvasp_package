@@ -29,6 +29,28 @@
 #|      observed, try to decrease AMIN to a smaller values (e.g. 0.01).        |
 #|      Note: this warning only applies if the selfconsistency cycle is used.  |
 
+#  ----------------------------------------------------------------------------- 
+# |                                                                             |
+# |           W    W    AA    RRRRR   N    N  II  N    N   GGGG   !!!           |
+# |           W    W   A  A   R    R  NN   N  II  NN   N  G    G  !!!           |
+# |           W    W  A    A  R    R  N N  N  II  N N  N  G       !!!           |
+# |           W WW W  AAAAAA  RRRRR   N  N N  II  N  N N  G  GGG   !            |
+# |           WW  WW  A    A  R   R   N   NN  II  N   NN  G    G                |
+# |           W    W  A    A  R    R  N    N  II  N    N   GGGG   !!!           |
+# |                                                                             |
+# |      Your highest band is occupied at some k-points! Unless you are         |
+# |      performing a calculation for an insulator or semiconductor, without    |
+# |      unoccupied bands, you have included TOO FEW BANDS!! Please increase    |
+# |      the parameter NBANDS in file INCAR to ensure that the highest band     |
+# |      is unoccupied at all k-points. It is always recommended to             |
+# |      include a few unoccupied bands to accelerate the convergence of        |
+# |      molecular dynamics runs (even for insulators or semiconductors).       |
+# |      Because the presence of unoccupied bands improves wavefunction         |
+# |      prediction, and helps to suppress 'band-crossings.'                    |
+# |                                                                             |
+#  ----------------------------------------------------------------------------- 
+
+
 # When ALGO= Fast
 #  ERROR in subspace rotation PSSYEVX: I2,IFAIL=            1           8
 
@@ -48,7 +70,7 @@
 
 
 main(){
-    errorkeywords=("hermitian" "sloshing" "ERROR in subspace rotation PSSYEVX")  # "DAV: 100" "RMM: 100" )
+    errorkeywords=("hermitian" "sloshing" "ERROR in subspace rotation PSSYEVX" "highest band")  # "DAV: 100" "RMM: 100" )
     skip_jobid="$1" # Set this to a specific JobID to skip it (e.g., if you know it's already being handled), or leave empty to check all jobs
 
     canceled_jobs=()
