@@ -1,11 +1,107 @@
 #!/bin/bash
-echo "==> sbatch all jobs under y_dir"
-for dir in y_dir/*/; do
-    cd $dir
-    echo ================ $dir
-    #sbatch sub.sh
-    echo 'submit dir:' `pwd`
-    sbatch sub.*
-    cd - > /dev/null
+
+# Submit all calculations that are not already converged as independent jobs.
+# This checks the current OUTCAR only; submitted jobs are not monitored here.
+
+root_dir="${1:-./y_dir}"
+completion_marker="${2:-reached required accuracy}"
+smaller_ediff_marker="${3:-please rerun with smaller EDIFF}"
+
+if [[ ! -d "$root_dir" ]]; then
+    echo "❌ ERROR: job directory not found: $root_dir" >&2
+    exit 1
+fi
+
+shopt -s nullglob
+job_dirs=("$root_dir"/*/)
+if (( ${#job_dirs[@]} == 0 )); then
+    echo "❌ ERROR: no calculation directories found below: $root_dir" >&2
+    exit 1
+fi
+
+start_dir="$(pwd)"
+converged_count=0
+submitted_count=0
+submit_failed_count=0
+not_converged_dirs=()
+submit_failed_dirs=()
+
+echo "🚀 ==> Checking convergence and submitting unfinished jobs below $root_dir in parallel"
+
+for dir in "${job_dirs[@]}"; do
+    cd "$start_dir" || exit 1
+    echo ""
+    echo "================ 📁 $dir"
+
+    if ! cd "$dir"; then
+        echo "❌ ERROR: cannot enter directory: $dir" >&2
+        submit_failed_count=$((submit_failed_count + 1))
+        not_converged_dirs+=("$dir")
+        continue
+    fi
+
+    echo "📍 Current dir: $(pwd)"
+    if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+        echo "✅ Calculation completed successfully, skipping submission..."
+        converged_count=$((converged_count + 1))
+        continue
+    fi
+
+    not_converged_dirs+=("$dir")
+    if [[ -s CONTCAR ]]; then
+        echo "❌ Calculation not completed, restarting from CONTCAR..."
+        if ! cp CONTCAR POSCAR; then
+            echo "❌ ERROR: cannot copy CONTCAR to POSCAR; skipping this directory." >&2
+            submit_failed_count=$((submit_failed_count + 1))
+            submit_failed_dirs+=("$dir")
+            continue
+        fi
+        if [[ -f OUTCAR ]] && grep -qF "$smaller_ediff_marker" OUTCAR; then
+            echo "⚠️  Detected previous EDIFF too large. Please consider rerunning with a smaller EDIFF."
+            pei_vasp_univ_find_and_change -ediff 1e-10
+            pei_vasp_univ_find_and_change -algo Normal  # more robust
+        fi
+    elif [[ -f POSCAR ]]; then
+        echo "🔍 No restart CONTCAR found, submitting from existing POSCAR..."
+    else
+        echo "❌ ERROR: neither a non-empty CONTCAR nor POSCAR is available." >&2
+        submit_failed_count=$((submit_failed_count + 1))
+        submit_failed_dirs+=("$dir")
+        continue
+    fi
+
+    # delete old output files to save space
+    pei_vasp_univ_clean_up_full
+
+    echo "▶️  Command: sbatch sub.*"
+    if sbatch sub.*; then
+        submitted_count=$((submitted_count + 1))
+    else
+        echo "❌ ERROR: sbatch failed in $(pwd)." >&2
+        submit_failed_count=$((submit_failed_count + 1))
+        submit_failed_dirs+=("$dir")
+    fi
 done
-echo "done!"
+
+echo ""
+echo "================ 📊 Summary"
+echo "converged=$converged_count    submitted_unconverged=$submitted_count    submit_failed=$submit_failed_count"
+
+if (( ${#not_converged_dirs[@]} > 0 )); then
+    echo "❌ Not converged directories:"
+    for dir in "${not_converged_dirs[@]}"; do
+        echo "  - 📁 $dir"
+    done
+fi
+
+if (( submit_failed_count > 0 )); then
+    echo "❌ Done with failed submissions."
+    for dir in "${submit_failed_dirs[@]}"; do
+        echo "  - 📁 $dir"
+    done
+    exit 1
+fi
+
+echo "🎉 Submission check done!"
+exit 0
+

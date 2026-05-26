@@ -37,7 +37,6 @@ skipped_count=0
 failed_count=0
 unfinished_or_failed_dirs=()
 
-# Todo: check "rerun"
 
 echo "🚀 ==> Running VASP jobs sequentially below $root_dir"
 
@@ -69,7 +68,7 @@ for dir in "${job_dirs[@]}"; do
             unfinished_or_failed_dirs+=("$dir")
             continue
         fi
-        if grep -qF "$smaller_ediff_marker" OUTCAR; then
+        if [[ -f OUTCAR ]] && grep -qF "$smaller_ediff_marker" OUTCAR; then
             echo "⚠️  Detected previous EDIFF too large. Please consider rerunning with a smaller EDIFF."
             pei_vasp_univ_find_and_change -ediff 1e-10
             pei_vasp_univ_find_and_change -algo Normal  # more robust
@@ -90,6 +89,9 @@ for dir in "${job_dirs[@]}"; do
     # pei_vasp_univ_find_and_change -lreal Auto      # 大系统可以考虑设置为 True 来加速，但可能会牺牲一些精度
     # pei_vasp_univ_find_and_change -nsw 100         # 如果之前的计算已经接近完成，可以适当增加最大步数
     # pei_vasp_univ_find_and_change -isym 0          # 如果之前的计算已经接近完成，可以考虑关闭对称性以避免一些收敛问题
+
+    # delete old output files to save space
+    pei_vasp_univ_clean_up_full
 
     echo "▶️  Command: srun $vasp_executable"
     if ! srun "$vasp_executable"; then
