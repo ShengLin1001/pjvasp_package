@@ -34,6 +34,12 @@ def check_and_submit_jobs(path_ydir: Path = None, if_sbatch: bool = False):
                     print(f"✅ {subdir.name}")
                 else:
                     print(f"❌ {subdir.name}")
+
+                    ret2 = os.system("grep -q 'please rerun with smaller EDIFF' OUTCAR")
+                    if ret2 == 0:
+                        os.system("pei_vasp_univ_find_and_change -ediff 1e-10")
+                        os.system("pei_vasp_univ_find_and_change -algo Normal")
+                        
                     if if_sbatch:
                         os.system("cp CONTCAR POSCAR && pei_vasp_univ_clean_up_full && sbatch sub.*")
             else:
