@@ -23,9 +23,10 @@ sub_change(){
 
     for filen in `find ./ -type f -name $file1`; do
         #echo $filen
-        j1=`grep -n  $tag1  $filen | head -1 | cut -d ":" -f1`
-        #echo $j1
-        #echo $str1
+        # Be aware that VASP will use the first occurrence. https://www.vasp.at/forum/viewtopic.php?t=19227
+        j1=`grep -n -E "^[[:space:]]*#*[[:space:]]*${tag1}[[:space:]]*=" "$filen" | head -1 | cut -d ":" -f1`
+        echo $j1
+        echo $str1
         if [ "$j1" = "" ]; then
             echo "no $tag1 in the file"
 	    else 
