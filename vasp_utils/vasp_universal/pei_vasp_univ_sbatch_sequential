@@ -1,0 +1,123 @@
+#!/bin/bash
+
+# Run unfinished VASP calculations below y_dir one at a time in one allocation.
+# Re-running this command is safe for completed directories: they are skipped.
+
+# Usage:
+#   sbatch pei_vasp_univ_sequential_sbatch.sh [root_dir] [vasp_executable] [completion_marker] [smaller_ediff_marker]
+# Example:
+#   sbatch pei_vasp_univ_sequential_sbatch.sh ./y_dir vasp_std "reached required accuracy" "please rerun with smaller EDIFF"
+
+# 目录根路径，默认使用当前目录下的 y_dir
+root_dir="${1:-./y_dir}"
+# VASP 可执行文件名
+vasp_executable="${2:-vasp_std}"
+# OUTCAR 中用于判断计算完成的标记
+completion_marker="${3:-reached required accuracy}"
+# 如果需要更小的 EDIFF 来完成计算，可以通过第四个参数传入，否则默认提示用户重新运行并使用更小的 EDIFF 
+smaller_ediff_marker="${4:-please rerun with smaller EDIFF}"
+
+
+if [[ ! -d "$root_dir" ]]; then
+    echo "❌ ERROR: sequential job directory not found: $root_dir" >&2
+    exit 1
+fi
+
+# 启用 nullglob 以防止没有目录时 glob 模式被原样保留，将为 job_dirs 赋值一个空数组
+shopt -s nullglob
+job_dirs=("$root_dir"/*/)
+if (( ${#job_dirs[@]} == 0 )); then
+    echo "❌ ERROR: no calculation directories found below: $root_dir" >&2
+    exit 1
+fi
+
+start_dir="$(pwd)"
+completed_count=0
+skipped_count=0
+failed_count=0
+unfinished_or_failed_dirs=()
+
+# Todo: check "rerun"
+
+echo "🚀 ==> Running VASP jobs sequentially below $root_dir"
+
+for dir in "${job_dirs[@]}"; do
+
+    cd "$start_dir" || exit 1
+    echo ""
+    echo "================ 📁 $dir"
+
+    if ! cd "$dir"; then
+        echo "❌ ERROR: cannot enter directory: $dir" >&2
+        failed_count=$((failed_count + 1))
+        unfinished_or_failed_dirs+=("$dir")
+        continue
+    fi
+    echo "📍 Current dir: $(pwd)"
+
+    if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+        echo "✅ Calculation completed successfully, skipping..."
+        skipped_count=$((skipped_count + 1))
+        continue
+    fi
+
+    if [[ -s CONTCAR ]]; then
+        echo "❌ Calculation not completed, restarting from CONTCAR..."
+        if ! cp CONTCAR POSCAR; then
+            echo "❌ ERROR: cannot copy CONTCAR to POSCAR; skipping this directory." >&2
+            failed_count=$((failed_count + 1))
+            unfinished_or_failed_dirs+=("$dir")
+            continue
+        fi
+        if grep -qF "$smaller_ediff_marker" OUTCAR; then
+            echo "⚠️  Detected previous EDIFF too large. Please consider rerunning with a smaller EDIFF."
+            pei_vasp_univ_find_and_change -ediff 1e-10
+            pei_vasp_univ_find_and_change -algo Normal  # more robust
+        fi
+    elif [[ -f POSCAR ]]; then
+        echo "🔍 No restart CONTCAR found, submitting from existing POSCAR..."
+    else
+        echo "❌ ERROR: neither a non-empty CONTCAR nor POSCAR is available." >&2
+        failed_count=$((failed_count + 1))
+        unfinished_or_failed_dirs+=("$dir")
+        continue
+    fi
+
+    # 你也可以在这里批量添加一些通用的 INCAR 设置的修改，例如：
+    # pei_vasp_univ_find_and_change -ediffg 1e-3
+    # pei_vasp_univ_find_and_change -isif 3
+    # pei_vasp_univ_find_and_change -algo Fast       # 更快但可能不太稳定，视情况调整
+    # pei_vasp_univ_find_and_change -lreal Auto      # 大系统可以考虑设置为 True 来加速，但可能会牺牲一些精度
+    # pei_vasp_univ_find_and_change -nsw 100         # 如果之前的计算已经接近完成，可以适当增加最大步数
+    # pei_vasp_univ_find_and_change -isym 0          # 如果之前的计算已经接近完成，可以考虑关闭对称性以避免一些收敛问题
+
+    echo "▶️  Command: srun $vasp_executable"
+    if ! srun "$vasp_executable"; then
+        echo "❌ ERROR: VASP execution failed in $(pwd)." >&2
+    fi
+
+    if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+        echo "✅ Calculation completed successfully after this run."
+        completed_count=$((completed_count + 1))
+    else
+        echo "❌ Calculation still not completed after this run." >&2
+        failed_count=$((failed_count + 1))
+        unfinished_or_failed_dirs+=("$dir")
+    fi
+
+done
+
+echo "================ 📊 Summary" 
+echo "completed_now=$completed_count    skipped_completed=$skipped_count    unfinished_or_failed=$failed_count"
+
+if (( failed_count > 0 )); then
+    echo "❌ Unfinished or failed directories:"
+    for dir in "${unfinished_or_failed_dirs[@]}"; do
+        echo "  - 📁 $dir"
+    done
+    echo "❌ Done with unfinished or failed calculations."
+    exit 1
+fi
+
+echo "🎉 Done!"
+exit 0
