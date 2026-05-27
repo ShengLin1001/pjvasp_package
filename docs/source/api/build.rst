@@ -7,9 +7,11 @@ Structure Building
 Bulk structures
 ---------------
 
-.. automodule:: mymetal.build.bulk.create
-   :members:
-   :show-inheritance:
+``mymetal.build.bulk.create`` contains bulk and slab construction helpers.
+Some functions import the runtime ``myvasp`` helper package, so this module is
+described here but not imported during the online documentation build.
+
+Important entry points include ``create_fcc_111`` and ``create_hcp_basal``.
 
 Film construction
 -----------------

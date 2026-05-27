@@ -36,6 +36,9 @@ jobs:
       - name: Install documentation dependencies
         run: python -m pip install -r docs/requirements.txt
 
+      - name: Install myalloy runtime helpers
+        run: python -m pip install --no-deps "git+https://github.com/ShengLin1001/myalloy_package.git@master"
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 

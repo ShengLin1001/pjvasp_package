@@ -1,0 +1,20 @@
+n2p2 Workflows
+==============
+
+``mymetal.ml.n2p2`` supports data preparation for neural-network potential
+training.
+
+Typical workflow
+----------------
+
+1. Generate or collect VASP calculations.
+2. Extract structures, energies and forces from ``OUTCAR`` files.
+3. Write n2p2 ``input.data`` files.
+4. Generate or compare symmetry-function parameter files.
+
+Important modules
+-----------------
+
+* ``mymetal.ml.n2p2.dataset``
+* ``mymetal.ml.n2p2.calculate.sf``
+* ``mymetal.ml.n2p2.sfparamgen.sfparamgen``

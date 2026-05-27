@@ -8,10 +8,16 @@ Post-Processing
    :members:
    :show-inheritance:
 
-.. automodule:: mymetal.post.general
-   :members:
-   :show-inheritance:
+Runtime-dependent modules
+-------------------------
 
-.. automodule:: mymetal.post.neb
+The modules below are part of the post-processing API, but they import the
+external ``myvasp`` helper package and are not imported during the online
+documentation build:
 
-.. automodule:: mymetal.post.gsfe
+* ``mymetal.post.general``
+* ``mymetal.post.neb``
+* ``mymetal.post.gsfe``
+* ``mymetal.post.stretch``
+* ``mymetal.post.Cij_energy``
+* ``mymetal.post.convergence``

@@ -34,6 +34,9 @@ exclude_patterns = [
     'mymetal.ml.rst',
     'mymetal.post.rst',
     'mymetal.universial*.rst',
+    'installation.rst',
+    'quickstart.rst',
+    'workflows.rst',
 ]
 
 # Keep the documentation build independent of optional simulation runtimes.
@@ -57,3 +60,8 @@ autodoc_typehints = 'description'
 
 html_theme = "sphinx_rtd_theme"
 html_title = 'mymetal Documentation'
+html_theme_options = {
+    'navigation_depth': 4,
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+}
