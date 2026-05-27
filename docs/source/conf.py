@@ -40,7 +40,6 @@ exclude_patterns = [
 
 # Keep the documentation build independent of optional simulation runtimes.
 autodoc_mock_imports = [
-    'brokenaxes',
     'hetbuilder',
     'monty',
     'ovito',
@@ -49,7 +48,6 @@ autodoc_mock_imports = [
     'pymatgen',
     'torch',
     'torchvision',
-    'myvasp',
 ]
 autodoc_member_order = 'bysource'
 autodoc_typehints = 'description'
