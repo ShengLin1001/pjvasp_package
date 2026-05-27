@@ -15,3 +15,4 @@ install their real runtime dependencies before calling the relevant functions.
    api/post
    api/universal
    api/ml
+   autoapi/index

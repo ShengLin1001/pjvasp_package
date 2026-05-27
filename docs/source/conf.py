@@ -72,4 +72,15 @@ autoapi_options = [
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "sphinx_rtd_theme"
-html_title = 'mymetal Documentation'
+html_title = "mymetal Manual"
+html_theme_options = {
+    "logo_only": False,
+    "navigation_depth": 4,
+    "collapse_navigation": True,
+    "sticky_navigation": True,
+    "includehidden": True,
+    "titles_only": False,
+}
+html_static_path = ["_static"]
+html_css_files = ["css/manual.css"]
+html_show_sourcelink = False

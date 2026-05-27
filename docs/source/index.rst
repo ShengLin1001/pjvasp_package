@@ -1,17 +1,18 @@
-mymetal Documentation
----------------------
+mymetal Manual
+--------------
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Documentation
+   :maxdepth: 3
+   :caption: Contents
 
    installation
    quickstart
    workflows
    api
-   autoapi/index
 
-``mymetal`` is the Python package at the core of ``pjvasp_package``. It
+``mymetal`` is the Python package at the core of ``pjvasp_package``. This
+manual follows a Sphinx handbook layout similar to a simulation-code manual.
+It
 provides reusable tools for computational materials workflows: structure
 construction, VASP-oriented I/O, property calculations, post-processing,
 plotting utilities, and preparation of machine-learning-potential data.
