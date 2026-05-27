@@ -1,0 +1,9 @@
+Sphinx>=7.2,<9
+sphinx-rtd-theme>=2,<4
+ase>=3.22
+matplotlib>=3.7
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+spglib>=2.0
+typing_extensions>=4.8

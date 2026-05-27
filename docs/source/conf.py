@@ -7,11 +7,12 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../../mymetal'))
+
+sys.path.insert(0, os.path.abspath('../..'))
 
 project = 'mymetal'
-copyright = '2024, louis'
-author = 'louis'
+copyright = '2024-2026, J. Pei'
+author = 'J. Pei'
 release = '1.0.0'
 
 # -- General configuration ---------------------------------------------------
@@ -20,15 +21,34 @@ release = '1.0.0'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx.ext.doctest',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.todo',
-    'sphinx.ext.coverage',
     'sphinx.ext.mathjax',
+    'sphinx.ext.todo',
 ]
 
 templates_path = ['_templates']
-exclude_patterns = []
+exclude_patterns = [
+    'modules.rst',
+    'mymetal.rst',
+    'mymetal.calculate*.rst',
+    'mymetal.io*.rst',
+    'mymetal.ml.rst',
+    'mymetal.post.rst',
+    'mymetal.universial*.rst',
+]
+
+# Keep the documentation build independent of optional simulation runtimes.
+autodoc_mock_imports = [
+    'hetbuilder',
+    'monty',
+    'ovito',
+    'palettable',
+    'prettytable',
+    'pymatgen',
+    'torch',
+    'torchvision',
+]
+autodoc_member_order = 'bysource'
+autodoc_typehints = 'description'
 
 
 
@@ -36,4 +56,4 @@ exclude_patterns = []
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "sphinx_rtd_theme"
-html_static_path = ['_static']
+html_title = 'mymetal Documentation'

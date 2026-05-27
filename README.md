@@ -96,10 +96,11 @@ LAMMPS 输入模板，当前可见模板主要围绕：
 
 ### `docs/`
 
-Sphinx 文档工程和已生成的 HTML 文档。入口通常是：
+Sphinx 官方文档工程。入口为：
 
-- `docs/source/`
-- `docs/build/html/index.html`
+- 源码：`docs/source/`
+- 在线站点：<https://shenglin1001.github.io/pjvasp_package/>
+- 本地预览：`docs/_build/html/index.html`
 
 ### `yin_github/`
 
@@ -290,7 +291,7 @@ project_folder/
 
 ## 7. 依赖
 
-根据 `forclear/requirements.txt`，核心依赖大致包括：
+根据根目录 `requirements.txt`，核心依赖大致包括：
 
 - 数值与科学计算：`numpy`、`scipy`、`sympy`、`statsmodels`
 - 材料建模：`ase`、`spglib`、`pymatgen`、`mp-api`
@@ -306,38 +307,27 @@ project_folder/
 
 ## 8. 安装建议
 
-### 8.1 推荐方式：源码工作区方式使用
+### 8.1 推荐方式：可编辑安装
 
-当前仓库根目录没有看到标准的 `pyproject.toml` 或可直接使用的根级 `setup.py`。现有打包脚本位于 `forclear/setup.py`，但它与当前源码布局并不完全对齐。
-
-因此，最稳妥的使用方式是：
+仓库根目录提供了 `setup.py`，可以在 Python 3.10 环境中直接安装：
 
 1. 克隆仓库
 2. 安装依赖
-3. 将仓库根目录加入 `PYTHONPATH`，或在 IDE / notebook 中以源码方式引用
+3. 以可编辑模式安装 `mymetal-pkg`
 
 示例：
 
 ```shell
-pip install -r forclear/requirements.txt
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
-然后在当前仓库根目录下运行 Python，或自行把根目录加入 `PYTHONPATH`。
-
-### 8.2 如果你准备整理打包配置
-
-仓库中存在以下打包痕迹：
-
-- `forclear/setup.py`
-- `mymetal_pkg.egg-info/`
-
-这说明项目曾经以 `mymetal-pkg` 名称打包过，但当前仓库状态下，建议先补齐根目录打包配置，再使用：
+如仅需本地构建官方文档，可安装较小的文档依赖集合：
 
 ```shell
-pip install -e .
+python -m pip install -r docs/requirements.txt
+python -m sphinx -b html -W --keep-going docs/source docs/_build/html
 ```
-
-换句话说，README 这里刻意不把 `pip install -e .` 当成现成保证可用的命令。
 
 ## 9. 文档与示例
 
@@ -346,11 +336,11 @@ pip install -e .
 仓库自带 Sphinx 工程：
 
 - 源文件：`docs/source/`
-- 构建结果：`docs/build/html/`
+- 在线文档：<https://shenglin1001.github.io/pjvasp_package/>
+- 本地构建结果：`docs/_build/html/`
 
-如果只是快速浏览，可直接打开：
-
-- `docs/build/html/index.html`
+`main` 分支的文档变更通过 GitHub Actions 自动构建并发布到 GitHub
+Pages。本地构建后可打开 `docs/_build/html/index.html` 预览同一站点。
 
 ### 示例
 
