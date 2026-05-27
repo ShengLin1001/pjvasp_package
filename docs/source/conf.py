@@ -53,7 +53,9 @@ autodoc_member_order = 'bysource'
 autodoc_typehints = 'description'
 
 autoapi_type = 'python'
-autoapi_dirs = ['../../mymetal']
+autoapi_dirs = [
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '../../mymetal'))
+]
 autoapi_root = 'autoapi'
 autoapi_options = [
     'members',
