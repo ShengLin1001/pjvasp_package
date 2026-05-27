@@ -9,6 +9,7 @@ mymetal Documentation
    quickstart
    workflows
    api
+   autoapi/index
 
 ``mymetal`` is the Python package at the core of ``pjvasp_package``. It
 provides reusable tools for computational materials workflows: structure

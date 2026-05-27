@@ -23,6 +23,8 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.mathjax',
     'sphinx.ext.todo',
+    'myst_parser',
+    'autoapi.extension',
 ]
 
 templates_path = ['_templates']
@@ -38,6 +40,7 @@ exclude_patterns = [
 
 # Keep the documentation build independent of optional simulation runtimes.
 autodoc_mock_imports = [
+    'brokenaxes',
     'hetbuilder',
     'monty',
     'ovito',
@@ -46,9 +49,20 @@ autodoc_mock_imports = [
     'pymatgen',
     'torch',
     'torchvision',
+    'myvasp',
 ]
 autodoc_member_order = 'bysource'
 autodoc_typehints = 'description'
+
+autoapi_type = 'python'
+autoapi_dirs = ['../../mymetal']
+autoapi_root = 'autoapi'
+autoapi_options = [
+    'members',
+    'undoc-members',
+    'show-inheritance',
+    'show-module-summary',
+]
 
 
 
