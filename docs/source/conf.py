@@ -40,8 +40,10 @@ exclude_patterns = [
 
 # Keep the documentation build independent of optional simulation runtimes.
 autodoc_mock_imports = [
+    'brokenaxes',
     'hetbuilder',
     'monty',
+    'myvasp',
     'ovito',
     'palettable',
     'prettytable',

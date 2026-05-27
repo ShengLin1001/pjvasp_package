@@ -10,6 +10,7 @@ install their real runtime dependencies before calling the relevant functions.
 
    api/build
    api/calculate
+   api/cr
    api/io
    api/post
    api/universal

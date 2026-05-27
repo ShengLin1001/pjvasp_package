@@ -24,6 +24,21 @@ Principal entry point: ``mymetal.build.film.stretch.generate_film``.
    :members:
    :show-inheritance:
 
+.. automodule:: mymetal.build.film.findcubic
+   :members:
+   :show-inheritance:
+
 .. automodule:: mymetal.build.film.findhetero
 
 Principal entry points include ``find_hetero`` and ``build_supercells``.
+
+.. automodule:: mymetal.build.film.extrfilm
+   :members:
+   :show-inheritance:
+
+Workflow helpers
+----------------
+
+.. automodule:: mymetal.build.workflow.general
+   :members:
+   :show-inheritance:

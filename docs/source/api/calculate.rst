@@ -30,6 +30,10 @@ Mechanics and mismatch
 
 Principal entry point: ``mymetal.calculate.calmismatch.calhetero.cal_mismatch``.
 
+.. automodule:: mymetal.calculate.calmath.matrix
+   :members:
+   :show-inheritance:
+
 Electronic and materials analysis
 ---------------------------------
 
@@ -38,3 +42,13 @@ Electronic and materials analysis
    :show-inheritance:
 
 .. automodule:: mymetal.calculate.material_science.schmid
+   :members:
+   :show-inheritance:
+
+.. automodule:: mymetal.calculate.electronic_structure.universal
+   :members:
+   :show-inheritance:
+
+.. automodule:: mymetal.calculate.electronic_structure.plotter
+   :members:
+   :show-inheritance:
