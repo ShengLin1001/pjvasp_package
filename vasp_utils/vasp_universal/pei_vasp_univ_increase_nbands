@@ -1,0 +1,63 @@
+#!/bin/bash
+set -euo pipefail
+
+outcar=${1:-OUTCAR}
+
+if [ ! -f "$outcar" ]; then
+    echo "ERROR: cannot find OUTCAR file: $outcar" >&2
+    exit 1
+fi
+
+if ! command -v pei_vasp_univ_find_and_change >/dev/null 2>&1; then
+    echo "ERROR: pei_vasp_univ_find_and_change is not in PATH" >&2
+    exit 1
+fi
+
+read -r nelect nions nbands_old < <(
+    awk '
+        nelect == "" && match($0, /(^|[[:space:]])NELECT[[:space:]]*=[[:space:]]*[-+0-9.eE]+/) {
+            s = substr($0, RSTART, RLENGTH)
+            sub(/^.*NELECT[[:space:]]*=[[:space:]]*/, "", s)
+            nelect = s
+        }
+
+        nions == "" && match($0, /(^|[[:space:]])NIONS[[:space:]]*=[[:space:]]*[0-9]+/) {
+            s = substr($0, RSTART, RLENGTH)
+            sub(/^.*NIONS[[:space:]]*=[[:space:]]*/, "", s)
+            nions = s
+        }
+
+        nbands_old == "" && match($0, /(^|[[:space:]])NBANDS[[:space:]]*=[[:space:]]*[0-9]+/) {
+            s = substr($0, RSTART, RLENGTH)
+            sub(/^.*NBANDS[[:space:]]*=[[:space:]]*/, "", s)
+            nbands_old = s
+        }
+
+        nelect != "" && nions != "" && nbands_old != "" {
+            print nelect, nions, nbands_old
+            exit
+        }
+    ' "$outcar"
+)
+
+if [ -z "$nelect" ] || [ -z "$nions" ]; then
+    echo "ERROR: failed to extract NELECT or NIONS from $outcar" >&2
+    echo "NELECT='$nelect', NIONS='$nions'" >&2
+    exit 1
+fi
+
+nbands=$(awk -v nelect="$nelect" -v nions="$nions" 'BEGIN {
+    value = nelect / 2 + 2 * nions
+    nbands = int(value)
+    if (value > nbands) {
+        nbands += 1
+    }
+    print nbands
+}')
+
+echo "NELECT=$nelect"
+echo "NIONS=$nions"
+echo "NBANDS=$nbands"
+echo "NBANDS_OLD=$nbands_old"
+
+pei_vasp_univ_find_and_change -nbands "$nbands"

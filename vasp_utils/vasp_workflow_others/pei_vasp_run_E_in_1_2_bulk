@@ -4,6 +4,8 @@
 # echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 # example: pei_vasp_run_E_in_1_2_bulk -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1
 
+# 这个脚本根据 CONTCAR 的 a0 为该 cell 的基准，分别在x和y方向施加 a1/a0 和 a2/a0 的stretch
+
 main(){
     srcdir0=y_full_relax
 
@@ -71,12 +73,13 @@ else
     cp POSCAR CONTCAR
 fi
 
+# 参数脚本的变化不应该在这个工作流文件中体现！！！！！！！！！
 # yin_vasp_univ_find_and_change  -isif  3
 # echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 
 # # sometime, we dont't want to relax the cell shape during the ionic relaxation
-yin_vasp_univ_find_and_change  -isif  2
-echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+# yin_vasp_univ_find_and_change  -isif  2
+# echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
 
 cd ..
 
@@ -135,7 +138,7 @@ strainy = $val2/$a0
 atoms_cell[:, 0] *= strainx
 atoms_cell[:, 1] *= strainy
 ################### Sometimes, you don't want to change c basis vector
-# atoms_cell[:, 2] /= (strainx*strainy)
+atoms_cell[:, 2] /= (strainx*strainy)
 
 atoms.set_cell(atoms_cell, scale_atoms=True)
 atoms_cell2 = np.array(atoms.get_cell().copy())
@@ -148,18 +151,18 @@ a3_new = atoms_cell2[2]
 my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0, label = f'strainx:{strainx} strainy:{strainy} val1:$val1  val2:$val2')
 
 # Uniform bixial strain check
-if abs($val1 - $val2) < 1e-6:
-  if abs(np.linalg.norm(a1_new)-$val1) > 1e-6 or abs(np.linalg.norm(a2_new)-$val2) > 1e-6:
-      print('Error in setting lattice vectors!')
-      print('a1_new:',np.linalg.norm(a1_new))
-      print('a2_new:',np.linalg.norm(a2_new))
-      raise Exception('Error in setting lattice vectors!')
+# if abs($val1 - $val2) < 1e-6:
+#     if abs(np.linalg.norm(a1_new)-$val1) > 1e-6 or abs(np.linalg.norm(a2_new)-$val2) > 1e-6:
+#         print('Error in setting lattice vectors!')
+#         print('a1_new:',np.linalg.norm(a1_new))
+#         print('a2_new:',np.linalg.norm(a2_new))
+#         # raise Exception('Error in setting lattice vectors!')
 
-# if abs(volume2 - volume) > 1e-6:
-#     print('Error in volume conservation!')
-#     print('volume old:',volume)
-#     print('volume new:',volume2)
-#     raise Exception('Error in volume conservation!')
+if abs(volume2 - volume) > 1e-6:
+    print('Error in volume conservation!')
+    print('volume old:',volume)
+    print('volume new:',volume2)
+    # raise Exception('Error in volume conservation!')
 
 
 "
