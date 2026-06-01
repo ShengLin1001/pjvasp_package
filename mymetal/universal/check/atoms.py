@@ -10,25 +10,30 @@ Functions:
 
 """
 
-from ovito.io import import_file
 from ovito.modifiers import CommonNeighborAnalysisModifier
 from pathlib import Path
+from ovito.io.ase import ase_to_ovito
+from ase import Atoms
+from ovito.pipeline import StaticSource, Pipeline
 
-def get_cna_count(path_atoms: Path = Path('./')) -> tuple[int, int, int, int, int]:
+def get_cna_count(atoms: Atoms = None ) -> tuple[int, int, int, int, int]:
         """Get the count of different crystal structures (FCC, HCP, BCC, ICO, OTHER) from an OVITO file.
         
         Args:
-            path_atoms (Path): The path to the OVITO file containing atomic data.
+            atoms (Atoms): The ASE Atoms object containing atomic data.
         
         Returns:
             tuple[int, int, int, int, int]: A tuple containing the counts of FCC, HCP, BCC, ICO, and OTHER structures, respectively.
         """
 
-        if not path_atoms.is_file():
-            raise FileNotFoundError(f"The file '{path_atoms}' does not exist.")
+        if atoms is None:
+            raise ValueError("The 'atoms' argument cannot be None.")
+
+        # Convert ASE Atoms to OVITO format
+        atoms_ovito = ase_to_ovito(atoms)
 
         # Read in OVITO for CNA analysis
-        pipeline = import_file(Path(path_atoms))
+        pipeline = Pipeline(source=StaticSource(data=atoms_ovito))
         cna_modifier = CommonNeighborAnalysisModifier(mode=CommonNeighborAnalysisModifier.Mode.AdaptiveCutoff)
         pipeline.modifiers.append(cna_modifier)
         results = pipeline.compute()
