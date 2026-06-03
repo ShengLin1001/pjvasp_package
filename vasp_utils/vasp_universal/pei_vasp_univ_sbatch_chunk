@@ -1,15 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
-# Example script:
-# #!/bin/bash
-# #SBATCH -p amd_512
-# #SBATCH -N 1
-# #SBATCH -n 128
-# source /public3/soft/modules/module.sh
-# module load mpi/intel/17.0.7-thc
-# export PATH=/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin:$PATH
-# pei_vasp_univ_sbatch_sequential ./y_dir vasp_std "$@"
+# Usage:
+# pei_vasp_univ_sbatch_chunk 10 pei_slurm_univ_vasp_544_sequential_single_allocation.sh "$@"
+# pei_vasp_univ_sbatch_chunk 10 pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh "$@"
 
 usage() {
     echo "Usage: bash chunk.sh <num_chunks> <submit_script> [--dry-run]" >&2

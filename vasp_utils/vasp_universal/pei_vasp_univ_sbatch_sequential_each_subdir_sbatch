@@ -1,0 +1,162 @@
+#!/bin/bash
+
+# Submit unfinished VASP calculations below y_dir one at a time.
+# Each calculation is submitted from its own directory with sbatch --wait, so
+# parent logging records the directory-level progress while each child Slurm job
+# keeps its own slurm output in that calculation directory.
+
+# Usage:
+#   pei_vasp_univ_sbatch_sequential_each_subdir_sbatch [root_dir] [submit_script] [lsubdir] [completion_marker]
+# Example:
+#   pei_vasp_univ_sbatch_sequential_each_subdir_sbatch ./y_dir pei_slurm_univ_vasp_544.sh "" "reached required accuracy"
+
+# 目录根路径，默认使用当前目录下的 y_dir
+root_dir="${1:-./y_dir}"
+# 每个计算子目录中使用的 Slurm 提交脚本
+submit_script="${2:-pei_slurm_univ_vasp_544.sh}"
+# 逗号分隔的 root_dir 下一级子目录 basename 列表；为空时遍历 root_dir 下全部一级目录
+lsubdir="${3:-}"
+# OUTCAR 中用于判断计算完成的标记
+completion_marker="${4:-reached required accuracy}"
+
+if [[ ! -d "$root_dir" ]]; then
+    echo "❌ ERROR: sequential job directory not found: $root_dir" >&2
+    exit 1
+fi
+
+command -v sbatch >/dev/null 2>&1 || {
+    echo "❌ ERROR: sbatch command not found in PATH." >&2
+    exit 1
+}
+
+submit_script_fallback=""
+if [[ "$submit_script" == */* ]]; then
+    if [[ ! -r "$submit_script" ]]; then
+        echo "❌ ERROR: submit script is not readable: $submit_script" >&2
+        exit 1
+    fi
+    submit_script_fallback="$(cd -- "$(dirname -- "$submit_script")" && pwd)/$(basename -- "$submit_script")"
+else
+    submit_script_fallback="$(command -v "$submit_script" || true)"
+fi
+
+# 启用 nullglob 以防止没有目录时 glob 模式被原样保留，将为 job_dirs 赋值一个空数组
+shopt -s nullglob
+if [[ -z "$lsubdir" ]]; then
+    job_dirs=("$root_dir"/*/)
+else
+    IFS=',' read -r -a lsubdir_items <<< "$lsubdir"
+    job_dirs=()
+    for subdir in "${lsubdir_items[@]}"; do
+        if [[ -z "$subdir" ]]; then
+            echo "❌ ERROR: empty directory name in lsubdir: $lsubdir" >&2
+            exit 1
+        fi
+        if [[ "$subdir" == */* ]]; then
+            echo "❌ ERROR: lsubdir entries must be basenames below $root_dir: $subdir" >&2
+            exit 1
+        fi
+        job_dir="${root_dir%/}/$subdir/"
+        if [[ ! -d "$job_dir" ]]; then
+            echo "❌ ERROR: lsubdir directory not found: $job_dir" >&2
+            exit 1
+        fi
+        job_dirs+=("$job_dir")
+    done
+fi
+if (( ${#job_dirs[@]} == 0 )); then
+    echo "❌ ERROR: no calculation directories found below: $root_dir" >&2
+    exit 1
+fi
+
+start_dir="$(pwd)"
+submitted_count=0
+skipped_count=0
+converged_after_count=0
+unconverged_count=0
+submit_failed_count=0
+unconverged_dirs=()
+submit_failed_dirs=()
+
+echo "🚀 ==> Submitting VASP jobs sequentially below $root_dir"
+echo "🧩 Submit script: $submit_script"
+if [[ -n "$submit_script_fallback" ]]; then
+    echo "🧩 Submit script fallback: $submit_script_fallback"
+fi
+echo "🧩 lsubdir: ${lsubdir:-all}"
+
+for dir in "${job_dirs[@]}"; do
+
+    cd "$start_dir" || exit 1
+    echo ""
+    echo "================ 📁 $dir"
+
+    if ! cd "$dir"; then
+        echo "❌ ERROR: cannot enter directory: $dir" >&2
+        submit_failed_count=$((submit_failed_count + 1))
+        submit_failed_dirs+=("$dir")
+        continue
+    fi
+    echo "📍 Current dir: $(pwd)"
+
+    if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+        echo "✅ Calculation already converged, skipping submission."
+        skipped_count=$((skipped_count + 1))
+        continue
+    fi
+
+    if [[ -r "$submit_script" ]]; then
+        job_submit_script="./$submit_script"
+    elif [[ -n "$submit_script_fallback" && -r "$submit_script_fallback" ]]; then
+        job_submit_script="$submit_script_fallback"
+    else
+        echo "❌ ERROR: submit script not found in $(pwd) or PATH: $submit_script" >&2
+        submit_failed_count=$((submit_failed_count + 1))
+        submit_failed_dirs+=("$dir")
+        continue
+    fi
+
+    echo "▶️  Command: sbatch --wait $job_submit_script"
+    if sbatch --wait "$job_submit_script"; then
+        echo "✅ Slurm child job ended with success status."
+    else
+        status=$?
+        echo "⚠️  Slurm child job ended with non-zero status: $status"
+    fi
+    submitted_count=$((submitted_count + 1))
+
+    if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+        echo "✅ Calculation converged after child job."
+        converged_after_count=$((converged_after_count + 1))
+    else
+        echo "❌ Calculation is not converged after child job." >&2
+        unconverged_count=$((unconverged_count + 1))
+        unconverged_dirs+=("$dir")
+    fi
+done
+
+echo ""
+echo "================ 📊 Summary"
+echo "submitted=$submitted_count    converged_after_submit=$converged_after_count    skipped_converged=$skipped_count    unconverged=$unconverged_count    submit_failed=$submit_failed_count"
+
+if (( unconverged_count > 0 )); then
+    echo "❌ Unconverged directories:"
+    for dir in "${unconverged_dirs[@]}"; do
+        echo "  - 📁 $dir"
+    done
+fi
+
+if (( submit_failed_count > 0 )); then
+    echo "❌ Submit failed directories:"
+    for dir in "${submit_failed_dirs[@]}"; do
+        echo "  - 📁 $dir"
+    done
+fi
+
+if (( unconverged_count > 0 || submit_failed_count > 0 )); then
+    echo "❌ Done with unconverged or failed calculations."
+    exit 1
+fi
+
+echo "🎉 Done!"
+exit 0

@@ -9,7 +9,7 @@ MODULE_FILE="/public3/soft/modules/module.sh"
 VASP_BIN_DIR="/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin"
 VASP_EXE="vasp_std"
 ROOT_DIR="./y_dir"
-SEQUENTIAL_HELPER="pei_vasp_univ_sbatch_sequential"
+SEQUENTIAL_HELPER="pei_vasp_univ_sbatch_sequential_single_allocation"
 
 ok() {
     echo "✅ $*"
@@ -25,7 +25,7 @@ fail() {
 }
 
 if [[ -z "${SLURM_JOB_ID:-}" ]]; then
-    fail "This is a Slurm batch script. Please run it with: sbatch sub.544.sequential.sh"
+    fail "This is a Slurm batch script. Please run it with: sbatch pei_slurm_univ_vasp_544_sequential_single_allocation.sh"
 fi
 
 LSUBDIR="${1:-}"

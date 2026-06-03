@@ -24,7 +24,7 @@ fail() {
 }
 
 if [[ -z "${SLURM_JOB_ID:-}" ]]; then
-    fail "This is a Slurm batch script. Please run it with: sbatch sub.544.sh"
+    fail "This is a Slurm batch script. Please run it with: sbatch pei_slurm_univ_vasp_544.sh"
 fi
 
 echo "================ VASP 5.4.4 Slurm preflight ================"

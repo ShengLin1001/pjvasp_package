@@ -47,6 +47,12 @@ else
     exit 1
 fi
 
+# Clean up old files that might cause issues with restarting
+echo "==> cleaning up output file"
+rm -f CHG CONTCAR* DOSCAR* DYNMAT EIGENVAL IBZKPT OPTIC OSZICAR* OUTCAR* PROCAR* PCDAT W* XDATCAR* PARCHG* vasprun.xml SUMMARY.* REPORT
+echo $(ls)
+echo "done!"
+
 echo "▶️  Command: srun $vasp_executable"
 if ! srun "$vasp_executable"; then
     echo "❌ ERROR: VASP execution failed in $(pwd)." >&2

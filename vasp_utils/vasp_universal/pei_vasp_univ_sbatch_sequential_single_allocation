@@ -4,9 +4,9 @@
 # Re-running this command is safe for completed directories: they are skipped.
 
 # Usage:
-#   pei_vasp_univ_sbatch_sequential [root_dir] [vasp_executable] [lsubdir] [completion_marker] [smaller_ediff_marker]
+#   pei_vasp_univ_sbatch_sequential_single_allocation [root_dir] [vasp_executable] [lsubdir] [completion_marker] [smaller_ediff_marker]
 # Example:
-#   pei_vasp_univ_sbatch_sequential ./y_dir vasp_std "" "reached required accuracy" "please rerun with smaller EDIFF"
+#   pei_vasp_univ_sbatch_sequential_single_allocation ./y_dir vasp_std "" "reached required accuracy" "please rerun with smaller EDIFF"
 
 # 目录根路径，默认使用当前目录下的 y_dir
 root_dir="${1:-./y_dir}"

@@ -6,12 +6,12 @@
 # Usage:
 #   pei_vasp_univ_sbatch_parallel [root_dir] [submit_script] [lsubdir] [completion_marker]
 # Example:
-#   pei_vasp_univ_sbatch_parallel ./y_dir sub.544.sh "" "reached required accuracy"
+#   pei_vasp_univ_sbatch_parallel ./y_dir pei_slurm_univ_vasp_544.sh "" "reached required accuracy"
 
 # 目录根路径，默认使用当前目录下的 y_dir
 root_dir="${1:-./y_dir}"
 # Slurm 提交脚本；可以是文件路径，也可以是 PATH 中的命令名
-submit_script="${2:-sub.544.sh}"
+submit_script="${2:-pei_slurm_univ_vasp_544.sh}"
 # 逗号分隔的 root_dir 下一级子目录 basename 列表；为空时遍历 root_dir 下全部一级目录
 lsubdir="${3:-}"
 # OUTCAR 中用于判断计算完成的标记
