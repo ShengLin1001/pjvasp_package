@@ -1,0 +1,109 @@
+#!/bin/bash
+set -euo pipefail
+
+# Example script:
+# #!/bin/bash
+# #SBATCH -p amd_512
+# #SBATCH -N 1
+# #SBATCH -n 128
+# source /public3/soft/modules/module.sh
+# module load mpi/intel/17.0.7-thc
+# export PATH=/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin:$PATH
+# pei_vasp_univ_sbatch_sequential ./y_dir vasp_std "$@"
+
+usage() {
+    echo "Usage: bash chunk.sh <num_chunks> <submit_script> [--dry-run]" >&2
+}
+
+echo $(pwd)
+
+if (( $# < 2 || $# > 3 )); then
+    usage
+    exit 1
+fi
+
+num_chunks="$1"
+submit_script="$2"
+mode="${3:-}"
+
+if [[ ! "$num_chunks" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: num_chunks must be a positive integer: $num_chunks" >&2
+    exit 1
+fi
+
+if [[ -n "$mode" && "$mode" != "--dry-run" ]]; then
+    usage
+    exit 1
+fi
+
+if [[ ! -d y_dir ]]; then
+    echo "ERROR: y_dir not found in current directory." >&2
+    exit 1
+fi
+
+if [[ -f "$submit_script" ]]; then
+    submit_script_path="$submit_script"
+else
+    submit_script_path=$(command -v "$submit_script" || true)
+fi
+
+if [[ -z "${submit_script_path:-}" ]]; then
+    echo "ERROR: submit script not found as file or command in PATH: $submit_script" >&2
+    exit 1
+fi
+
+if [[ ! -r "$submit_script_path" ]]; then
+    echo "ERROR: submit script is not readable: $submit_script_path" >&2
+    exit 1
+fi
+
+mapfile -t dirs < <(find y_dir -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+total=${#dirs[@]}
+
+if (( total == 0 )); then
+    echo "ERROR: no subdirectories found below y_dir." >&2
+    exit 1
+fi
+
+if (( num_chunks > total )); then
+    echo "ERROR: num_chunks ($num_chunks) cannot exceed number of y_dir subdirectories ($total)." >&2
+    exit 1
+fi
+
+base=$(( total / num_chunks ))
+remainder=$(( total % num_chunks ))
+offset=0
+
+for (( chunk=1; chunk<=num_chunks; chunk++ )); do
+    count=$base
+    if (( chunk <= remainder )); then
+        count=$(( count + 1 ))
+    fi
+
+    lsubdir=""
+    for (( i=0; i<count; i++ )); do
+        name="${dirs[offset + i]}"
+        if [[ -z "$lsubdir" ]]; then
+            lsubdir="$name"
+        else
+            lsubdir="$lsubdir,$name"
+        fi
+    done
+
+    echo
+    echo "========================================================================"
+    echo "🚀 Submitting chunk $chunk / $num_chunks"
+    echo "------------------------------------------------------------------------"
+    echo "  Number of directories : $count"
+    echo "  Subdirectories        : $lsubdir"
+    echo "  Submit script         : $submit_script_path"
+    echo "  Submit command        : sbatch $submit_script_path \"$lsubdir\""
+    echo "========================================================================"
+    echo
+
+    if [[ "$mode" != "--dry-run" ]]; then
+        sbatch "$submit_script_path" "$lsubdir"
+    fi
+
+    offset=$(( offset + count ))
+done

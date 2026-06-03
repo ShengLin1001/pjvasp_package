@@ -1,19 +1,72 @@
 #!/bin/bash
 
-# Submit all calculations that are not already converged as independent jobs.
-# This checks the current OUTCAR only; submitted jobs are not monitored here.
+# Submit unfinished VASP calculations below y_dir as independent Slurm jobs.
+# This checks current OUTCAR files only; submitted jobs are not monitored here.
+#
+# Usage:
+#   pei_vasp_univ_sbatch_parallel [root_dir] [submit_script] [lsubdir] [completion_marker]
+# Example:
+#   pei_vasp_univ_sbatch_parallel ./y_dir sub.544.sh "" "reached required accuracy"
 
+# 目录根路径，默认使用当前目录下的 y_dir
 root_dir="${1:-./y_dir}"
-completion_marker="${2:-reached required accuracy}"
-smaller_ediff_marker="${3:-please rerun with smaller EDIFF}"
+# Slurm 提交脚本；可以是文件路径，也可以是 PATH 中的命令名
+submit_script="${2:-sub.544.sh}"
+# 逗号分隔的 root_dir 下一级子目录 basename 列表；为空时遍历 root_dir 下全部一级目录
+lsubdir="${3:-}"
+# OUTCAR 中用于判断计算完成的标记
+completion_marker="${4:-reached required accuracy}"
 
 if [[ ! -d "$root_dir" ]]; then
     echo "❌ ERROR: job directory not found: $root_dir" >&2
     exit 1
 fi
 
+if [[ -f "$submit_script" ]]; then
+    submit_script_path="$(cd -- "$(dirname -- "$submit_script")" && pwd)/$(basename -- "$submit_script")"
+else
+    submit_script_path="$(command -v "$submit_script" || true)"
+fi
+
+if [[ -z "${submit_script_path:-}" ]]; then
+    echo "❌ ERROR: submit script not found as file or command in PATH: $submit_script" >&2
+    exit 1
+fi
+
+if [[ ! -r "$submit_script_path" ]]; then
+    echo "❌ ERROR: submit script is not readable: $submit_script_path" >&2
+    exit 1
+fi
+
+command -v sbatch >/dev/null 2>&1 || {
+    echo "❌ ERROR: sbatch command not found in PATH." >&2
+    exit 1
+}
+
+# 启用 nullglob 以防止没有目录时 glob 模式被原样保留，将为 job_dirs 赋值一个空数组
 shopt -s nullglob
-job_dirs=("$root_dir"/*/)
+if [[ -z "$lsubdir" ]]; then
+    job_dirs=("$root_dir"/*/)
+else
+    IFS=',' read -r -a lsubdir_items <<< "$lsubdir"
+    job_dirs=()
+    for subdir in "${lsubdir_items[@]}"; do
+        if [[ -z "$subdir" ]]; then
+            echo "❌ ERROR: empty directory name in lsubdir: $lsubdir" >&2
+            exit 1
+        fi
+        if [[ "$subdir" == */* ]]; then
+            echo "❌ ERROR: lsubdir entries must be basenames below $root_dir: $subdir" >&2
+            exit 1
+        fi
+        job_dir="${root_dir%/}/$subdir/"
+        if [[ ! -d "$job_dir" ]]; then
+            echo "❌ ERROR: lsubdir directory not found: $job_dir" >&2
+            exit 1
+        fi
+        job_dirs+=("$job_dir")
+    done
+fi
 if (( ${#job_dirs[@]} == 0 )); then
     echo "❌ ERROR: no calculation directories found below: $root_dir" >&2
     exit 1
@@ -23,10 +76,11 @@ start_dir="$(pwd)"
 converged_count=0
 submitted_count=0
 submit_failed_count=0
-not_converged_dirs=()
+submitted_dirs=()
 submit_failed_dirs=()
 
 echo "🚀 ==> Checking convergence and submitting unfinished jobs below $root_dir in parallel"
+echo "🧩 Submit script: $submit_script_path"
 
 for dir in "${job_dirs[@]}"; do
     cd "$start_dir" || exit 1
@@ -36,7 +90,7 @@ for dir in "${job_dirs[@]}"; do
     if ! cd "$dir"; then
         echo "❌ ERROR: cannot enter directory: $dir" >&2
         submit_failed_count=$((submit_failed_count + 1))
-        not_converged_dirs+=("$dir")
+        submit_failed_dirs+=("$dir")
         continue
     fi
 
@@ -47,35 +101,10 @@ for dir in "${job_dirs[@]}"; do
         continue
     fi
 
-    not_converged_dirs+=("$dir")
-    if [[ -s CONTCAR ]]; then
-        echo "❌ Calculation not completed, restarting from CONTCAR..."
-        if ! cp CONTCAR POSCAR; then
-            echo "❌ ERROR: cannot copy CONTCAR to POSCAR; skipping this directory." >&2
-            submit_failed_count=$((submit_failed_count + 1))
-            submit_failed_dirs+=("$dir")
-            continue
-        fi
-        if [[ -f OUTCAR ]] && grep -qF "$smaller_ediff_marker" OUTCAR; then
-            echo "⚠️  Detected previous EDIFF too large. Please consider rerunning with a smaller EDIFF."
-            pei_vasp_univ_find_and_change -ediff 1e-10
-            pei_vasp_univ_find_and_change -algo Normal  # more robust
-        fi
-    elif [[ -f POSCAR ]]; then
-        echo "🔍 No restart CONTCAR found, submitting from existing POSCAR..."
-    else
-        echo "❌ ERROR: neither a non-empty CONTCAR nor POSCAR is available." >&2
-        submit_failed_count=$((submit_failed_count + 1))
-        submit_failed_dirs+=("$dir")
-        continue
-    fi
-
-    # delete old output files to save space
-    pei_vasp_univ_clean_up_full
-
-    echo "▶️  Command: sbatch sub.*"
-    if sbatch sub.*; then
+    echo "▶️  Command: sbatch $submit_script_path"
+    if sbatch "$submit_script_path"; then
         submitted_count=$((submitted_count + 1))
+        submitted_dirs+=("$dir")
     else
         echo "❌ ERROR: sbatch failed in $(pwd)." >&2
         submit_failed_count=$((submit_failed_count + 1))
@@ -87,9 +116,9 @@ echo ""
 echo "================ 📊 Summary"
 echo "converged=$converged_count    submitted_unconverged=$submitted_count    submit_failed=$submit_failed_count"
 
-if (( ${#not_converged_dirs[@]} > 0 )); then
-    echo "❌ Not converged directories:"
-    for dir in "${not_converged_dirs[@]}"; do
+if (( ${#submitted_dirs[@]} > 0 )); then
+    echo "🚀 Submitted directories:"
+    for dir in "${submitted_dirs[@]}"; do
         echo "  - 📁 $dir"
     done
 fi
@@ -104,4 +133,3 @@ fi
 
 echo "🎉 Submission check done!"
 exit 0
-

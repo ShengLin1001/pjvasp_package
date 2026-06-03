@@ -1,0 +1,61 @@
+#!/bin/bash
+
+# Run or resume one VASP calculation directory inside an existing Slurm allocation.
+#
+# Usage:
+#   pei_vasp_univ_sbatch <job_dir> [vasp_executable] [completion_marker] [smaller_ediff_marker]
+#
+# Exit codes:
+#   0   calculation completed after this run
+#   10  calculation was already completed and skipped
+#   1   calculation failed or required files were missing
+
+job_dir="${1:-.}"
+vasp_executable="${2:-vasp_std}"
+completion_marker="${3:-reached required accuracy}"
+smaller_ediff_marker="${4:-please rerun with smaller EDIFF}"
+
+echo ""
+echo "================ 📁 $job_dir"
+
+if ! cd "$job_dir"; then
+    echo "❌ ERROR: cannot enter directory: $job_dir" >&2
+    exit 1
+fi
+echo "📍 Current dir: $(pwd)"
+
+if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+    echo "✅ Calculation completed successfully, skipping..."
+    exit 10
+fi
+
+if [[ -s CONTCAR ]]; then
+    echo "❌ Calculation not completed, restarting from CONTCAR..."
+    if ! cp CONTCAR POSCAR; then
+        echo "❌ ERROR: cannot copy CONTCAR to POSCAR; skipping this directory." >&2
+        exit 1
+    fi
+    if [[ -f OUTCAR ]] && grep -qF "$smaller_ediff_marker" OUTCAR; then
+        echo "⚠️  Detected previous EDIFF too large. Please consider rerunning with a smaller EDIFF."
+        pei_vasp_univ_find_and_change -ediff 1e-10
+        pei_vasp_univ_find_and_change -algo Normal  # more robust
+    fi
+elif [[ -f POSCAR ]]; then
+    echo "🔍 No restart CONTCAR found, submitting from existing POSCAR..."
+else
+    echo "❌ ERROR: neither a non-empty CONTCAR nor POSCAR is available." >&2
+    exit 1
+fi
+
+echo "▶️  Command: srun $vasp_executable"
+if ! srun "$vasp_executable"; then
+    echo "❌ ERROR: VASP execution failed in $(pwd)." >&2
+fi
+
+if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+    echo "✅ Calculation completed successfully after this run."
+    exit 0
+fi
+
+echo "❌ Calculation still not completed after this run." >&2
+exit 1
