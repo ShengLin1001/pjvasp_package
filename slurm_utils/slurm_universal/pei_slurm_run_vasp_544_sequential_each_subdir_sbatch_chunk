@@ -1,0 +1,15 @@
+#!/bin/bash
+set -euo pipefail
+
+# Usage:
+#   pei_slurm_run_vasp_544_sequential_each_subdir_sbatch_chunk <num_chunks> [--dry-run]
+#
+# Split first-level ./y_dir subdirectories into num_chunks chunks. Each chunk is
+# submitted as one parent job; that parent job submits one child sbatch job per
+# selected subdirectory and waits before moving to the next subdirectory.
+if (( $# < 1 || $# > 2 )); then
+    echo "Usage: $(basename "$0") <num_chunks> [--dry-run]" >&2
+    exit 1
+fi
+
+pei_vasp_univ_sbatch_chunk "$1" pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh "${2:-}"
