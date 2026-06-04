@@ -183,7 +183,7 @@ class nnpdata:
         self.lforces = lforces
         self.lenergies = lenergies
 
-        self.outcar_dict = {
+        self.dict = {
             'latoms': latoms,
             'ltags': ltags,
             'lcomment_files': lcomment_files,
