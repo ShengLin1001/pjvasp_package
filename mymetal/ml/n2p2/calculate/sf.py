@@ -730,3 +730,129 @@ def get_angular_pairs(elements: list = None) -> list:
     if count != num_ele * (num_ele * (num_ele + 1) / 2):
         raise ValueError('count not equal to num_ele * (num_ele * (num_ele + 1) / 2)')
     return sorted(triplets)
+
+def get_leta_lshift_from_N(rc: float = None, N: int = 5) -> tuple:
+    """Generate logarithmically spaced eta values and corresponding length shifts.
+
+    Constructs a ratio grid centered around 1 with values spanning roughly
+    from ``1 / N`` to ``N``. The eta values are computed as ``(ratio / rc) ** 2``.
+    The returned shift values are computed from the larger-ratio half of the
+    grid as ``rc / ratio``.
+
+    Args:
+        rc: Cutoff radius used to scale eta and shift values.
+        N: Number controlling the density and range of the logarithmic grid.
+
+    Returns:
+        A tuple ``(leta, lshift)`` where ``leta`` is an array of eta values and
+        ``lshift`` is an array of corresponding length shifts.
+    """
+    lid = np.arange(N+1, dtype=float)
+    lratio = np.append(1/N**(lid[::-1][:-1]/N), N**(lid/N))
+    lshift = rc/lratio[N+1:]
+    leta = (lratio/rc)**2
+    return leta, lshift
+
+
+def _format_sf_block(mysf):
+    """Format one symmetry-function parameter object as an n2p2 block.
+
+    Args:
+        mysf: Symmetry-function parameter object to serialize.
+
+    Returns:
+        Formatted settings overview and parameter strings.
+    """
+    return mysf.write_settings_overview() + mysf.write_parameter_strings()
+
+
+def generate_radial_blocks(lrc, n, lrs):
+    """Generate g2 radial symmetry-function blocks.
+
+    Args:
+        lrc: Cutoff radii used to generate eta grids.
+        n: Density parameter for each eta grid.
+        lrs: Relative radial shifts scaled by each cutoff radius.
+
+    Returns:
+        List of formatted g2 symmetry-function blocks.
+    """
+    blocks = []
+    for rc in lrc:
+        leta, _ = get_leta_lshift_from_N(rc=rc, N=n)
+
+        for rs in np.array(lrs) * rc:
+            mysf = mysfparams(
+                g="g2",
+                center_atoms="Au",
+                neighbor_atoms=["Au"],
+                leta=leta,
+                lrs=[rs] * len(leta),
+                lrc=[rc] * len(leta),
+            )
+            blocks.append(_format_sf_block(mysf))
+    return blocks
+
+
+def generate_angular_blocks(type, lrc, n, lrs, llambd, lzeta):
+    """Generate g3 or g9 angular symmetry-function blocks.
+
+    Args:
+        type: Angular symmetry-function type, either ``"g3"`` or ``"g9"``.
+        lrc: Cutoff radii used to generate eta grids.
+        n: Density parameter for each eta grid.
+        lrs: Relative radial shifts scaled by each cutoff radius.
+        llambd: Lambda values for angular symmetry functions.
+        lzeta: Zeta values for angular symmetry functions.
+
+    Returns:
+        List of formatted angular symmetry-function blocks.
+    """
+    blocks = []
+    for rc in lrc:
+        leta, _ = get_leta_lshift_from_N(rc=rc, N=n)
+
+        for rs in np.array(lrs) * rc:
+            for lambd in llambd:
+                for zeta in lzeta:
+                    mysf = mysfparams(
+                        g=type,
+                        center_atoms="Au",
+                        neighbor_atoms=["Au", "Au"],
+                        leta=leta,
+                        lrs=[rs] * len(leta),
+                        lrc=[rc] * len(leta),
+                        llambd=[lambd] * len(leta),
+                        lzeta=[zeta] * len(leta),
+                    )
+                    blocks.append(_format_sf_block(mysf))
+    return blocks
+
+
+def generate_g2_g3_g9_blocks(lrc_dict=None, n_dict=None, lrs_dict=None, llambd=None, lzeta=None, if_print=True):
+    """Generate formatted g2, g3, and g9 symmetry-function blocks.
+
+    Args:
+        lrc_dict: Mapping from symmetry-function type to cutoff radii.
+        n_dict: Mapping from symmetry-function type to eta-grid density.
+        lrs_dict: Mapping from symmetry-function type to relative shifts.
+        llambd: Lambda values shared by g3 and g9 blocks.
+        lzeta: Zeta values shared by g3 and g9 blocks.
+        if_print: If True, print each generated block.
+
+    Returns:
+        List of formatted symmetry-function blocks.
+    """
+    # store the generated blocks in a list
+    blocks = []
+    for key, _ in lrc_dict.items():
+        if key == "g2":
+            blocks.extend(generate_radial_blocks(lrc_dict[key], n_dict[key], lrs_dict[key]))
+        if key in ["g3", "g9"]:
+            blocks.extend(generate_angular_blocks(key, lrc_dict[key], n_dict[key], lrs_dict[key], llambd, lzeta))
+    
+    if if_print:
+        for block in blocks:
+            print(block)
+    
+    return blocks
