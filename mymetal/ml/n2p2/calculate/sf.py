@@ -19,6 +19,10 @@ Functions:
     - load_from_npp_data: Load SF parameters from an NNP input file.
     - get_radial_pairs: Generate unique pairs of elements for radial SFs.
     - get_angular_pairs: Generate unique triplets of elements for angular SFs.
+    - get_leta_lshift_from_N: Generate eta and r_shift parameters based on the number of desired SFs.
+    - generate_radial_blocks: Generate parameter blocks for radial SFs.
+    - generate_angular_blocks: Generate parameter blocks for angular SFs.
+    - generate_g2_g3_g9_blocks: Generate parameter blocks for g2, g3, and g9 SFs.
 
 Change Log:
     - 2025.10.16: Fixed a bug in cal_g3_g9 where rc parameter was not passed, and added rc offset to Gaussian peaks.
