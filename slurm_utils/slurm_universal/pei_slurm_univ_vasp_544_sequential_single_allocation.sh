@@ -28,6 +28,10 @@ if [[ -z "${SLURM_JOB_ID:-}" ]]; then
     fail "This is a Slurm batch script. Please run it with: sbatch pei_slurm_univ_vasp_544_sequential_single_allocation.sh"
 fi
 
+if [[ $# -ge 2 ]]; then
+    ROOT_DIR="$1"
+    shift
+fi
 LSUBDIR="${1:-}"
 
 echo "============ VASP 5.4.4 sequential Slurm preflight ==========="
@@ -59,8 +63,8 @@ SEQUENTIAL_HELPER_PATH="$(command -v "$SEQUENTIAL_HELPER" || true)"
 [[ -x "$SEQUENTIAL_HELPER_PATH" ]] || fail "sequential helper is not executable: $SEQUENTIAL_HELPER_PATH"
 ok "Sequential helper: $SEQUENTIAL_HELPER_PATH"
 
-if [[ $# -gt 0 ]]; then
-    warn "Extra arguments passed to sequential helper after root and executable: $*"
+if [[ $# -gt 1 ]]; then
+    warn "Extra arguments passed to sequential helper after root, executable and lsubdir: ${*:2}"
 fi
 
 echo "✅ Preflight passed. Starting sequential VASP workflow."

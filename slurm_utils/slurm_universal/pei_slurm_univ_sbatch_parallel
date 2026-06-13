@@ -1,0 +1,207 @@
+#!/bin/bash
+set -euo pipefail
+
+# Submit first-level root_dir subdirectories as independent Slurm jobs.
+#
+# Usage:
+#   pei_slurm_univ_sbatch_parallel [root_dir] [submit_script] [lsubdir] [--dry-run]
+#   pei_slurm_univ_sbatch_parallel [root_dir] [submit_script] [lsubdir] --skip-if-file-contains <relative_file> <marker>
+#
+# Examples:
+#   pei_slurm_univ_sbatch_parallel ./y_dir pei_slurm_univ_vasp_544.sh
+#   pei_slurm_univ_sbatch_parallel ./train_dirs pei_slurm_univ_n2p2_train.sh "" --dry-run
+#   pei_slurm_univ_sbatch_parallel ./y_dir pei_slurm_univ_vasp_544.sh "" --skip-if-file-contains OUTCAR "reached required accuracy"
+
+usage() {
+    echo "Usage: $(basename "$0") [root_dir] [submit_script] [lsubdir] [--dry-run] [--skip-if-file-contains <relative_file> <marker>]" >&2
+}
+
+root_dir="${1:-./y_dir}"
+submit_script="${2:-}"
+lsubdir="${3:-}"
+
+if (( $# > 0 )); then
+    shift
+fi
+if (( $# > 0 )); then
+    shift
+fi
+if (( $# > 0 )); then
+    shift
+fi
+
+dry_run=false
+skip_file=""
+skip_marker=""
+
+while (( $# > 0 )); do
+    case "$1" in
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
+        --skip-if-file-contains)
+            if (( $# < 3 )); then
+                usage
+                exit 1
+            fi
+            skip_file="$2"
+            skip_marker="$3"
+            shift 3
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$submit_script" ]]; then
+    echo "ERROR: submit_script is required." >&2
+    usage
+    exit 1
+fi
+
+if [[ ! -d "$root_dir" ]]; then
+    echo "ERROR: root_dir not found: $root_dir" >&2
+    exit 1
+fi
+
+if [[ -n "$skip_file" && "$skip_file" == */* ]]; then
+    echo "ERROR: skip file must be a relative file name inside each job directory: $skip_file" >&2
+    exit 1
+fi
+
+if [[ -f "$submit_script" ]]; then
+    submit_script_path="$(cd -- "$(dirname -- "$submit_script")" && pwd)/$(basename -- "$submit_script")"
+else
+    submit_script_path="$(command -v "$submit_script" || true)"
+fi
+
+if [[ -z "${submit_script_path:-}" ]]; then
+    echo "ERROR: submit script not found as file or command in PATH: $submit_script" >&2
+    exit 1
+fi
+
+if [[ ! -r "$submit_script_path" ]]; then
+    echo "ERROR: submit script is not readable: $submit_script_path" >&2
+    exit 1
+fi
+
+if [[ "$dry_run" != true ]]; then
+    command -v sbatch >/dev/null 2>&1 || {
+        echo "ERROR: sbatch command not found in PATH." >&2
+        exit 1
+    }
+fi
+
+shopt -s nullglob
+if [[ -z "$lsubdir" ]]; then
+    job_dirs=("$root_dir"/*/)
+else
+    IFS=',' read -r -a lsubdir_items <<< "$lsubdir"
+    job_dirs=()
+    for subdir in "${lsubdir_items[@]}"; do
+        if [[ -z "$subdir" ]]; then
+            echo "ERROR: empty directory name in lsubdir: $lsubdir" >&2
+            exit 1
+        fi
+        if [[ "$subdir" == */* ]]; then
+            echo "ERROR: lsubdir entries must be basenames below $root_dir: $subdir" >&2
+            exit 1
+        fi
+        job_dir="${root_dir%/}/$subdir/"
+        if [[ ! -d "$job_dir" ]]; then
+            echo "ERROR: lsubdir directory not found: $job_dir" >&2
+            exit 1
+        fi
+        job_dirs+=("$job_dir")
+    done
+fi
+
+if (( ${#job_dirs[@]} == 0 )); then
+    echo "ERROR: no job directories found below: $root_dir" >&2
+    exit 1
+fi
+
+start_dir="$(pwd)"
+skipped_count=0
+submitted_count=0
+submit_failed_count=0
+submitted_dirs=()
+submit_failed_dirs=()
+skipped_dirs=()
+
+echo "Submitting first-level directories below $root_dir in parallel"
+echo "Submit script: $submit_script_path"
+echo "lsubdir: ${lsubdir:-all}"
+if [[ -n "$skip_file" ]]; then
+    echo "Skip completed when $skip_file contains marker: $skip_marker"
+fi
+if [[ "$dry_run" == true ]]; then
+    echo "Mode: dry-run"
+fi
+
+for dir in "${job_dirs[@]}"; do
+    cd "$start_dir" || exit 1
+    echo ""
+    echo "================ $dir"
+
+    if ! cd "$dir"; then
+        echo "ERROR: cannot enter directory: $dir" >&2
+        submit_failed_count=$((submit_failed_count + 1))
+        submit_failed_dirs+=("$dir")
+        continue
+    fi
+
+    echo "Current dir: $(pwd)"
+    if [[ -n "$skip_file" && -f "$skip_file" ]] && grep -qF "$skip_marker" "$skip_file"; then
+        echo "Skip: $skip_file contains completion marker."
+        skipped_count=$((skipped_count + 1))
+        skipped_dirs+=("$dir")
+        continue
+    fi
+
+    echo "Command: sbatch $submit_script_path"
+    if [[ "$dry_run" == true ]]; then
+        continue
+    fi
+
+    if sbatch "$submit_script_path"; then
+        submitted_count=$((submitted_count + 1))
+        submitted_dirs+=("$dir")
+    else
+        echo "ERROR: sbatch failed in $(pwd)." >&2
+        submit_failed_count=$((submit_failed_count + 1))
+        submit_failed_dirs+=("$dir")
+    fi
+done
+
+echo ""
+echo "================ Summary"
+echo "skipped=$skipped_count    submitted=$submitted_count    submit_failed=$submit_failed_count"
+
+if (( ${#submitted_dirs[@]} > 0 )); then
+    echo "Submitted directories:"
+    for dir in "${submitted_dirs[@]}"; do
+        echo "  - $dir"
+    done
+fi
+
+if (( ${#skipped_dirs[@]} > 0 )); then
+    echo "Skipped directories:"
+    for dir in "${skipped_dirs[@]}"; do
+        echo "  - $dir"
+    done
+fi
+
+if (( submit_failed_count > 0 )); then
+    echo "Done with failed submissions."
+    for dir in "${submit_failed_dirs[@]}"; do
+        echo "  - $dir"
+    done
+    exit 1
+fi
+
+echo "Submission check done."
+exit 0

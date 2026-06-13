@@ -2,14 +2,26 @@
 set -euo pipefail
 
 # Usage:
-#   pei_slurm_run_vasp_544_sequential_single_allocation_chunk <num_chunks> [--dry-run]
+#   pei_slurm_run_vasp_544_sequential_single_allocation_chunk [root_dir] <num_chunks> [--dry-run]
 #
-# Split first-level ./y_dir subdirectories into num_chunks chunks. Each chunk is
-# submitted as one parent job; that parent job runs all selected subdirectories
-# inside a single Slurm allocation.
-if (( $# < 1 || $# > 2 )); then
-    echo "Usage: $(basename "$0") <num_chunks> [--dry-run]" >&2
+# Split first-level root_dir subdirectories into num_chunks chunks. Each chunk
+# is submitted as one parent job; that parent job runs all selected
+# subdirectories inside a single Slurm allocation.
+if (( $# < 1 || $# > 3 )); then
+    echo "Usage: $(basename "$0") [root_dir] <num_chunks> [--dry-run]" >&2
     exit 1
 fi
 
-pei_vasp_univ_sbatch_chunk "$1" pei_slurm_univ_vasp_544_sequential_single_allocation.sh "${2:-}"
+if [[ "$1" =~ ^[1-9][0-9]*$ ]]; then
+    if (( $# > 2 )); then
+        echo "Usage: $(basename "$0") [root_dir] <num_chunks> [--dry-run]" >&2
+        exit 1
+    fi
+    pei_vasp_univ_sbatch_chunk "$1" pei_slurm_univ_vasp_544_sequential_single_allocation.sh "${2:-}"
+else
+    if (( $# < 2 )); then
+        echo "Usage: $(basename "$0") [root_dir] <num_chunks> [--dry-run]" >&2
+        exit 1
+    fi
+    pei_vasp_univ_sbatch_chunk "$1" "$2" pei_slurm_univ_vasp_544_sequential_single_allocation.sh "${3:-}"
+fi

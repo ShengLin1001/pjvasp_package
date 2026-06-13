@@ -2,23 +2,46 @@
 set -euo pipefail
 
 # Usage:
+# pei_vasp_univ_sbatch_chunk [root_dir] <num_chunks> <submit_script> [--dry-run]
+# pei_vasp_univ_sbatch_chunk ./y_dir 10 pei_slurm_univ_vasp_544_sequential_single_allocation.sh "$@"
+# pei_vasp_univ_sbatch_chunk ./y_dir 10 pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh "$@"
+#
+# Backward-compatible usage:
 # pei_vasp_univ_sbatch_chunk 10 pei_slurm_univ_vasp_544_sequential_single_allocation.sh "$@"
 # pei_vasp_univ_sbatch_chunk 10 pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh "$@"
 
 usage() {
-    echo "Usage: bash chunk.sh <num_chunks> <submit_script> [--dry-run]" >&2
+    echo "Usage: $(basename "$0") [root_dir] <num_chunks> <submit_script> [--dry-run]" >&2
 }
 
 echo $(pwd)
 
-if (( $# < 2 || $# > 3 )); then
+if (( $# < 2 || $# > 4 )); then
     usage
     exit 1
 fi
 
-num_chunks="$1"
-submit_script="$2"
-mode="${3:-}"
+root_dir="./y_dir"
+explicit_root_dir=false
+if [[ "$1" =~ ^[1-9][0-9]*$ ]]; then
+    if (( $# > 3 )); then
+        usage
+        exit 1
+    fi
+    num_chunks="$1"
+    submit_script="$2"
+    mode="${3:-}"
+else
+    if (( $# < 3 )); then
+        usage
+        exit 1
+    fi
+    root_dir="$1"
+    explicit_root_dir=true
+    num_chunks="$2"
+    submit_script="$3"
+    mode="${4:-}"
+fi
 
 if [[ ! "$num_chunks" =~ ^[1-9][0-9]*$ ]]; then
     echo "ERROR: num_chunks must be a positive integer: $num_chunks" >&2
@@ -30,8 +53,8 @@ if [[ -n "$mode" && "$mode" != "--dry-run" ]]; then
     exit 1
 fi
 
-if [[ ! -d y_dir ]]; then
-    echo "ERROR: y_dir not found in current directory." >&2
+if [[ ! -d "$root_dir" ]]; then
+    echo "ERROR: root_dir not found: $root_dir" >&2
     exit 1
 fi
 
@@ -51,16 +74,16 @@ if [[ ! -r "$submit_script_path" ]]; then
     exit 1
 fi
 
-mapfile -t dirs < <(find y_dir -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
+mapfile -t dirs < <(find "$root_dir" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort)
 total=${#dirs[@]}
 
 if (( total == 0 )); then
-    echo "ERROR: no subdirectories found below y_dir." >&2
+    echo "ERROR: no subdirectories found below root_dir: $root_dir" >&2
     exit 1
 fi
 
 if (( num_chunks > total )); then
-    echo "ERROR: num_chunks ($num_chunks) cannot exceed number of y_dir subdirectories ($total)." >&2
+    echo "ERROR: num_chunks ($num_chunks) cannot exceed number of root_dir subdirectories ($total)." >&2
     exit 1
 fi
 
@@ -88,15 +111,24 @@ for (( chunk=1; chunk<=num_chunks; chunk++ )); do
     echo "========================================================================"
     echo "🚀 Submitting chunk $chunk / $num_chunks"
     echo "------------------------------------------------------------------------"
+    echo "  Root directory       : $root_dir"
     echo "  Number of directories : $count"
     echo "  Subdirectories        : $lsubdir"
     echo "  Submit script         : $submit_script_path"
-    echo "  Submit command        : sbatch $submit_script_path \"$lsubdir\""
+    if [[ "$explicit_root_dir" == true ]]; then
+        echo "  Submit command        : sbatch $submit_script_path \"$root_dir\" \"$lsubdir\""
+    else
+        echo "  Submit command        : sbatch $submit_script_path \"$lsubdir\""
+    fi
     echo "========================================================================"
     echo
 
     if [[ "$mode" != "--dry-run" ]]; then
-        sbatch "$submit_script_path" "$lsubdir"
+        if [[ "$explicit_root_dir" == true ]]; then
+            sbatch "$submit_script_path" "$root_dir" "$lsubdir"
+        else
+            sbatch "$submit_script_path" "$lsubdir"
+        fi
     fi
 
     offset=$(( offset + count ))

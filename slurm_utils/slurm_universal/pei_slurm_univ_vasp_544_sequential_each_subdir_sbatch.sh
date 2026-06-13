@@ -37,6 +37,10 @@ if [[ -z "${SLURM_JOB_ID:-}" ]]; then
 fi
 check_parent_resources
 
+if [[ $# -ge 2 ]]; then
+    ROOT_DIR="$1"
+    shift
+fi
 LSUBDIR="${1:-}"
 
 echo "============ VASP 5.4.4 sequential Slurm preflight ==========="

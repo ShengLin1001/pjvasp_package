@@ -88,7 +88,7 @@ sbatch pei_slurm_univ_vasp_544.sh
 2. 将所有未完成的子目录作为相互独立的 Slurm 作业提交，不等待每个作业完成。
 
 ```bash
-pei_vasp_univ_sbatch_parallel -> sbatch pei_slurm_univ_vasp_544.sh
+pei_vasp_univ_sbatch_parallel -> pei_slurm_univ_sbatch_parallel -> sbatch pei_slurm_univ_vasp_544.sh
 ```
 
    在包含 `y_dir` 的目录中运行：
@@ -96,6 +96,9 @@ pei_vasp_univ_sbatch_parallel -> sbatch pei_slurm_univ_vasp_544.sh
 ```bash
 pei_vasp_univ_sbatch_parallel ./y_dir pei_slurm_univ_vasp_544.sh
 ```
+
+   `pei_slurm_univ_sbatch_parallel` 是软件无关的 Slurm 并行提交 helper。VASP 包装脚本通过
+   `--skip-if-file-contains OUTCAR "reached required accuracy"` 保留旧的 OUTCAR 完成判断。
 
 3. 通过顺序提交包装脚本提交 `y_dir` 中选定的分块。
 
@@ -107,7 +110,9 @@ pei_vasp_univ_sbatch_chunk -> pei_slurm_univ_vasp_544_sequential_each_subdir_sba
    当你有意创建多个父顺序作业，并希望每个父作业负责 `y_dir` 的一个子集时，可以使用这种模式。提交脚本参数决定每个分块使用哪一种顺序提交模式。
 
 ```bash
-pei_vasp_univ_sbatch_chunk <num_chunks> <submit_script> [--dry-run]
-pei_vasp_univ_sbatch_chunk 10 pei_slurm_univ_vasp_544_sequential_single_allocation.sh
-pei_vasp_univ_sbatch_chunk 10 pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh
+pei_vasp_univ_sbatch_chunk [root_dir] <num_chunks> <submit_script> [--dry-run]
+pei_vasp_univ_sbatch_chunk ./y_dir 10 pei_slurm_univ_vasp_544_sequential_single_allocation.sh
+pei_vasp_univ_sbatch_chunk ./y_dir 10 pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh
 ```
+
+省略 `root_dir` 时，默认使用当前目录下的 `./y_dir`。
