@@ -4,72 +4,30 @@
 #SBATCH -n 128
 #SBATCH -o slurm-%j.out
 #SBATCH -e slurm-%j.out
+set -uo pipefail
 
-MODULE_FILE="/public3/soft/modules/module.sh"
-VASP_BIN_DIR="/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin"
-VASP_EXE="vasp_std"
-SINGLE_JOB_RUNNER="pei_vasp_univ_sbatch"
+# Run or resume one VASP 5.4.4 calculation in the submission directory.
+# Workflow: pei_slurm_univ_vasp_544.sh -> pei_vasp_univ_sbatch
 
-ok() {
-    echo "✅ $*"
-}
+_lib="$(command -v pei_slurm_univ_lib.sh || true)"
+[[ -n "$_lib" ]] || { echo "❌ ERROR: pei_slurm_univ_lib.sh not found in PATH" >&2; exit 1; }
+_env="$(command -v pei_vasp_univ_load_env || true)"
+[[ -n "$_env" ]] || { echo "❌ ERROR: pei_vasp_univ_load_env not found in PATH" >&2; exit 1; }
+# shellcheck source=/dev/null
+source "$_lib"
+# shellcheck source=/dev/null
+source "$_env"
 
-warn() {
-    echo "⚠️  $*"
-}
-
-fail() {
-    echo "❌ ERROR: $*" >&2
-    exit 1
-}
-
-if [[ -z "${SLURM_JOB_ID:-}" ]]; then
-    fail "This is a Slurm batch script. Please run it with: sbatch pei_slurm_univ_vasp_544.sh"
-fi
+[[ -n "${SLURM_JOB_ID:-}" ]] || ps_fail "This is a Slurm batch script. Run it with: sbatch $(basename "$0")"
 
 echo "================ VASP 5.4.4 Slurm preflight ================"
-echo "📄 Slurm output: slurm-${SLURM_JOB_ID}.out"
-echo "📁 Work dir: $(pwd)"
-echo "🖥️  Host: $(hostname)"
-echo "🧾 Job ID: ${SLURM_JOB_ID}"
-echo "📦 Partition: ${SLURM_JOB_PARTITION:-unknown}"
-echo "🔢 Nodes: ${SLURM_JOB_NUM_NODES:-unknown}"
-echo "🔢 Tasks: ${SLURM_NTASKS:-unknown}"
+ps_print_slurm_preflight
+pei_vasp_univ_load_env
+pei_vasp_check_inputs INCAR POSCAR POTCAR KPOINTS Y_CONSTR_LATT
+echo "✅ Preflight passed. Running single-directory VASP workflow."
+echo "==========================================================="
 
-[[ -r "$MODULE_FILE" ]] || fail "module file not readable: $MODULE_FILE"
-source "$MODULE_FILE" || fail "failed to source module file: $MODULE_FILE"
-module load mpi/intel/17.0.7-thc || fail "failed to load module: mpi/intel/17.0.7-thc"
-ok "Loaded module: mpi/intel/17.0.7-thc"
-
-[[ -d "$VASP_BIN_DIR" ]] || fail "VASP bin directory not found: $VASP_BIN_DIR"
-export PATH="$VASP_BIN_DIR:$PATH"
-command -v "$VASP_EXE" >/dev/null 2>&1 || fail "VASP executable not found in PATH: $VASP_EXE"
-ok "VASP executable: $(command -v "$VASP_EXE")"
-
-SINGLE_JOB_RUNNER_PATH="$(command -v "$SINGLE_JOB_RUNNER" || true)"
-[[ -n "$SINGLE_JOB_RUNNER_PATH" ]] || fail "single job runner not found in PATH: $SINGLE_JOB_RUNNER"
-[[ -x "$SINGLE_JOB_RUNNER_PATH" ]] || fail "single job runner is not executable: $SINGLE_JOB_RUNNER_PATH"
-ok "Single job runner: $SINGLE_JOB_RUNNER_PATH"
-
-for input_file in INCAR POSCAR POTCAR KPOINTS Y_CONSTR_LATT; do
-    [[ -f "$input_file" ]] || fail "required VASP input file missing in $(pwd): $input_file"
-    ok "Found input file: $input_file"
-done
-
-# 或许后面可以自动生成POTCAR利用vaspkit
-
-if [[ $# -gt 0 ]]; then
-    warn "Extra arguments passed to single job runner after job directory and executable: $*"
-fi
-
-echo "✅ Preflight passed. Starting single-directory VASP workflow."
-echo "============================================================="
-"$SINGLE_JOB_RUNNER_PATH" "." "$VASP_EXE" "$@"
+pei_vasp_univ_sbatch "." "$VASP_EXE"
 status=$?
-
-if (( status == 10 )); then
-    ok "Single-directory workflow skipped an already completed calculation."
-    exit 0
-fi
-
+(( status == 10 )) && { ps_ok "Already completed; nothing to do."; exit 0; }
 exit "$status"

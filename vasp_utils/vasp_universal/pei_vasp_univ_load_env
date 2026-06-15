@@ -1,0 +1,36 @@
+#!/bin/bash
+# VASP runtime environment + input checks for the pei_slurm_univ_vasp_544*.sh
+# Slurm parent scripts.
+#
+# Source this file; do not execute it. Requires pei_slurm_univ_lib.sh to be
+# sourced first (for ps_ok / ps_fail).
+#
+#   pei_vasp_univ_load_env                      # load module + put vasp_std on PATH
+#   pei_vasp_check_inputs INCAR POSCAR ...       # verify required input files exist
+#
+# Override any of these via the environment before sourcing if needed:
+: "${VASP_MODULE_FILE:=/public3/soft/modules/module.sh}"
+: "${VASP_MODULE:=mpi/intel/17.0.7-thc}"
+: "${VASP_BIN_DIR:=/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin}"
+: "${VASP_EXE:=vasp_std}"
+
+pei_vasp_univ_load_env() {
+    [[ -r "$VASP_MODULE_FILE" ]] || ps_fail "module file not readable: $VASP_MODULE_FILE"
+    # shellcheck source=/dev/null
+    source "$VASP_MODULE_FILE" || ps_fail "failed to source module file: $VASP_MODULE_FILE"
+    module load "$VASP_MODULE"  || ps_fail "failed to load module: $VASP_MODULE"
+    ps_ok "Loaded module: $VASP_MODULE"
+
+    [[ -d "$VASP_BIN_DIR" ]] || ps_fail "VASP bin directory not found: $VASP_BIN_DIR"
+    export PATH="$VASP_BIN_DIR:$PATH"
+    command -v "$VASP_EXE" >/dev/null 2>&1 || ps_fail "VASP executable not found in PATH: $VASP_EXE"
+    ps_ok "VASP executable: $(command -v "$VASP_EXE")"
+}
+
+pei_vasp_check_inputs() {
+    local f
+    for f in "$@"; do
+        [[ -f "$f" ]] || ps_fail "required VASP input file missing in $(pwd): $f"
+        ps_ok "Found input file: $f"
+    done
+}

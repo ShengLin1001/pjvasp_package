@@ -4,69 +4,38 @@
 #SBATCH -n 128
 #SBATCH -o slurm-%j.out
 #SBATCH -e slurm-%j.out
+set -uo pipefail
 
-MODULE_FILE="/public3/soft/modules/module.sh"
-VASP_BIN_DIR="/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin"
-VASP_EXE="vasp_std"
+# Run unfinished VASP calculations below root_dir one at a time, inside this
+# single Slurm allocation (each calculation runs via srun here).
+# Workflow: this script -> pei_slurm_univ_submit --mode single-alloc -> pei_vasp_univ_sbatch
+#
+# Usage (as a Slurm script):
+#   sbatch pei_slurm_univ_vasp_544_sequential_single_allocation.sh [root_dir] [lsubdir]
+#   sbatch pei_slurm_univ_vasp_544_sequential_single_allocation.sh "0.98,1.00,1.02"
+
+_lib="$(command -v pei_slurm_univ_lib.sh || true)"
+[[ -n "$_lib" ]] || { echo "❌ ERROR: pei_slurm_univ_lib.sh not found in PATH" >&2; exit 1; }
+_env="$(command -v pei_vasp_univ_load_env || true)"
+[[ -n "$_env" ]] || { echo "❌ ERROR: pei_vasp_univ_load_env not found in PATH" >&2; exit 1; }
+# shellcheck source=/dev/null
+source "$_lib"
+# shellcheck source=/dev/null
+source "$_env"
+
+[[ -n "${SLURM_JOB_ID:-}" ]] || ps_fail "This is a Slurm batch script. Run it with: sbatch $(basename "$0")"
+
 ROOT_DIR="./y_dir"
-SEQUENTIAL_HELPER="pei_vasp_univ_sbatch_sequential_single_allocation"
-
-ok() {
-    echo "✅ $*"
-}
-
-warn() {
-    echo "⚠️  $*"
-}
-
-fail() {
-    echo "❌ ERROR: $*" >&2
-    exit 1
-}
-
-if [[ -z "${SLURM_JOB_ID:-}" ]]; then
-    fail "This is a Slurm batch script. Please run it with: sbatch pei_slurm_univ_vasp_544_sequential_single_allocation.sh"
-fi
-
-if [[ $# -ge 2 ]]; then
-    ROOT_DIR="$1"
-    shift
-fi
+if [[ $# -ge 2 ]]; then ROOT_DIR="$1"; shift; fi
 LSUBDIR="${1:-}"
 
-echo "============ VASP 5.4.4 sequential Slurm preflight ==========="
-echo "📄 Slurm output: slurm-${SLURM_JOB_ID}.out"
-echo "📁 Work dir: $(pwd)"
-echo "📁 Sequential root: $ROOT_DIR"
-echo "🧩 lsubdir: ${LSUBDIR:-all}"
-echo "🖥️  Host: $(hostname)"
-echo "🧾 Job ID: ${SLURM_JOB_ID}"
-echo "📦 Partition: ${SLURM_JOB_PARTITION:-unknown}"
-echo "🔢 Nodes: ${SLURM_JOB_NUM_NODES:-unknown}"
-echo "🔢 Tasks: ${SLURM_NTASKS:-unknown}"
+echo "===== VASP 5.4.4 sequential (single allocation) preflight ====="
+ps_print_slurm_preflight
+echo "📁 Sequential root: $ROOT_DIR    🧩 lsubdir: ${LSUBDIR:-all}"
+pei_vasp_univ_load_env
+echo "✅ Preflight passed. Starting sequential VASP (single allocation)."
+echo "==============================================================="
 
-[[ -r "$MODULE_FILE" ]] || fail "module file not readable: $MODULE_FILE"
-source "$MODULE_FILE" || fail "failed to source module file: $MODULE_FILE"
-module load mpi/intel/17.0.7-thc || fail "failed to load module: mpi/intel/17.0.7-thc"
-ok "Loaded module: mpi/intel/17.0.7-thc"
-
-[[ -d "$VASP_BIN_DIR" ]] || fail "VASP bin directory not found: $VASP_BIN_DIR"
-export PATH="$VASP_BIN_DIR:$PATH"
-command -v "$VASP_EXE" >/dev/null 2>&1 || fail "VASP executable not found in PATH: $VASP_EXE"
-ok "VASP executable: $(command -v "$VASP_EXE")"
-
-[[ -d "$ROOT_DIR" ]] || fail "sequential root directory not found in $(pwd): $ROOT_DIR"
-ok "Found sequential root directory: $ROOT_DIR"
-
-SEQUENTIAL_HELPER_PATH="$(command -v "$SEQUENTIAL_HELPER" || true)"
-[[ -n "$SEQUENTIAL_HELPER_PATH" ]] || fail "sequential helper not found in PATH: $SEQUENTIAL_HELPER"
-[[ -x "$SEQUENTIAL_HELPER_PATH" ]] || fail "sequential helper is not executable: $SEQUENTIAL_HELPER_PATH"
-ok "Sequential helper: $SEQUENTIAL_HELPER_PATH"
-
-if [[ $# -gt 1 ]]; then
-    warn "Extra arguments passed to sequential helper after root, executable and lsubdir: ${*:2}"
-fi
-
-echo "✅ Preflight passed. Starting sequential VASP workflow."
-echo "============================================================="
-"$SEQUENTIAL_HELPER_PATH" "$ROOT_DIR" "$VASP_EXE" "$@"
+exec pei_slurm_univ_submit --mode single-alloc \
+    --root-dir "$ROOT_DIR" --lsubdir "$LSUBDIR" \
+    --run-cmd "pei_vasp_univ_sbatch . $VASP_EXE"
