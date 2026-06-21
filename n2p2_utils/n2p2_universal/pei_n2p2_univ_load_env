@@ -1,0 +1,39 @@
+#!/bin/bash
+# n2p2 runtime environment + input checks for the pei_slurm_univ_n2p2_* Slurm
+# parent scripts and the pei_n2p2_univ_run pipeline runner.
+#
+# Source this file; do not execute it. Requires pei_slurm_univ_lib.sh to be
+# sourced first (for ps_ok / ps_fail).
+#
+#   pei_n2p2_univ_load_env                  # load modules + put nnp-* on PATH
+#   pei_n2p2_check_inputs input.nn ...       # verify required input files exist
+#
+# Override any of these via the environment before sourcing if needed:
+: "${N2P2_MODULE_FILE:=/public3/soft/modules/module.sh}"
+: "${N2P2_MODULES:=eigen/3.8.8-cyc gsl/2.5-cjj mpi/openmpi/2.0.4-gcc-4.9.0}"
+: "${N2P2_BIN_DIR:=/public3/home/scg6928/mysoft/tools/n2p2/2.3.0/n2p2-2.3.0/bin}"
+
+pei_n2p2_univ_load_env() {
+    [[ -r "$N2P2_MODULE_FILE" ]] || ps_fail "module file not readable: $N2P2_MODULE_FILE"
+    # shellcheck source=/dev/null
+    source "$N2P2_MODULE_FILE" || ps_fail "failed to source module file: $N2P2_MODULE_FILE"
+    local m
+    for m in $N2P2_MODULES; do
+        module load "$m" || ps_fail "failed to load module: $m"
+    done
+    ps_ok "Loaded modules: $N2P2_MODULES"
+
+    [[ -d "$N2P2_BIN_DIR" ]] || ps_fail "n2p2 bin directory not found: $N2P2_BIN_DIR"
+    export PATH="$N2P2_BIN_DIR:$PATH"
+    command -v nnp-train   >/dev/null 2>&1 || ps_fail "n2p2 executable not found in PATH: nnp-train"
+    command -v nnp-scaling >/dev/null 2>&1 || ps_fail "n2p2 executable not found in PATH: nnp-scaling"
+    ps_ok "n2p2 binaries: $(command -v nnp-train)"
+}
+
+pei_n2p2_check_inputs() {
+    local f
+    for f in "$@"; do
+        [[ -f "$f" ]] || ps_fail "required n2p2 input file missing in $(pwd): $f"
+        ps_ok "Found input file: $f"
+    done
+}

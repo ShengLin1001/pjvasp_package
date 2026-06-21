@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# Run or resume one n2p2 {nnp-scaling -> nnp-train} pipeline inside an existing
+# Slurm allocation (each stage runs via srun here).
+#
+# Usage:
+#   pei_n2p2_univ_run <job_dir> [scaling_bins] [done_file] [done_marker]
+#
+# Exit codes:
+#   0   pipeline completed after this run
+#   10  pipeline was already completed and skipped
+#   1   pipeline failed or required inputs were missing
+#
+# n2p2 has no native completion marker, so this runner writes its own sentinel
+# (<done_file>) on success and uses it to skip/resume. nnp-scaling is skipped if
+# scaling.data already exists; nnp-train does not checkpoint-resume, so if a
+# previous training left partial outputs, clean the directory before rerunning.
+
+job_dir="${1:-.}"
+scaling_bins="${2:-10000}"
+done_file="${3:-n2p2.done}"
+done_marker="${4:-n2p2 pipeline finished}"
+
+echo ""
+echo "================ 📁 $job_dir"
+
+if ! cd "$job_dir"; then
+    echo "❌ ERROR: cannot enter directory: $job_dir" >&2
+    exit 1
+fi
+echo "📍 Current dir: $(pwd)"
+
+if [[ -f "$done_file" ]] && grep -qF "$done_marker" "$done_file"; then
+    echo "✅ Pipeline already completed, skipping..."
+    exit 10
+fi
+
+for f in input.nn input.data; do
+    if [[ ! -f "$f" ]]; then
+        echo "❌ ERROR: required n2p2 input file missing in $(pwd): $f" >&2
+        exit 1
+    fi
+done
+
+# Stage 1: scaling (skip if scaling.data already present and non-empty)
+if [[ -s scaling.data ]]; then
+    echo "🔍 Found existing scaling.data, skipping nnp-scaling."
+else
+    echo "▶️  Command: srun nnp-scaling $scaling_bins"
+    if ! srun nnp-scaling "$scaling_bins"; then
+        echo "❌ ERROR: nnp-scaling failed in $(pwd)." >&2
+        exit 1
+    fi
+    if [[ ! -s scaling.data ]]; then
+        echo "❌ ERROR: nnp-scaling did not produce scaling.data in $(pwd)." >&2
+        exit 1
+    fi
+fi
+
+# Stage 2: training
+echo "▶️  Command: srun nnp-train"
+if ! srun nnp-train; then
+    echo "❌ ERROR: nnp-train failed in $(pwd)." >&2
+    exit 1
+fi
+
+echo "$done_marker" > "$done_file"
+echo "✅ Pipeline completed successfully after this run."
+exit 0

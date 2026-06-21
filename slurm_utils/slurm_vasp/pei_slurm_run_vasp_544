@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# Usage:
-#   pei_slurm_run_vasp_544 [sbatch_args...]
-#
-# Submit one VASP 5.4.4 job in the current calculation directory.
-# Any arguments are passed directly to sbatch.
-sbatch pei_slurm_univ_vasp_544.sh "$@"

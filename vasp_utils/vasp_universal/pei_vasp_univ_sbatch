@@ -10,10 +10,12 @@
 #   10  calculation was already completed and skipped
 #   1   calculation failed or required files were missing
 
-job_dir="${1:-.}"
+launcher="${MY_LAUNCHER:-srun}"
+job_dir="$(realpath "${1:-.}")"   # 转化为真实路径
 vasp_executable="${2:-vasp_std}"
 completion_marker="${3:-reached required accuracy}"
 smaller_ediff_marker="${4:-please rerun with smaller EDIFF}"
+## TODO: 如果建模的时候完全是精确坐标，vasp可能会报错，需要添加微扰进去
 
 echo ""
 echo "================ 📁 $job_dir"
@@ -53,8 +55,8 @@ rm -f CHG CONTCAR* DOSCAR* DYNMAT EIGENVAL IBZKPT OPTIC OSZICAR* OUTCAR* PROCAR*
 echo $(ls)
 echo "done!"
 
-echo "▶️  Command: srun $vasp_executable"
-if ! srun "$vasp_executable"; then
+echo "▶️  Command: $launcher $vasp_executable"
+if ! $launcher "$vasp_executable"; then
     echo "❌ ERROR: VASP execution failed in $(pwd)." >&2
 fi
 

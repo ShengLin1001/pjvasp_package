@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# Usage:
-#   pei_slurm_run_vasp_544_sequential_single_allocation [lsubdir]
-#
-# lsubdir is optional. When set, it must be a comma-separated list of basenames
-# below ./y_dir, for example: "0.98,1.00,1.02".
-sbatch pei_slurm_univ_vasp_544_sequential_single_allocation.sh "$@"

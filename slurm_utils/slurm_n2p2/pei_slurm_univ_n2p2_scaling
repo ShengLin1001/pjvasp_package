@@ -1,0 +1,9 @@
+#!/bin/bash
+#SBATCH -p amd_512
+#SBATCH -N 1
+#SBATCH -n 1
+
+source /public3/soft/modules/module.sh
+module load eigen/3.8.8-cyc gsl/2.5-cjj mpi/openmpi/2.0.4-gcc-4.9.0
+export PATH="/public3/home/scg6928/mysoft/tools/n2p2/2.3.0/n2p2-2.3.0/bin:${PATH}"
+srun nnp-scaling 10000
