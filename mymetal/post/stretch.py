@@ -115,7 +115,9 @@ def post_lammps_stretch(post_data_file: str = './y_post_data.txt', refcontcar: s
     jobn, Etot, Eent, pres = vf.vasp_read_post_data(post_data_file)
 
     # zero-strain reference
-    atoms_ref = read(refcontcar, format='lammps-data')
+    # style='atomic' 必须显式指定：LAMMPS write_data 用 atom_style atomic（id type x y z [ix iy iz]），
+    # 而 ASE read_lammps_data 默认 style='full'，会按 7/10 字段解析 -> RuntimeError。只取几何（cell/natoms），元素无所谓。
+    atoms_ref = read(refcontcar, format='lammps-data', style='atomic')
     cell_ref = np.array(atoms_ref.get_cell())
     natoms = len(atoms_ref)
     # Col vector [x, y, z]
