@@ -1,6 +1,13 @@
-# `slurm_universal` 通用提交脚本
+# `slurm_utils` 提交脚本
 
-本目录存放定义明确的 `sub.*` / `pei_slurm_univ_*` 提交脚本。
+Slurm 提交脚本按用途分到三个子目录（均已加入 PATH，命令可在任意位置裸名调用）：
+
+| 子目录 | 内容 |
+|---|---|
+| `slurm_universal/` | 软件无关的核心：通用引擎 + 共享库 + 命令速查 |
+| `slurm_vasp/` | VASP 专属：单作业 / 顺序 / 监控的父脚本与便捷启动器 |
+| `slurm_n2p2/` | n2p2 专属：训练 / scaling 作业脚本 |
+| `docs/` | 架构与模式详解（见 `docs/submission-architecture-and-modes.md`） |
 
 > 注意：运行下面的脚本前，必须先完成所有前处理，包括 `pei_vasp_univ_clean_up_full`、修改 `INCAR`、更新 `KPOINTS`。
 > 只有 `pei_vasp_univ_sbatch` 会删除旧的输出文件（保留 `*.out`）：
@@ -112,16 +119,44 @@ pei_slurm_univ_submit --mode parallel --root-dir ./y_dir \
     --skip-if-file-contains OUTCAR "reached required accuracy"
 ```
 
-## 文件一览
+## 文件一览（按子目录）
+
+### `slurm_universal/`（软件无关核心）
 
 | 文件 | 角色 |
 |---|---|
-| `pei_slurm_univ_lib.sh` | sourced 共享库：输出助手 + 目录解析 + 脚本路径解析 |
+| `pei_slurm_univ_lib.sh` | sourced 共享库：输出助手 + 目录解析 + 脚本路径解析 + chunk 切分 |
 | `pei_slurm_univ_submit` | 通用引擎（`--mode` + 正交 `--chunks`），所有批量提交的唯一入口 |
+| `pei_slurm_univ_useful_command.sh` | 常用命令速查表（Slurm / VASP / …） |
+
+### `slurm_vasp/`（VASP 专属）
+
+| 文件 | 角色 |
+|---|---|
 | `pei_slurm_univ_vasp_544.sh` | VASP 单作业父脚本（`-n 128`），也作 each-subdir 的子作业 |
 | `pei_slurm_univ_vasp_544_sequential_single_allocation.sh` | single-alloc 父脚本（`-n 128`） |
 | `pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh` | each-subdir 父脚本（`-n 1`） |
-| `vasp_utils/vasp_universal/pei_vasp_univ_load_env` | sourced：加载 module、把 `vasp_std` 放进 PATH、逐文件检查输入 |
-| `vasp_utils/vasp_universal/pei_vasp_univ_sbatch` | 真正运行单个 VASP 计算的 runner（OUTCAR 判定 / CONTCAR→POSCAR / 清理 / `srun` / 退出码 0·10·1） |
+| `pei_slurm_run_vasp_544` | 便捷启动器：`sbatch` 单作业父脚本 |
+| `pei_slurm_run_vasp_544_sequential_each_subdir_sbatch` | 便捷启动器：`sbatch` each-subdir 父脚本 |
+| `pei_slurm_run_vasp_544_sequential_single_allocation` | 便捷启动器：`sbatch` single-alloc 父脚本 |
+| `pei_slurm_univ_vasp_monitor.sh` | 报错监控作业（`-n 1`，跑 `pei_vasp_univ_monitor_error`） |
+| `pei_slurm_univ_vasp_monitor` | 便捷启动器：`sbatch` 监控作业 |
 
-之前的薄包装命令（`pei_vasp_univ_sbatch_parallel`、`pei_vasp_univ_sbatch_chunk`、`pei_vasp_univ_sbatch_sequential_*`、`pei_slurm_univ_sbatch_parallel`、`pei_slurm_run_vasp_544_*_chunk`）已删除，统一改为直接调用引擎 `pei_slurm_univ_submit`（用法见上文各节）。
+### `slurm_n2p2/`（n2p2 专属）
+
+| 文件 | 角色 |
+|---|---|
+| `pei_slurm_univ_n2p2_train.sh` | n2p2 训练作业（`srun nnp-train`） |
+| `pei_slurm_univ_n2p2_scaling.sh` | n2p2 scaling 作业（`srun nnp-scaling`） |
+
+### 依赖（位于 `vasp_utils/vasp_universal/`，不在本目录）
+
+| 文件 | 角色 |
+|---|---|
+| `pei_vasp_univ_load_env` | sourced：加载 module、把 `vasp_std` 放进 PATH、逐文件检查输入 |
+| `pei_vasp_univ_sbatch` | 真正运行单个 VASP 计算的 runner（OUTCAR 判定 / CONTCAR→POSCAR / 清理 / `srun` / 退出码 0·10·1） |
+| `pei_vasp_univ_monitor_error` | 扫描运行中作业 stdout，遇报错关键字即 `scancel` |
+
+> 子目录间互不依赖目录路径：所有脚本都按**裸名经 PATH** 互相调用（`command -v` / `sbatch <name>` / 引擎的 `ps_resolve_script_path`），因此三个目录都必须在 PATH 上。
+>
+> 历史薄包装命令（`pei_vasp_univ_sbatch_parallel/chunk/sequential_*`、`pei_slurm_univ_sbatch_parallel`、`pei_slurm_run_vasp_544_*_chunk`）已删除，统一改为直接调用引擎 `pei_slurm_univ_submit`（用法见上文各节）。

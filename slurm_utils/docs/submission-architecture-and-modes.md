@@ -1,9 +1,9 @@
 # 提交脚本：架构、模式与流程详解
 
-本文档讲清楚 `slurm_utils/slurm_universal/` 与 `vasp_utils/vasp_universal/` 这套批量提交脚本：
+本文档讲清楚 `slurm_utils/`（`slurm_universal/` 通用核心、`slurm_vasp/` VASP 脚本）与 `vasp_utils/vasp_universal/` 这套批量提交脚本：
 **每个文件干什么、三种模式各自的作用和流程、以及端到端怎么跑起来**。
 
-> 速查手册见 [`../slurm_universal/README.md`](../slurm_universal/README.md)；本文是其背后的原理与流程说明。
+> 速查手册见 [`../README.md`](../README.md)；本文是其背后的原理与流程说明。
 
 ---
 
