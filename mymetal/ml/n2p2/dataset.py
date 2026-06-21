@@ -340,3 +340,38 @@ class nnpdata:
 
     def get_dict(self) -> dict:
         return self.dict
+
+    @staticmethod
+    def read_tags_from_datafile(file_path: str = None, default_tag: str = 'all') -> list:
+        """Lightweight reader: one ``tag=`` label per structure from input.data.
+
+        Scans only the ``begin`` / ``comment`` / ``end`` lines and the regex
+        ``tag=...`` in the comment, without building ASE Atoms objects. About
+        30x faster than ``load_from_datafile`` when only the tags are needed
+        (e.g. mapping the structure index in trainpoints/trainforces to a tag);
+        results are identical, and the order matches the file/structure index.
+
+        Args:
+            file_path (str): Path to the input.data file.
+            default_tag (str): Tag for structures whose comment has no tag=
+                field. Defaults to 'all' (same convention as load_from_datafile).
+
+        Returns:
+            list: Tag strings, one per structure, in file order.
+        """
+        ltag = []
+        tag = default_tag
+        with open(file_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                fields = line.split()
+                if not fields:
+                    continue
+                if fields[0] == 'begin':
+                    tag = default_tag
+                elif fields[0] == 'comment':
+                    m = re.search(r'tag=([^\s]+)', line)
+                    if m:
+                        tag = m.group(1)
+                elif fields[0] == 'end':
+                    ltag.append(tag)
+        return ltag

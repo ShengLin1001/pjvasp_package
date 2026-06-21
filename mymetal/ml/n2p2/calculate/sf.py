@@ -16,7 +16,8 @@ Methods:
     - plot: Plot Gaussian functions for the SFs (supported 2, 3, 9).
     
 Functions:
-    - load_from_npp_data: Load SF parameters from an NNP input file.
+    - load_from_input_nn: Load SF parameters from an NNP input file.
+    - get_largest_rc_from_input_nn: Largest SF cutoff radius (rc) in an NNP input file.
     - get_radial_pairs: Generate unique pairs of elements for radial SFs.
     - get_angular_pairs: Generate unique triplets of elements for angular SFs.
     - get_leta_lshift_from_N: Generate eta and r_shift parameters based on the number of desired SFs.
@@ -558,7 +559,7 @@ class mysfparams:
         return fig, axes
 
 
-def load_from_npp_data(nnp_file: str = 'input.nn') -> tuple:
+def load_from_input_nn(nnp_file: str = 'input.nn') -> tuple:
     """
     Args:
         nnp_file (str): Path to the NNP input file containing symmetry function definitions.
@@ -569,7 +570,7 @@ def load_from_npp_data(nnp_file: str = 'input.nn') -> tuple:
     
     Example:
         ```python
-        g2sfs, g3sfs, g9sfs = load_from_npp_data('input.nn')
+        g2sfs, g3sfs, g9sfs = load_from_input_nn('input.nn')
 
         for (centor, neighbors), df in g2sfs.items():
             temp_dict = {
@@ -695,6 +696,33 @@ def load_from_npp_data(nnp_file: str = 'input.nn') -> tuple:
 
     #      g2,           g3,         , g9
     return lg_groups[0], lg_groups[1], lg_groups[2]
+
+def get_largest_rc_from_input_nn(nnp_file: str = 'input.nn') -> float:
+    """Return the largest symmetry-function cutoff radius (rc) defined in an n2p2 input.nn.
+
+    Parses every g2/g3/g9 ``symfunction_short`` entry via :func:`load_from_input_nn`
+    and returns the maximum cutoff radius. A typical use is to set the LAMMPS
+    ``pair_style hdnnp`` neighbor-list cutoff, which must be >= the largest SF rc.
+
+    Args:
+        nnp_file (str): Path to the n2p2 input.nn file.
+
+    Returns:
+        float: The largest rc over all symmetry functions.
+
+    Raises:
+        ValueError: If no symmetry functions are found in the file.
+    """
+    g2sfs, g3sfs, g9sfs = load_from_input_nn(nnp_file)
+    rc_max = None
+    for g_groups in (g2sfs, g3sfs, g9sfs):
+        for (_center, _neighbors), df in g_groups.items():
+            this_max = float(df['lrc'].max())
+            if rc_max is None or this_max > rc_max:
+                rc_max = this_max
+    if rc_max is None:
+        raise ValueError(f"No symmetry functions (symfunction_short) found in {nnp_file}.")
+    return rc_max
 
 def get_radial_pairs(elements: list = None) -> list:
     """Generate unique radial atom pairs [center, neighbor] for symmetry functions.
