@@ -1,480 +1,302 @@
+#!/usr/bin/env python3
+"""
+pei_slurm_univ_submit —— 通用 Slurm 作业脚本生成 / 提交 CLI。
+
+这是 mymetal.slurm.submit.pei_slurm_univ_submit 的薄命令行封装：本文件只负责
+解析 argparse 参数再原样转交给库函数，不再自带任何业务逻辑。
+
+设计要点：
+    每个命令行选项名都与库函数的形参严格同名（dest 一致），因此 main 里可以直接
+    `pei_slurm_univ_submit(**vars(args))` 透传，无需手抄一份参数映射、也不会漏改。
+    所有结构性 / 枚举 / None / 正整数校验都下推给库函数，这里只搬运。
+"""
 
 import argparse
-import os
-import shutil
-import string
-import subprocess
 import sys
 import textwrap
 from pathlib import Path
-import numpy as np
 
-def pr(text=""):
-    print(text)
+from mymetal.slurm.submit import pei_slurm_univ_submit
 
-def er(text=""):
-    print(text)
+# 输出含大量 emoji（📁▶️✅❌📊🎉），在 locale 非 UTF-8 的计算节点上直接 print 会炸；
+# 入口处兜底把 stdout/stderr 切到 utf-8，老 Python 没有 reconfigure 时静默跳过。
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 
-def warn(msg):
-    print(f"⚠️  {msg}")
 
-def fail(msg):
-    print(f"❌ ERROR: {msg}")
+# ================ 📋 常见用法预设（preset 注册表）
+# 把以前散落在文件底部、彼此用同名 args 反复覆盖且从不被调用的 dict，收敛成键控注册表。
+# --preset NAME 先用这里的值灌默认，命令行再显式覆盖个别字段（如 --ncores 64）。
+# 只放各场景的「区别性」字段；path_root / lsubdir 等沿用 CLI 默认，不在 import 期固化 cwd。
+PRESETS = {
+    # zcm6-vasp-0：每个子目录一个 VASP 作业，启动器经 MY_LAUNCHER 传递
+    "zcm6-vasp-0": {
+        "mode": "each-subdir",
+        "dir_root": Path("./y_dir"),
+        "chunks": 5,
+        "module_profile_type": "zcm6-vasp-0",
+        "launcher_type": "srun",
+        "cmd": "pei_vasp_univ_sbatch",
+        "if_use_my_launcher": True,
+        "partition": "amd_512",
+        "nodes": 1,
+        "ncores": 128,
+    },
+    # zcm6-n2p2-scaling-0：nnp-scaling，单核估算并行扩展性
+    "zcm6-n2p2-scaling-0": {
+        "mode": "each-subdir",
+        "dir_root": Path("./y_dir"),
+        "chunks": 5,
+        "module_profile_type": "zcm6-n2p2-0",
+        "launcher_type": "mpirun",
+        "cmd": "nnp-scaling 10000",
+        "if_use_my_launcher": False,
+        "partition": "amd_512",
+        "nodes": 1,
+        "ncores": 1,
+    },
+    # zcm6-n2p2-train-0：nnp-train，16–32 核是推荐区间
+    "zcm6-n2p2-train-0": {
+        "mode": "each-subdir",
+        "dir_root": Path("./y_dir"),
+        "chunks": 5,
+        "module_profile_type": "zcm6-n2p2-0",
+        "launcher_type": "mpirun",
+        "cmd": "nnp-train",
+        "if_use_my_launcher": False,
+        "partition": "amd_512",
+        "nodes": 1,
+        "ncores": 24,
+    },
+    # zcm6-lammps-0：lmp -in lmp.in
+    "zcm6-lammps-0": {
+        "mode": "each-subdir",
+        "dir_root": Path("./y_dir"),
+        "chunks": 5,
+        "module_profile_type": "zcm6-lammps-0",
+        "launcher_type": "mpirun",
+        "cmd": "lmp -in lmp.in",
+        "if_use_my_launcher": False,
+        "partition": "amd_512",
+        "nodes": 1,
+        "ncores": 24,
+    },
+}
+# to here ================
+
+# 受 preset / 命令行共同提供的「必填」字段。argparse 不再用 required=True 强制——否则 --preset
+# 经 set_defaults 灌进来的值满足不了 required 检查；改为合并后在 check_required 里统一兜底。
+REQUIRED_FIELDS = (
+    "mode", "module_profile_type", "launcher_type",
+    "cmd", "partition", "nodes", "ncores",
+)
+
+
+def fail(msg: str):
+    # 统一失败出口：打印 + 退出码 1，调用处不必各自 raise。
+    print("❌ ERROR: " + msg)
     raise SystemExit(1)
 
-# generate_script
 
-def generate_script_header(partition: str, nodes: int, ncores: int, module_profile_type: str, MODULE_BLOCKS: dict[str, str]):
-    header = (
-        "#!/bin/bash\n"
-        f"#SBATCH -p {partition}\n"
-        f"#SBATCH -N {nodes}\n"
-        f"#SBATCH -n {ncores}\n"
-    )
-    module_block = MODULE_BLOCKS.get(module_profile_type)
-    if module_block is None:
-        fail(f"Unknown module profile type: {module_profile_type}")
-    header += module_block
-    return header
-
-def generate_launcher_command(launcher: str, cmd: str, if_use_my_launcher: bool = False):
-    line_launcher = ""
-
-    # 裸变量写法两处通用：$SLURM_NTASKS 是纯数字，无需内层引号防 word splitting。
-    if launcher == "srun":
-        line_launcher_1 = 'srun -n $SLURM_NTASKS'
-    elif launcher == "mpirun":
-        line_launcher_1 = 'mpirun -np $SLURM_NTASKS'
-    elif launcher == "none":
-        line_launcher_1 = ""
-    else:
-        fail(f"Unknown launcher type: {launcher}")
-
-    line_launcher_2 = cmd
-
-    # 对于一些封装好的脚本，可能需要通过环境变量传递launcher类型，而不是直接在脚本里写死，例如 srun -n "$SLURM_NTASKS" cmd
-    # 而对于 n2p2, vasp 一些直接调用可执行文件的，直接在脚本里写死 srun -n "$SLURM_NTASKS" cmd 可能更方便
-    if if_use_my_launcher:
-        # 方案A1：用双引号包裹。该脚本运行在计算节点的 Slurm 作业中，此刻 SLURM_NTASKS
-        # 已由 Slurm 设好，于是在 export 这一刻就把它展开成真实核数，直接烤进 MY_LAUNCHER
-        # 的值（例如 'srun -n 16'）。消费端（如 pei_vasp_univ_sbatch）拿到的已是现成数字，
-        # 无需再做二次展开 / eval。注意不能用单引号，否则 $SLURM_NTASKS 会被原样保存。
-        line_launcher = f'export MY_LAUNCHER="{line_launcher_1}"\n{line_launcher_2}'
-    else:
-        # 直接写入分支：该行在作业里执行，运行时 $SLURM_NTASKS 同样会展开。
-        line_launcher = f"{line_launcher_1}  {line_launcher_2}"
-    return line_launcher
-
-def generate_slurm_script_base(partition: str, nodes: int, ncores: int, module_profile_type: str, MODULE_BLOCKS: dict[str, str],
-                        launcher: str, cmd: str, if_use_my_launcher: bool,
-                        if_output: bool = True, path_save: Path = Path('./sub_slurm_univ.sh')):
-
-    line_header = generate_script_header(partition, nodes, ncores, module_profile_type, MODULE_BLOCKS)
-    line_launcher = generate_launcher_command(launcher, cmd, if_use_my_launcher)
-    line_myheader = (
-        "# Auto-generated by pei_slurm_univ_submit (base job script). Do not edit by hand.\n"
-        "# 该脚本由程序自动生成，每次运行都会被覆盖。\n"
-    )
-    line = line_header + "\n\n" + line_myheader + "\n\n" + line_launcher + "\n"
-
-    if if_output:
-        with open(path_save, 'w') as f:
-            f.write(line)
-
-    return line
-
-def generate_slurm_script_sequential(partition: str, nodes: int, ncores: int, module_profile_type: str, MODULE_BLOCKS: dict[str, str],
-                        launcher: str, cmd: str, if_use_my_launcher: bool,
-                        group: list, mode: str,
-                        if_output: bool = True, path_save: Path = Path('./sub_slurm_each_subdir.sh')):
-    line_header = generate_script_header(partition, nodes, ncores, module_profile_type, MODULE_BLOCKS)
-    line_launcher = generate_launcher_command(launcher, cmd, if_use_my_launcher)
-    line_myheader = (
-        f"# Auto-generated by pei_slurm_univ_submit ({mode} job script). Do not edit by hand.\n"
-        "# 该脚本由程序自动生成，每次运行都会被覆盖。\n"
-    )
-    line_loop = generate_loop(group, mode, line_launcher)
-    line = line_header + "\n\n" + line_myheader + "\n\n" + line_loop
-
-    if if_output:
-        with open(path_save, 'w') as f:
-            f.write(line)
-
-    return line
-
-def generate_loop(group: list, mode: str, line_launcher: str):
-    # subdir 已经是绝对路径了，在 get_lsubdir 中检查过了。
-    # 用普通字符串拼接（而非 f-string）来写 bash，避免 $((...)) / ${...} 的花括号
-    # 被 Python 当成替换字段；只在注入 Python 值（subdirs / mode / line_launcher）处用 +。
-    group = [str(subdir) for subdir in group]
-    subdirs = " ".join(group)
-
-    # —— 计数器 + 失败/未收敛目录数组 + 目录列表 + 循环开头 ——
-    line_loop = (
-        'start_dir="$(pwd)"\n'
-        "submit_success=0\n"
-        "submit_failed=0\n"
-        "submit_success_convergenced=0\n"
-        "submit_success_not_convergenced=0\n"
-        "failed_dirs=()\n"
-        "not_convergenced_dirs=()\n"
-        "lsubdir=(" + subdirs + " )\n"
-        "\n"
-        'for subdir in "${lsubdir[@]}"; do\n'
-        '    cd "$start_dir" || exit 1\n'
-        '    echo ""\n'
-        '    echo "================ 📁 $subdir"\n'
-        '    if ! cd "$subdir"; then\n'
-        '        echo "❌ ERROR: 无法进入目录: $subdir" >&2\n'
-        '        submit_failed=$((submit_failed + 1)); failed_dirs+=("$subdir")\n'
-        "        continue\n"
-        "    fi\n"
-        '    echo "📍 当前目录: $(pwd)"\n'
-    )
-
-    if mode == "each-subdir":
-        # 子作业经 sbatch --wait 提交：先看是否真的提交成功（输出含 Submitted batch job），
-        # 提交成功后用 --wait 返回的退出码判断收敛。
-        line_loop += (
-            '    echo "▶️  sbatch --wait sub_slurm_univ.sh"\n'
-            '    sbatch_out="$(sbatch --wait sub_slurm_univ.sh 2>&1)"; status=$?\n'
-            '    echo "$sbatch_out"\n'
-            '    if ! grep -q "Submitted batch job" <<< "$sbatch_out"; then\n'
-            '        echo "❌ 提交失败: $subdir" >&2\n'
-            '        submit_failed=$((submit_failed + 1)); failed_dirs+=("$subdir")\n'
-            "        continue\n"
-            "    fi\n"
-            "    submit_success=$((submit_success + 1))\n"
-        )
-    elif mode == "single-alloc":
-        # 单一分配内直接运行命令：cd 成功即视为运行成功，再按退出码判断收敛。
-        line_loop += (
-            '    echo "▶️  run (single-alloc)"\n'
-            + textwrap.indent(line_launcher, "    ") + "\n"
-            "    status=$?\n"
-            "    submit_success=$((submit_success + 1))\n"
-        )
-
-    # —— 依据退出码判定收敛：pei_vasp_univ_sbatch 约定 0/10=已收敛，其余=未收敛 ——
-    line_loop += (
-        "    if (( status == 0 || status == 10 )); then\n"
-        '        echo "✅ 已收敛 (exit $status)"\n'
-        "        submit_success_convergenced=$((submit_success_convergenced + 1))\n"
-        "    else\n"
-        '        echo "❌ 未收敛 (exit $status): $subdir" >&2\n'
-        "        submit_success_not_convergenced=$((submit_success_not_convergenced + 1))\n"
-        '        not_convergenced_dirs+=("$subdir")\n'
-        "    fi\n"
-        "done\n"
-    )
-
-    # —— 最终 summary：四个量 + 挨个列出 not_convergenced_dirs 与 failed_dirs ——
-    line_loop += (
-        'cd "$start_dir" || exit 1\n'
-        'echo ""\n'
-        'echo "================ 📊 Summary (mode=' + mode + ')"\n'
-        'echo "submit_success=$submit_success    submit_failed=$submit_failed'
-        "    convergenced=$submit_success_convergenced"
-        '    not_convergenced=$submit_success_not_convergenced"\n'
-        "if (( ${#not_convergenced_dirs[@]} > 0 )); then\n"
-        '    echo "❌ 未收敛的目录:"\n'
-        '    for d in "${not_convergenced_dirs[@]}"; do echo "  - 📁 $d"; done\n'
-        "fi\n"
-        "if (( ${#failed_dirs[@]} > 0 )); then\n"
-        '    echo "❌ 提交/运行失败的目录:"\n'
-        '    for d in "${failed_dirs[@]}"; do echo "  - 📁 $d"; done\n'
-        "fi\n"
-        "if (( submit_failed > 0 || submit_success_not_convergenced > 0 )); then\n"
-        '    echo "❌ Done: 存在失败或未收敛的计算。"\n'
-        "    exit 1\n"
-        "fi\n"
-        'echo "🎉 Done: 全部完成且收敛！"\n'
-        "exit 0\n"
-    )
-    return line_loop
+def resolve_preset(name: str) -> dict:
+    # 查表取预设；未知名直接 fail 并列出可用项。返回副本，避免调用方改到全局表。
+    if name not in PRESETS:
+        fail("未知预设: " + repr(name) + "；可用：" + ", ".join(sorted(PRESETS)))
+    return dict(PRESETS[name])
 
 
-# prepare parts
-def get_lsubdir(lsubdir: list[str] = None, dir_root: Path = None):
+def print_presets():
+    # --list-presets：列出所有预设及关键字段，方便挑选。
+    print("📋 可用预设（--preset NAME）：")
+    for name in sorted(PRESETS):
+        p = PRESETS[name]
+        print("  • " + name
+              + "  →  module=" + str(p.get("module_profile_type"))
+              + ", launcher=" + str(p.get("launcher_type"))
+              + ", cmd=" + repr(p.get("cmd"))
+              + ", nodes=" + str(p.get("nodes"))
+              + ", ncores=" + str(p.get("ncores")))
 
-    # 如果用户没指定
-    if lsubdir is None or len(lsubdir) == 0 :
-        if not dir_root.is_dir():
-            fail(f"dir_root {dir_root} is not a directory")
-        lsubdir = sorted([d for d in dir_root.iterdir() if d.is_dir()])
-        if len(lsubdir) == 0:
-            fail(f"No subdirectories found in dir_root {dir_root}")
-    # 如果用户指定了 list[str]，逐个检查 basename 后拼到 dir_root 下
-    else:
-        for subdir in lsubdir:
-            check_basename(subdir)
-        lsubdir = [dir_root / Path(subdir) for subdir in lsubdir]
 
-    # 检查是不是绝对路径，这很重要
-    for subdir in lsubdir:
-        if not subdir.is_dir():
-            fail(f"subdir {subdir} is not a directory")
-        check_absolute_path(subdir)
+def show_preset(name: str):
+    # --show-preset NAME：摊开单个预设的全部字段，核对后再 --preset 调用。
+    preset = resolve_preset(name)
+    print("📋 预设 " + name + "：")
+    for key in sorted(preset):
+        print("  " + key + " = " + repr(preset[key]))
 
-    return lsubdir
 
-def split_chunks(chunks, lsubdir):
-    total = len(lsubdir)
-    if total == 0:
-        fail("split_chunks: no directories to split")
-    if chunks < 1:
-        fail("split_chunks: chunk count must be >= 1 (got %d)" % chunks)
-    if chunks > total:
-        fail("--chunks (%d) cannot exceed number of job directories (%d)" % (chunks, total))
-    base, rem = divmod(total, chunks)
-    lgroup = []
-    offset = 0
-    num_check = 0
-    for c in range(1, chunks + 1):
-        count = base + (1 if c <= rem else 0)
-        group = [str(d) for d in lsubdir[offset:offset + count]]
-        lgroup.append(group)
-        num_check += len(group)
-        offset += count
-    if np.abs(num_check - total) > 1e-10:
-        fail("split_chunks: internal error: num_check %d != total %d" % (num_check, total))
-    return lgroup
+def check_required(args):
+    # 合并 preset + 命令行之后兜底：必填字段缺一不可（任一来源提供即可）。
+    missing = [f for f in REQUIRED_FIELDS if getattr(args, f, None) is None]
+    if missing:
+        fail("缺少必填参数：" + ", ".join("--" + m for m in missing)
+             + "；请在命令行直接指定，或用 --preset 提供（可用预设见 --list-presets）。")
 
-# Check part
-# True means pass, False means fail
-def check_positive_int(value, name):
-    value = str(value)
-    _DIGITS = set(string.digits) # {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'}
-    # 确认没负号，小数点，或其他非数字字符；同时确保第一个字符不是 '0'（除非值本身是 '0'，但这里不允许 '0' 作为正整数）。
-    if value and value[0] in "123456789" and all(c in _DIGITS for c in value):
-        return int(value)
-    fail(f"%s must be a positive integer: %s" % (name, value if value else "<unset>"))
 
-def check_none(value, name):
-    if value is not None:
+def parse_bool(value) -> bool:
+    # argparse 的 type 只在「显式传了值」时才被调用；裸写 --if_sbatch 走的是 const=True，
+    # 不会进这里。所以这里只管把 True/False（及常见同义词）字符串解析成 bool。
+    if isinstance(value, bool):
         return value
-    fail(f"%s 参数不能为空" % name)
-
-def check_basename(value):
-    if "/" in value or "\\" in value:
-        fail(f"目录名称 {value} 不能包含路径分隔符")
-    return value
-
-def check_absolute_path(value):
-    if not Path(value).is_absolute():
-        fail(f"必须是绝对路径: {value}")
-    return value
-
-# main body
-def pei_slurm_univ_submit(
-                    path_root: Path = None,
-                    # 运行的基本模式
-                    mode: str = None,
-                    dir_root: Path = Path('./dir'),
-                    lsubdir: str = None,
-                    chunks: int = 1,
-                    # script 相关参数
-                    module_profile_type: str = None,
-                    launcher_type: str = None,
-                    cmd: str = None,
-                    if_use_my_launcher: bool = False,  # 如果打开，将通过定义 MY_LAUNCHER 环境变量来传递 launcher_type，而不是直接在脚本中写死例如 srun -n "$SLURM_NTASKS" cmd
-                    # 作业资源参数
-                    partition: str = None,
-                    nodes: int = None,
-                    ncores: int = None,
-                    # check markers dict
-                    if_sbatch: bool = False,
-
-                    # work_dir_name, dry_run, show_script, skip_if_file_contains
-
-                    # global variables
-                    MODULE_BLOCKS: dict[str, str] = {
-                        "none": "# module-profile: none (no environment modules loaded)",
-                        "zcm6-vasp": (
-                            "# module-profile: zcm6-vasp  (VASP 5.4.4)\n"
-                            "source /public3/soft/modules/module.sh\n"
-                            "module load mpi/intel/17.0.7-thc\n"
-                            'export PATH="/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin:$PATH"\n'
-                        ),
-                        "zcm6-lammps": (
-                            "# module-profile: zcm6-lammps  (LAMMPS)\n"
-                            "source /public3/soft/modules/module.sh\n"
-                            "# TODO(zcm6-lammps): load the LAMMPS module(s) for this cluster and/or prepend the\n"
-                            "#   LAMMPS bin dir to PATH. The exact module name is not known from this project,\n"
-                            "#   so it is intentionally left blank — fill in before using this profile, e.g.:\n"
-                            "#     module load mpi/intel/17.0.7-thc\n"
-                            "#     module load lammps/<version>\n"
-                            '#     export PATH="/path/to/lammps/bin:$PATH"\n'
-                        ),
-                        "zcm6-n2p2": (
-                            "# module-profile: zcm6-n2p2  (n2p2)\n"
-                            "source /public3/soft/modules/module.sh\n"
-                            "module load eigen/3.8.8-cyc\n"
-                            "module load gsl/2.5-cjj\n"
-                            "module load mpi/openmpi/2.0.4-gcc-4.9.0\n"
-                            'export PATH="/public3/home/scg6928/mysoft/tools/n2p2/2.3.0/n2p2-2.3.0/bin:$PATH"\n'
-                        ),
-                    },
-                    LAUNCHERS: list = ["srun", "mpirun", "none"],
-                    MODES: list = ["parallel", "each-subdir", "single-alloc"],
-
-                    ):
-
-    """
-
-    Args:
-        path_root (Path): 根目录路径，默认为当前目录。保险起见应该全部由外部导入
-        mode (str): 运行模式，必须是 "parallel"、"each-subdir" 或 "single-alloc" 之一。
-        dir_root (Path): 根目录路径，默认为当前目录下的 "dir"。
-        lsubdir (list): 一级子目录列表，默认为 None。必须处于dir_root下。
-        chunks (int): 将作业目录分成多少块，默认为 1。
-    """
-
-    ################################### Check
-    # check if None
-    for temp_value, temp_name in [(path_root, "path_root"), (mode, "mode"), (module_profile_type, "module_profile_type"),
-                                  (launcher_type, "launcher_type"), (cmd, "cmd"), (partition, "partition"),
-                                  (chunks, "chunks"), (nodes, "nodes"), (ncores, "ncores")]:
-        check_none(temp_value, temp_name)
-
-    # path_root是一切的根基，必须是绝对路径
-    check_absolute_path(path_root)
-
-    # check if positive int（必须接住返回值，把字符串等输入强制转成 int，
-    # 否则后续 split_chunks 的 chunks < 1 / divmod 会因类型不符而报错）
-    chunks = check_positive_int(chunks, "chunks")
-    nodes = check_positive_int(nodes, "nodes")
-    ncores = check_positive_int(ncores, "ncores")
-
-    # check mode
-    if mode not in MODES:
-        fail(f"Unknown mode: {mode}")
-
-    # check module_profile_type
-    if module_profile_type not in list(MODULE_BLOCKS.keys()):
-        fail(f"Unknown module profile type: {module_profile_type}")
-
-    # check launcher_type
-    if launcher_type not in LAUNCHERS:
-        fail(f"Unknown launcher type: {launcher_type}")
-    ################################### Check to here
-
-    os.chdir(path_root)
-    print(f"path_root: {path_root}")
-
-    # 把当前路径全部转化为绝对路径
-    dir_root = path_root / dir_root
-
-    ################################### Prepare
-    # get lsubdir
-    lsubdir = get_lsubdir(lsubdir, dir_root) # 已经被检查了确认都存在文件夹
-    lgroup = split_chunks(chunks, lsubdir)
-    ################################### Prepare to here
-
-    ################################### Main control flow
-    # 不使用check_file_contain参数，这是在cmd里应该执行的，而非提前去检查
-
-    # 提前生成所需的base slurm script
-    if mode in ["parallel", "each-subdir"]:
-        for subdir in lsubdir:
-            path_save = subdir / "sub_slurm_univ.sh"
-            generate_slurm_script_base(partition, nodes, ncores, module_profile_type, MODULE_BLOCKS,
-                                        launcher_type, cmd, if_use_my_launcher,
-                                        if_output=True, path_save=path_save)
-
-    if mode == "parallel":
-        if chunks > 1:
-            warn("--chunks ignored in parallel mode (already one job per dir)")
-        if if_sbatch:
-            # parallel 只负责提交、不等待结果，因此只统计 submit_success / submit_failed。
-            submit_success = 0
-            submit_failed = 0
-            submit_failed_dirs = []
-            for subdir in lsubdir:
-                path_save = subdir / "sub_slurm_univ.sh"
-                print("")
-                print(f"================ 📁 {subdir}")
-                print(f"▶️  sbatch {path_save}")
-                # 这个 bash 脚本结束就会回到 path_root
-                rc = os.system(f"cd {subdir} && sbatch {path_save}")
-                exit_code = os.waitstatus_to_exitcode(rc)
-                if exit_code == 0:
-                    print("✅ 提交成功")
-                    submit_success += 1
-                else:
-                    print(f"❌ 提交失败 (exit {exit_code}): {subdir}")
-                    submit_failed += 1
-                    submit_failed_dirs.append(subdir)
-            # —— summary：两个量 + 挨个列出 submit_failed_dirs ——
-            print("")
-            print("================ 📊 Summary (mode=parallel)")
-            print(f"submit_success={submit_success}    submit_failed={submit_failed}")
-            if submit_failed_dirs:
-                print("❌ 提交失败的目录:")
-                for d in submit_failed_dirs:
-                    print(f"  - 📁 {d}")
-            print("❌ Done with submission failures." if submit_failed > 0 else "🎉 Done!")
-    elif mode in ["each-subdir", "single-alloc"]:
-        # each-subdir 的 chunk 脚本只负责循环 + sbatch --wait 子作业，本身不跑计算，
-        # 实际计算资源由各子 base 脚本申请，因此编排脚本固定为 -N 1 -n 1。
-        if mode == "each-subdir" and (nodes != 1 or ncores != 1):
-            warn(f"each-subdir 编排脚本无需多资源，已将 nodes={nodes}, ncores={ncores} 修正为 1")
-            nodes = 1
-            ncores = 1
-        # 这里你应该提前在所有subdir中生成base script, 因为 slurm script 中无法调用generate_base() 函数
-        for id, group in enumerate(lgroup, start = 1):
-            path_save = path_root / f"sub_slurm_{mode.replace('-', '_')}_chunk{id:03d}.sh"
-            generate_slurm_script_sequential(partition, nodes, ncores, module_profile_type, MODULE_BLOCKS,
-                                            launcher_type, cmd, if_use_my_launcher,
-                                            group=group, mode=mode,
-                                            if_output=True, path_save=path_save)
-            if if_sbatch:
-                os.system(f"cd {path_root} && sbatch {path_save}")
-
-    ################################### Main control flow to here
-    return None
-
-test_args1 = {
-    "path_root": Path('/public3/home/scg6928/mywork/test-sbatch/y_E_in_1_2_bulk'),
-    "mode": "parallel",
-    "dir_root": Path('./y_dir'),
-    "lsubdir": [],
-    "chunks": 5,
-    "module_profile_type": "zcm6-vasp",
-    "launcher_type": "srun",
-    "cmd": "echo Hello, World!",
-    "partition": "amd_512",
-    "nodes": 2,
-    "ncores": 16,}
-
-test_args2 = {
-    "path_root": Path('/public3/home/scg6928/mywork/test-sbatch/y_E_in_1_2_bulk'),
-    "mode": "each-subdir",
-    "dir_root": Path('./y_dir'),
-    "lsubdir": [],
-    "chunks": 5,
-    "module_profile_type": "zcm6-vasp",
-    "launcher_type": "srun",
-    "cmd": "pei_vasp_univ_sbatch",
-    "partition": "amd_512",
-    "nodes": 2,
-    "ncores": 16,}
-
-test_args3 = {
-    "path_root": Path('/public3/home/scg6928/mywork/test-sbatch/y_E_in_1_2_bulk'),
-    "mode": "single-alloc",
-    "dir_root": Path('./y_dir'),
-    "lsubdir": [],
-    "chunks": 5,
-    "module_profile_type": "zcm6-vasp",
-    "launcher_type": "srun",
-    "cmd": "pei_vasp_univ_sbatch",
-    "partition": "amd_512",
-    "nodes": 2,
-    "ncores": 16,}
+    normalized = str(value).strip().lower()
+    if normalized in ("true", "1", "yes", "y", "on", "t"):
+        return True
+    if normalized in ("false", "0", "no", "n", "off", "f"):
+        return False
+    raise argparse.ArgumentTypeError(
+        "if_sbatch 只接受布尔值 True/False（或 1/0、yes/no），收到: " + repr(value)
+    )
 
 
-# 列举三种测试环境
-# pei_slurm_univ_submit(**test_args1 )
-pei_slurm_univ_submit(**test_args2 )
-pei_slurm_univ_submit(**test_args3 )
+def build_parser() -> argparse.ArgumentParser:
+    # 选项名与 pei_slurm_univ_submit 形参一一对应；枚举的合法取值只写在 help 里做提示，
+    # 真正的校验交给库函数，避免在 CLI 再抄一份枚举导致两边漂移。
+    parser = argparse.ArgumentParser(
+        prog="pei_slurm_univ_submit",
+        description="通用 Slurm 作业脚本生成 / 提交引擎（mymetal.slurm 的 CLI 封装）。",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent(
+            """\
+            示例（对应库里的 test_args1/2/3 三种模式）：
+
+              # parallel：每个子目录一个独立作业，只提交不等待
+              pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
+                  --mode parallel --dir_root ./y_dir --chunks 5 \\
+                  --module_profile_type zcm6-vasp-0 --launcher_type srun \\
+                  --cmd "echo Hello, World!" --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
+
+              # each-subdir：编排作业里逐个 sbatch --wait 子作业
+              pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
+                  --mode each-subdir --dir_root ./y_dir --chunks 5 \\
+                  --module_profile_type zcm6-vasp-0 --launcher_type srun \\
+                  --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
+
+              # single-alloc：单次分配内顺序跑各子目录
+              pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
+                  --mode single-alloc --dir_root ./y_dir --chunks 5 \\
+                  --module_profile_type zcm6-vasp-0 --launcher_type srun \\
+                  --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
+
+            预设（preset）：常见场景已封装在 PRESETS 里，可一行直呼，必填项由预设提供：
+
+              pei_slurm_univ_submit --preset zcm6-vasp-0                  # 直接用预设
+              pei_slurm_univ_submit --preset zcm6-vasp-0 --ncores 64      # 预设基础上覆盖个别项
+              pei_slurm_univ_submit --preset zcm6-n2p2-train-0 --if_sbatch True
+              pei_slurm_univ_submit --list-presets                      # 查看所有预设
+              pei_slurm_univ_submit --show-preset zcm6-vasp-0             # 查看某预设全部字段
+
+            不加 --preset 时，--mode/--module_profile_type/--launcher_type/--cmd/
+            --partition/--nodes/--ncores 为必填；命令行显式值始终覆盖预设。
+            不加 --if_sbatch 时只生成脚本、不提交（dry）。
+            """
+        ),
+    )
+
+    # —— 预设 / 发现 ——
+    # --preset 先把某场景的默认值灌进来，命令行其余 flag 再覆盖；--list/--show 只读不跑。
+    parser.add_argument("--preset",
+                        help="使用内置预设填充默认值（命令行可逐项覆盖）。可用：" + ", ".join(sorted(PRESETS)) + "。")
+    parser.add_argument("--list-presets", action="store_true",
+                        help="列出所有内置预设后退出。")
+    parser.add_argument("--show-preset", metavar="NAME",
+                        help="打印指定预设的全部字段后退出。")
+
+    # —— 运行的基本模式 ——
+    parser.add_argument("--path_root", type=Path, default=Path.cwd(),
+                        help="根目录，必须是绝对路径；相对路径会被解析为绝对。默认当前目录。")
+    parser.add_argument("--mode",
+                        help="运行模式：parallel / each-subdir / single-alloc。无 --preset 时必填。")
+    parser.add_argument("--dir_root", type=Path, default=Path("./dir"),
+                        help="作业子目录的父目录，相对 path_root。默认 ./dir。")
+    parser.add_argument("--lsubdir", nargs="*", default=None,
+                        help="子目录名列表（basename，需位于 dir_root 下）；留空则自动遍历 dir_root。")
+    parser.add_argument("--chunks", type=int, default=1,
+                        help="把作业目录分成多少块（仅 each-subdir / single-alloc 生效）。默认 1。")
+
+    # —— script 相关参数 ——
+    parser.add_argument("--module_profile_type",
+                        help="环境 module profile：zcm6-vasp-0 / zcm6-lammps-0 / zcm6-n2p2-0。无 --preset 时必填。")
+    parser.add_argument("--launcher_type",
+                        help="并行启动器：srun / mpirun / none。无 --preset 时必填。")
+    parser.add_argument("--cmd",
+                        help="每个子目录里实际执行的命令。无 --preset 时必填。")
+    parser.add_argument("--if_use_my_launcher", action="store_true",
+                        help="通过 MY_LAUNCHER 环境变量传递启动器，而非在脚本里写死。")
+
+    # —— 作业资源参数 ——
+    parser.add_argument("--partition", help="Slurm 分区（-p）。无 --preset 时必填。")
+    parser.add_argument("--nodes", type=int, help="节点数（-N）。无 --preset 时必填。")
+    parser.add_argument("--ncores", type=int, help="核数（-n）。无 --preset 时必填。")
+
+    # —— 提交开关 ——
+    # 接收布尔值：--if_sbatch True / --if_sbatch False；裸写 --if_sbatch 等价于 True；
+    # 完全不写则取默认 False（只生成脚本 dry run）。
+    parser.add_argument("--if_sbatch", type=parse_bool, nargs="?", const=True, default=False,
+                        help="是否真正 sbatch 提交：True/False（默认 False，只生成脚本 dry run）；"
+                             "裸写 --if_sbatch 等价于 True。")
+
+    return parser
+
+
+def main():
+    # ====== check ======
+    # 第一段只认 --preset：用 parse_known_args 容忍此刻其余必填项尚未给全。
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--preset")
+    known, _ = pre.parse_known_args()
+
+    parser = build_parser()
+    if known.preset is not None:
+        # 预设灌默认；下面 parse_args 时命令行显式给的同名 flag 会再覆盖它。
+        parser.set_defaults(**resolve_preset(known.preset))
+
+    args = parser.parse_args()
+
+    # 只读动作：列出 / 查看预设，打印完即走，不进入提交流程。
+    if args.list_presets:
+        print_presets()
+        return
+    if args.show_preset is not None:
+        show_preset(args.show_preset)
+        return
+
+    # path_root 必须绝对：先把相对路径解析成绝对，库函数内部仍会再 check 一次兜底。
+    args.path_root = args.path_root.resolve()
+
+    # 合并 preset + 命令行后做结构性必填兜底（取代被去掉的 argparse required=True）。
+    check_required(args)
+    # ====== to here ======
+
+    # ====== main ======
+    # preset/list_presets/show_preset 是 CLI 自身的控制项、不是库函数形参，透传前剔除；
+    # 其余 dest 与形参同名，直接整体透传。枚举 / None / 正整数等校验仍由库函数负责。
+    for key in ("preset", "list_presets", "show_preset"):
+        vars(args).pop(key, None)
+
+    pei_slurm_univ_submit(**vars(args))
+    # ====== to here ======
+
+
+if __name__ == "__main__":
+    main()
+
+################################### ZCM6
+# 以下常见用法已收敛进顶部的 PRESETS 注册表，改用 --preset 一行直呼，例如：
+#   pei_slurm_univ_submit --preset zcm6-vasp-0
+#   pei_slurm_univ_submit --preset zcm6-n2p2-scaling-0
+#   pei_slurm_univ_submit --preset zcm6-n2p2-train-0 --ncores 32
+#   pei_slurm_univ_submit --preset zcm6-lammps-0
+# 发现 / 核对：--list-presets、--show-preset NAME。要新增场景就往 PRESETS 里加一项。
+
+###### python 通用 sbatch 包装（与本 CLI 无关，仅备忘）
+# python
+# #!/bin/bash
+#SBATCH -p amd_512
+#SBATCH -N 1
+#SBATCH -n 1
+# /public3/home/scg6928/mysoft/env/pyenv/codex/bin/python "$@"
+
