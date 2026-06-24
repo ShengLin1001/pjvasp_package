@@ -37,6 +37,7 @@ from ase import Atoms
 import numpy as np
 from myvasp import vasp_func as vf
 
+INPLANE_SHIFT = 1e-5  # to avoid atoms sitting exactly on the xlo/ylo face of the (tilted) cell
 
 # FCC (111) Plane
 def create_fcc_111(a: float = None, size: tuple = (1, 1, 1),
@@ -50,7 +51,7 @@ def create_fcc_111(a: float = None, size: tuple = (1, 1, 1),
                             size=size, symbol=symbol, pbc=pbc,
                             latticeconstant = a)
     # the interlayer spacing of fcc (111) is a/sqrt(3) ~ 1.732 a
-    atoms = move_atoms(atoms, [0,0,0.1*a], if_scale_position=False)
+    atoms = move_atoms(atoms, [INPLANE_SHIFT, INPLANE_SHIFT, 0.1*a], if_scale_position=False)
     atoms.wrap()
     return atoms
 
@@ -67,6 +68,11 @@ def create_hcp_basal(a: float = None, c: float = None, size: tuple = (1, 1, 1),
                                          latticeconstant = {'a': a, 'c': c})
     # the interlayer spacing of hcp (0001) is c/2
     atoms = move_atoms(atoms, [0,0,0.1*c], if_scale_position=False)
+    # nudge in-plane so no atom sits exactly on the xlo/ylo face of the (tilted) cell.
+    # otherwise the corner atom at (0,0) gets pushed just outside the box by float noise
+    # during a LAMMPS minimize, and write/read_restart drops it
+    # ("Did not assign all restart atoms correctly"). Pure translation -> physics unchanged.
+    atoms = move_atoms(atoms, [INPLANE_SHIFT, INPLANE_SHIFT, 0.0], if_scale_position=True)
     atoms.wrap()
     return atoms
 
@@ -86,9 +92,9 @@ def create_hcp_prism1(a: float = None, c: float = None, size: tuple = (1, 1, 1),
     # Interplanar spacing of wide: 1/sqrt(3) * a ~ 0.577 * a
     # Interplanar spacing of narrow: 1/(2*sqrt(3)) * a ~ 0.289 * a
     if mode == 'wide':
-        atoms = move_atoms(atoms, [0,0,0.1*a], if_scale_position=False)
+        atoms = move_atoms(atoms, [INPLANE_SHIFT, INPLANE_SHIFT, 0.1*a], if_scale_position=False)
     elif mode == 'narrow':
-        atoms = move_atoms(atoms, [0,0,-0.05*a], if_scale_position=False)
+        atoms = move_atoms(atoms, [INPLANE_SHIFT, INPLANE_SHIFT, -0.05*a], if_scale_position=False)
     atoms.wrap()
     return atoms
 
@@ -104,7 +110,7 @@ def create_hcp_prism2(a: float = None, c: float = None, size: tuple = (1, 1, 1),
                                             size=size, symbol=symbol, pbc=pbc,
                                             latticeconstant = {'a': a, 'c': c})
     # the interlayer spacing of hcp (10-11) is 0.5 * a
-    atoms = move_atoms(atoms, [0,0,0.1*a], if_scale_position=False)
+    atoms = move_atoms(atoms, [INPLANE_SHIFT, INPLANE_SHIFT, 0.1*a], if_scale_position=False)
     atoms.wrap()
     return atoms
 

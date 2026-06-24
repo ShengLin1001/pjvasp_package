@@ -2,6 +2,7 @@
 # initial lattice constant
 variable aa equal aa_template
 variable lat equal lat_template   # 1 - "hcp", 2 - "fcc", 3 - "bcc"
+variable shift equal 1e-5
 
 print "Lattice type: ${lat}"
 
@@ -90,3 +91,9 @@ region   box  prism 0 ${a11_box} 0 ${a22_box} 0 ${a33_box} ${a21_box} ${a31_box}
 create_box 1 box
 create_atoms 1 box
 mass 1 196.97
+
+# 把所有原子整体平移一个微量 ${shift}，使角原子 (0,0,0) 离开 xlo/ylo/zlo 面。
+# 否则在 minimize / box-relax 时浮点噪声会把角原子推到盒子外侧（lambda<0），
+# write_restart/read_restart 便会丢原子并报 "Did not assign all restart atoms correctly"。
+# 这是周期性体相的纯刚性平移，能量/受力不变（对应 create.py 里的 INPLANE_SHIFT）。
+displace_atoms all move ${shift} ${shift} ${shift} units box
