@@ -1,16 +1,34 @@
 #!/bin/bash
 
+launcher="${MY_LAUNCHER:-srun}"
 myroot=$(pwd)
-pair_style="eam"
-pair_coeff="${myroot}/potential/Au_u3.eam"
-python_path="/home/louis/mysoft/env/pyenv/mydft/bin/python"
-lmp_template_path="/home/louis/mywork/github/myrepo/PJ-advanced-reasearch/20250505_machine_learning/workflow_for_n2p2_test/template"
+# 可在运行时按位置覆盖（不传则用原默认值）：
+#   $1 pair_style  $2 pair_coeff  $3 python_path  $4 mass_content  $5 lmp_template_path
+#   mass_content：写入各 workdir 的 general_mass.mod（多行用 \n 连接，下方 printf '%b' 展开）
+pair_style="${1:-eam}"
+pair_coeff="${2:-${myroot}/potential/Au_u3.eam}"
+python_path="${3:-python}"
+mass_content="${4:-mass 1 196.97}"
+lmp_template_path="${5:-${myroot}/template}"
+
+echo ""
+echo "================ 📁 ${myroot}"
+echo "📍 Current dir: $(pwd)"
+
+# 失败收集：每个 lmp / post 步骤非 0 退出都记下「标签 (exit 码)」，最后汇总到 📊 Summary 并决定退出码。
+failed_steps=()
+record_fail () {   # $1=步骤标签  $2=退出码
+    failed_steps+=("$1 (exit $2)")
+    echo "❌ $1 失败 (exit $2)"
+}
 
 rm -rf y_stretch
 rm -rf y_Cij_energy
 rm -rf y_gsfe
 
 ############ Found equilibrium lattice constant ############
+echo ""
+echo "================ 🧪 stretch — 平衡晶格常数"
 for lat in fcc bcc hcp; do
     workdir="${myroot}/y_stretch/${lat}/y_dir"
     dumpdir="${myroot}/y_stretch/${lat}/dump"
@@ -53,19 +71,24 @@ for lat in fcc bcc hcp; do
 
     sed -i "s/lat_template/${latnum}/g" stretch_model.mod
     sed -i "s/aa_template/${ini_aa}/g"  stretch_model.mod
-    sed -i "s/pair_style_template/${pair_style}/g" general_potential.mod
+    sed -i "s|pair_style_template|${pair_style}|g" general_potential.mod
     sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
-    lmp -in stretch_template.in
-
+    printf '%b\n' "$mass_content" > general_mass.mod
+    echo "▶️  stretch ${lat}: $launcher lmp -in stretch_template.in -screen none"
+    $launcher lmp -in stretch_template.in -screen none || record_fail "stretch ${lat} (lmp)" "$?"
 
     cd $myroot
 
 done
 
-${python_path} post/stretch.py
+echo "▶️  post: stretch.py"
+${python_path} post/stretch.py; rc_stretch=$?
+(( rc_stretch == 0 )) || record_fail "post/stretch.py" "${rc_stretch}"
 
 
 ############ Cij_energy ############
+echo ""
+echo "================ 🧪 Cij — 弹性常数"
 for lat in fcc bcc hcp; do
     workdir="${myroot}/y_Cij_energy/${lat}/y_dir"
     dumpdir="${myroot}/y_Cij_energy/${lat}/dump"
@@ -101,21 +124,27 @@ for lat in fcc bcc hcp; do
 
     sed -i "s/lat_template/${latnum}/g" stretch_model.mod
     sed -i "s/aa_template/${a0}/g"      stretch_model.mod
-    sed -i "s/pair_style_template/${pair_style}/g" general_potential.mod
+    sed -i "s|pair_style_template|${pair_style}|g" general_potential.mod
     sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
-    lmp -in Cij_energy_template.in
+    printf '%b\n' "$mass_content" > general_mass.mod
+    echo "▶️  Cij ${lat}: $launcher lmp -in Cij_energy_template.in -screen none"
+    $launcher lmp -in Cij_energy_template.in -screen none || record_fail "Cij ${lat} (lmp)" "$?"
 
     cd $myroot
 
 done
 
-${python_path} post/Cij_energy.py
+echo "▶️  post: Cij_energy.py"
+${python_path} post/Cij_energy.py; rc_cij=$?
+(( rc_cij == 0 )) || record_fail "post/Cij_energy.py" "${rc_cij}"
 
 ############ gsfe ############
 
 # HCP: HCP_basal, HCP_prism1w, HCP_pyr1w, HCP_pyr2
 # FCC: FCC_111, FCC_100
 
+echo ""
+echo "================ 🧪 gsfe — 广义层错能"
 for lat in fcc hcp; do
 
     # bcc:3, fcc:2, hcp:1
@@ -159,6 +188,7 @@ for lat in fcc hcp; do
             cp "${file}" .
         done
 
+        sed -i "s/lat_template/${latnum}/g"              gsfe_model.py
         sed -i "s|gsfe_type_template|${gsfe_type}|g"     gsfe_model.py
         sed -i "s/aa_template/${a0}/g"                   gsfe_model.py
         sed -i "s/cc_template/${c0}/g"                   gsfe_model.py
@@ -166,11 +196,33 @@ for lat in fcc hcp; do
         sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
         sed -i "s|python_path_template|${python_path}|g" gsfe_template.in
         sed -i "s|gsfe_type_template|${gsfe_type}|g"     gsfe_template.in
-        lmp -in gsfe_template.in
+        printf '%b\n' "$mass_content" > general_mass.mod
+        echo "▶️  gsfe ${lat}/${gsfe_type}: $launcher lmp -in gsfe_template.in -screen none"
+        $launcher lmp -in gsfe_template.in -screen none || record_fail "gsfe ${lat}/${gsfe_type} (lmp)" "$?"
 
         cd $myroot
     done
 
 done
 
-${python_path} post/gsfe.py
+echo "▶️  post: gsfe.py"
+${python_path} post/gsfe.py; rc_gsfe=$?
+(( rc_gsfe == 0 )) || record_fail "post/gsfe.py" "${rc_gsfe}"
+
+############ Summary ############
+echo ""
+echo "================ 📊 Summary  📁 ${myroot}"
+# 最关心的三个 post（python 自身已打印细节 emoji，这里只汇总通过/失败）
+fmt_rc () { (( $1 == 0 )) && echo "✅ ok" || echo "❌ exit $1"; }
+echo "  post/stretch.py     : $(fmt_rc ${rc_stretch:-1})"
+echo "  post/Cij_energy.py  : $(fmt_rc ${rc_cij:-1})"
+echo "  post/gsfe.py        : $(fmt_rc ${rc_gsfe:-1})"
+
+if (( ${#failed_steps[@]} > 0 )); then
+    echo "❌ 失败步骤 (${#failed_steps[@]})："
+    for s in "${failed_steps[@]}"; do echo "  - $s"; done
+    echo "❌ Done with failures."
+    exit 1
+fi
+echo "🎉 Done: stretch + Cij + gsfe 全部完成，三个 post 均正常。"
+exit 0

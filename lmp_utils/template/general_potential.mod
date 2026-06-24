@@ -1,6 +1,10 @@
 # NOTE: This script can be modified for different pair styles 
 # See in.elastic for more info.
 
+# Set per-type masses (由 model.py 的 self.lele 生成；pei_lmp_run_properties 在各 workdir 写入 general_mass.mod)
+# 放在 pair 之前：general_potential.mod 总是在建/读结构之后被 include，此时原子类型已定义，mass 合法。
+include general_mass.mod
+
 # Choose potential
 pair_style pair_style_template
 pair_coeff * * pair_coeff_template
