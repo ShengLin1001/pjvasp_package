@@ -348,32 +348,7 @@ def pei_slurm_univ_submit(
                     # work_dir_name, dry_run, show_script, skip_if_file_contains
 
                     # global variables
-                    MODULE_BLOCKS: dict[str, str] = {
-                        "none": "# module-profile: none (no environment modules loaded)",
-                        "zcm6-vasp-0": (
-                            "# module-profile: zcm6-vasp  (VASP 5.4.4)\n"
-                            "source /public3/soft/modules/module.sh\n"
-                            "module load mpi/intel/17.0.7-thc\n"
-                            'export PATH="/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin:$PATH"\n'
-                        ),
-                        "zcm6-lammps-0": (
-                            "# module-profile: zcm6-lammps  (LAMMPS)\n"
-                            "source /public3/soft/modules/module.sh\n"
-                            "module load cmake/3.24.1\n"
-                            "module load gcc/12.2\n"
-                            "module load mpi/intel/17.0.7-thc\n"
-                            "module load fftw/3.3.8-mpi\n"
-                            'export PATH="/public3/home/scg6928/mysoft/lammps/lammps/20240829/lammps-stable_29Aug2024_update2/build:$PATH"\n'
-                        ),
-                        "zcm6-n2p2-0": (
-                            "# module-profile: zcm6-n2p2  (n2p2)\n"
-                            "source /public3/soft/modules/module.sh\n"
-                            "module load eigen/3.8.8-cyc\n"
-                            "module load gsl/2.5-cjj\n"
-                            "module load mpi/openmpi/2.0.4-gcc-4.9.0\n"
-                            'export PATH="/public3/home/scg6928/mysoft/tools/n2p2/2.3.0/n2p2-2.3.0/bin:$PATH"\n'
-                        ),
-                    },
+                    MODULE_BLOCKS: dict[str, str] = None,
                     LAUNCHERS: list = ["srun", "mpirun", "none"],
                     MODES: list = ["parallel", "each-subdir", "single-alloc"],
 
