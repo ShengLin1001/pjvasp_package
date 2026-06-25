@@ -22,6 +22,31 @@ record_fail () {   # $1=步骤标签  $2=退出码
     echo "❌ $1 失败 (exit $2)"
 }
 
+# 带重试退避地跑 lmp：只对「srun 创建 step 失败」这种瞬时错误重试（高并发提交时 slurmctld
+# 偶发 "srun: error: Unable to create step ...: Unexpected message received"）。
+# 真·LAMMPS 错误（输入错、势文件缺失等）立即返回，不浪费时间反复重试。
+# 次数/间隔可用环境变量覆盖；默认最多尝试 10 次（含首次），每次失败后 sleep 10s。
+LMP_MAX_TRY="${LMP_MAX_TRY:-99}"
+LMP_RETRY_SLEEP="${LMP_RETRY_SLEEP:-5}"
+run_lmp_retry () {   # 参数原样转给 lmp，例如：run_lmp_retry -in foo.in -screen none
+    local attempt=1 rc errlog
+    errlog="$(mktemp)"
+    while : ; do
+        $launcher lmp "$@" 2> "$errlog"
+        rc=$?
+        cat "$errlog" >&2          # 这次的 stderr 照常进 slurm-*.out，不吞日志
+        if (( rc == 0 )); then rm -f "$errlog"; return 0; fi
+        if (( attempt < LMP_MAX_TRY )) && grep -qE 'Unable to create step|Unexpected message received' "$errlog"; then
+            echo "⚠️  srun step 创建失败（第 ${attempt}/${LMP_MAX_TRY} 次尝试，exit ${rc}），${LMP_RETRY_SLEEP}s 后重试…"
+            sleep "${LMP_RETRY_SLEEP}"
+            (( attempt++ ))
+            continue
+        fi
+        rm -f "$errlog"
+        return "$rc"               # 非瞬时错误，或已达最大尝试次数 → 交给 record_fail
+    done
+}
+
 rm -rf y_stretch
 rm -rf y_Cij_energy
 rm -rf y_gsfe
@@ -75,7 +100,7 @@ for lat in fcc bcc hcp; do
     sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
     printf '%b\n' "$mass_content" > general_mass.mod
     echo "▶️  stretch ${lat}: $launcher lmp -in stretch_template.in -screen none"
-    $launcher lmp -in stretch_template.in -screen none || record_fail "stretch ${lat} (lmp)" "$?"
+    run_lmp_retry -in stretch_template.in -screen none || record_fail "stretch ${lat} (lmp)" "$?"
 
     cd $myroot
 
@@ -128,7 +153,7 @@ for lat in fcc bcc hcp; do
     sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
     printf '%b\n' "$mass_content" > general_mass.mod
     echo "▶️  Cij ${lat}: $launcher lmp -in Cij_energy_template.in -screen none"
-    $launcher lmp -in Cij_energy_template.in -screen none || record_fail "Cij ${lat} (lmp)" "$?"
+    run_lmp_retry -in Cij_energy_template.in -screen none || record_fail "Cij ${lat} (lmp)" "$?"
 
     cd $myroot
 
@@ -198,7 +223,7 @@ for lat in fcc hcp; do
         sed -i "s|gsfe_type_template|${gsfe_type}|g"     gsfe_template.in
         printf '%b\n' "$mass_content" > general_mass.mod
         echo "▶️  gsfe ${lat}/${gsfe_type}: $launcher lmp -in gsfe_template.in -screen none"
-        $launcher lmp -in gsfe_template.in -screen none || record_fail "gsfe ${lat}/${gsfe_type} (lmp)" "$?"
+        run_lmp_retry -in gsfe_template.in -screen none || record_fail "gsfe ${lat}/${gsfe_type} (lmp)" "$?"
 
         cd $myroot
     done
