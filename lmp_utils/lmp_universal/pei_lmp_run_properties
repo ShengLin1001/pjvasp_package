@@ -213,10 +213,23 @@ for lat in fcc hcp; do
             cp "${file}" .
         done
 
+        # 每个滑移系的剪切偏移 (bp1, bp2)，与 DFT vasp_utils/.../pei_vasp_run_gsfe 完全一致：
+        # DFT 把 c 矢量平移 (bp1*a1, bp2*b2)，对应 LAMMPS 的 Δxz = bp1*lx、Δyz = bp2*ly。
+        # 值为 LAMMPS equal-style 可求值的表达式（1.0/3.0 由 LAMMPS 求值）。
+        case "${gsfe_type}" in
+            FCC_111|HCP_basal)   bp1="-0.5"; bp2="1.0/3.0" ;;
+            FCC_100)             bp1="0.5";  bp2="0.5" ;;
+            HCP_prism1w)         bp1="0.5";  bp2="0.0" ;;
+            HCP_pyr1w|HCP_pyr2)  bp1="0.0";  bp2="0.5" ;;
+            *) echo "Unknown gsfe_type for bp1/bp2: ${gsfe_type}"; exit 1 ;;
+        esac
+
         sed -i "s/lat_template/${latnum}/g"              gsfe_model.py
         sed -i "s|gsfe_type_template|${gsfe_type}|g"     gsfe_model.py
         sed -i "s/aa_template/${a0}/g"                   gsfe_model.py
         sed -i "s/cc_template/${c0}/g"                   gsfe_model.py
+        sed -i "s|gsfe_bp1_template|${bp1}|g"            gsfe.mod
+        sed -i "s|gsfe_bp2_template|${bp2}|g"            gsfe.mod
         sed -i "s|pair_style_template|${pair_style}|g" general_potential.mod
         sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
         sed -i "s|python_path_template|${python_path}|g" gsfe_template.in
