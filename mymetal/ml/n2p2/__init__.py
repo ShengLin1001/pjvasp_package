@@ -6,4 +6,7 @@ It includes functions to generate datasets from VASP OUTCAR files and to read da
 
 Submodules:
     - dataset: Contains functions to generate datasets from VASP OUTCAR files and to read datasets in NNP format.
+    - workflow: High-level PeiN2p2 orchestrator chaining the full n2p2 training/testing pipeline.
 """
+
+from mymetal.ml.n2p2.workflow import PeiN2p2
