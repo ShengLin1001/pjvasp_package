@@ -9,19 +9,22 @@ Functions:
     - check_ldata: Check consistency of reference states
     - plot_cij_energy: Fit energy-strain curves and plot results
     - write_cij_energy: Write calculated Cij values to a text file
+    - read_cij_energy: Read calculated Cij values back from the text file
     - read_deform_data: Read deformation data from a specified directory
 
 Change log:
     - Written by B. Y. (https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_bulk/yin_vasp_plot_cij_energy.py).
     - Revised by J. P. on 2025-11-04 to adapt to LAMMPS output format.
+    - Added read_cij_energy by J. P. to mirror write_cij_energy.
 """
 # This page is taken from https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_bulk/yin_vasp_plot_cij_energy.py
 # Changed to fit the lammps output by J. P. 
 # 2025.11.04
 
 import numpy as np
-from myvasp import vasp_func as vf 
+from myvasp import vasp_func as vf
 import os
+from pathlib import Path
 import matplotlib.pyplot as plt
 from mymetal.universal.plot.general import general_set_all_rcParams
 from ase import Atoms
@@ -245,9 +248,50 @@ def write_cij_energy( cij_hcp: np.array = None, save_txt_path: str = './y_post_c
         %( E_x/(1-nu_xy**2)   ) )
 
 
-    f.close() 
+    f.close()
 
     print(f"✅ Cij-energy written to '{save_txt_path}'")
+
+def read_cij_energy(save_txt_path: str = './y_post_cij_energy.txt') -> dict:
+    """
+    Read elastic constants written by :func:`write_cij_energy`.
+
+    Parses the ``C11 C12 C13 C33 C44`` block (always present) and, when the
+    file contains them, the derived transverse-isotropy quantities
+    ``E_x E_z nu_xy nu_xz mu_xz``. Each block is a header line of names
+    followed by one line of numeric values.
+
+    Args:
+        save_txt_path (str): Path to the file written by ``write_cij_energy``.
+
+    Returns:
+        dict: Keys ``C11, C12, C13, C33, C44`` (GPa) are always returned; keys
+        ``E_x, E_z, nu_xy, nu_xz, mu_xz`` are added when that block is present.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the C11..C44 block cannot be located.
+    """
+    p = Path(save_txt_path)
+    if not p.is_file():
+        raise FileNotFoundError(f"File not found: {p}")
+
+    lines = p.read_text(encoding='utf-8', errors='ignore').splitlines()
+    blocks = [['C11', 'C12', 'C13', 'C33', 'C44'],
+              ['E_x', 'E_z', 'nu_xy', 'nu_xz', 'mu_xz']]
+
+    out = {}
+    for i, ln in enumerate(lines):
+        names = ln.split()
+        for block in blocks:
+            if names[:5] == block and i + 1 < len(lines):
+                vals = lines[i + 1].split()
+                for k, v in zip(block, vals[:5]):
+                    out[k] = float(v)
+
+    if 'C11' not in out:
+        raise ValueError(f"Could not find C11..C44 block in {p}.")
+    return out
 
 def read_deform_data(dirn: str = None, atoms_ref: Atoms = None) -> dict:
     """

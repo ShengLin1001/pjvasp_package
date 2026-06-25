@@ -1,13 +1,29 @@
 """Plots for n2p2 training post-processing.
 
 Built on :func:`mymetal.universal.plot.plot.my_plot` so the figures share the
-package's house style (size, fonts, ticks, grid). Three plots:
+package's house style (size, fonts, ticks, grid).
 
-    - plot_learning_curve : energy/force RMSE vs epoch (log-y)
-    - plot_compare        : DFT-vs-NNP scatter (full range + zoom), per tag
-    - plot_rmse_by_tag    : per-tag energy/force RMSE bar chart (log-y)
+Per-training-run RMSE / scatter plots (data from
+:mod:`mymetal.ml.n2p2.calculate.post`):
 
-Data come from :mod:`mymetal.ml.n2p2.calculate.post`.
+    - my_plot_learning_curve : energy/force RMSE vs epoch (log-y)
+    - my_plot_compare        : DFT-vs-NNP scatter (full range + zoom), per tag
+    - my_plot_rmse_by_tag    : per-tag energy/force RMSE bar chart (log-y)
+
+LAMMPS (pair_style hdnnp) physical properties vs training epoch (data
+aggregated from the per-epoch mymetal post readers ``my_read_stretch`` /
+``read_cij_energy`` / ``read_output``):
+
+    - my_plot_epoch_stretch  : a / c (c/a for HCP) / E vs epoch, 3 rows x phase cols
+    - my_plot_epoch_cij      : C11/C12/C13/C33/C44 vs epoch, 5 rows x phase cols
+    - my_plot_epoch_gsfe     : stable/unstable SFE vs epoch, 2 rows x slip-system cols
+
+All three epoch grids share the x-axis (epoch); each panel is one
+default-coloured (C0) line with a C1 circle marker every 50 epochs, labelled by a
+column title (phase / slip system) and its own y-axis label instead of a
+legend. y-limits track the converged tail (last 75% of the data, 5% margin);
+grid is off; axes keep the my_plot preset size with a tightened inter-row gap
+(if_keep_wspace_hspace), and figures are saved with bbox_inches='tight'.
 """
 
 import matplotlib
@@ -18,7 +34,8 @@ import numpy as np
 from mymetal.universal.plot.plot import my_plot
 from mymetal.universal.plot.general import general_modify_legend
 
-__all__ = ['plot_learning_curve', 'plot_compare', 'plot_rmse_by_tag']
+__all__ = ['my_plot_learning_curve', 'my_plot_compare', 'my_plot_rmse_by_tag',
+           'my_plot_epoch_stretch', 'my_plot_epoch_cij', 'my_plot_epoch_gsfe']
 
 
 def _tag_colors(ltag: list) -> dict:
@@ -180,4 +197,181 @@ def my_plot_rmse_by_tag(df=None, file_path: str = None) -> tuple:
     ax[1].set_xticklabels(tags, rotation=45)
     ax[1].set_xlabel('Tag')
     fig.savefig(file_path)
+    return fig, ax
+
+
+# 共享 x 的 epoch 网格统一参数：
+#   _EPOCH_HSPACE   行间留白（英寸）。配合 my_plot(if_keep_wspace_hspace=True) 让每个 axes 保持
+#                   预设大小（7.31 x 5.89），只缩小竖直间距而不是把 axes 撑大；wspace 不传、保持默认。
+#   _EPOCH_MARK_EVERY  每隔多少 epoch 打一个 marker。
+_EPOCH_HSPACE = 1.0
+_EPOCH_MARK_EVERY = 50
+
+
+def _clear_default_labels(ax) -> None:
+    """Drop the placeholder 'X-/Y-axis Label' that general_axes writes on every axis."""
+    for a in np.atleast_2d(ax).ravel():
+        a.set_xlabel('')
+        a.set_ylabel('')
+
+
+def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY) -> None:
+    """Draw one epoch series with house defaults and a data-driven y-limit.
+
+    Full line in the default style (C0, default linewidth) with a circle marker
+    every ``mark_every`` epochs placed via ``markevery`` on the same artist. The
+    markers are coloured C1 so they stand out against the C0 line;
+    marker size keeps its default. The y-limits span the last 75% of the (finite)
+    data with a 5% margin top and bottom, so the early, still-converging epochs
+    don't squash the converged tail. An all-NaN panel (e.g. a slip system without
+    a stable SFE) is left empty.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y, dtype=float)
+    if not np.isfinite(y).any():
+        return
+    mark_idx = np.nonzero(x % mark_every == 0)[0]          # marker 落在 epoch 的整 mark_every 倍处
+    a.plot(x, y, marker='o', markevery=mark_idx.tolist(),
+           markeredgecolor='C1')     # 线默认 C0，marker 统一用 C1
+
+    tail = y[int(round(0.25 * len(y))):]                   # 后 75% 数据定 ylim
+    tail = tail[np.isfinite(tail)]
+    if tail.size:
+        lo, hi = float(tail.min()), float(tail.max())
+        span = hi - lo
+        pad = 0.05 * span if span > 0 else (0.05 * abs(hi) if hi else 0.05)
+        a.set_ylim(lo - pad, hi + pad)
+
+
+def _pretty_type(t: str) -> str:
+    """'HCP_basal' -> 'HCP Basal' (capitalise each token, keep all-caps tokens like FCC/HCP)."""
+    return ' '.join(p if p.isupper() else p.capitalize() for p in t.split('_'))
+
+
+def my_plot_epoch_stretch(df=None, file_path: str = None,
+                          phases=('hcp', 'fcc', 'bcc')) -> tuple:
+    """Equilibrium stretch quantities versus training epoch (3 rows x phase cols).
+
+    One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch). Rows top to
+    bottom: lattice constant ``a``, ``c`` (the HCP column shows ``c/a`` instead),
+    and energy per atom ``E``. One default-coloured (C0) line per panel (circle
+    marker every 50 epochs); phases are told apart by the column + its own y
+    label, not by colour, so there is no legend.
+
+    Args:
+        df: DataFrame with column ``epoch`` and (per phase) ``a_<p>``, ``c_<p>``,
+            ``E_<p>`` plus ``ca_hcp`` (built in ``PeiN2p2.post_epoch_scan``).
+        file_path: Output figure path (e.g. p_post_epoch_stretch.pdf).
+        phases: Column order (default hcp/fcc/bcc).
+    """
+    d = df.copy()
+    ep = d['epoch'].to_numpy()
+
+    fig, ax = my_plot(fig_subp=[3, len(phases)], fig_sharex=True, grid=False,
+                      if_keep_wspace_hspace=True, hspace=_EPOCH_HSPACE)
+    ax = np.atleast_2d(ax)
+    _clear_default_labels(ax)
+
+    for j, p in enumerate(phases):
+        if f'a_{p}' in d:                                  # row 0: a
+            _epoch_panel(ax[0, j], ep, d[f'a_{p}'].to_numpy())
+        ax[0, j].set_ylabel(r'$a$ ($\mathrm{\AA}$)')
+        if p == 'hcp':                                     # row 1: HCP 列画 c/a
+            if 'ca_hcp' in d:
+                _epoch_panel(ax[1, j], ep, d['ca_hcp'].to_numpy())
+            ax[1, j].set_ylabel(r'$c/a$ (-)')
+        else:                                              # row 1: 立方相画 c
+            if f'c_{p}' in d:
+                _epoch_panel(ax[1, j], ep, d[f'c_{p}'].to_numpy())
+            ax[1, j].set_ylabel(r'$c$ ($\mathrm{\AA}$)')
+        if f'E_{p}' in d:                                  # row 2: E
+            _epoch_panel(ax[2, j], ep, d[f'E_{p}'].to_numpy())
+        ax[2, j].set_ylabel('Energy (eV/atom)')
+        ax[0, j].set_title(p.upper())                      # 列标题：相
+        ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
+
+    fig.savefig(file_path, bbox_inches='tight')
+    return fig, ax
+
+
+def my_plot_epoch_cij(df=None, file_path: str = None,
+                      phases=('hcp', 'fcc', 'bcc'),
+                      comps=('11', '12', '13', '33', '44')) -> tuple:
+    """Elastic constants Cij versus training epoch (5 rows x phase cols).
+
+    One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch); rows top to
+    bottom are C11, C12, C13, C33, C44. One default-coloured (C0) line per panel
+    (circle marker every 50 epochs); no legend (the component is the row + y
+    label, the phase is the column).
+
+    Args:
+        df: DataFrame with column ``epoch`` and ``C<ij>_<p>`` columns
+            (built in ``PeiN2p2.post_epoch_scan``).
+        file_path: Output figure path (e.g. p_post_epoch_cij.pdf).
+        phases: Column order (default hcp/fcc/bcc).
+        comps: Cij components, one row each (default 11/12/13/33/44).
+    """
+    d = df.copy()
+    ep = d['epoch'].to_numpy()
+
+    fig, ax = my_plot(fig_subp=[len(comps), len(phases)], fig_sharex=True, grid=False,
+                      if_keep_wspace_hspace=True, hspace=_EPOCH_HSPACE)
+    ax = np.atleast_2d(ax)
+    _clear_default_labels(ax)
+
+    for i, c in enumerate(comps):
+        for j, p in enumerate(phases):
+            col = f'C{c}_{p}'
+            if col in d:
+                _epoch_panel(ax[i, j], ep, d[col].to_numpy())
+            ax[i, j].set_ylabel(rf'$C_{{{c}}}$ (GPa)')     # 每个面板都标 y
+            if i == 0:
+                ax[i, j].set_title(p.upper())              # 列标题：相
+    for j in range(ax.shape[1]):
+        ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
+
+    fig.savefig(file_path, bbox_inches='tight')
+    return fig, ax
+
+
+def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None) -> tuple:
+    """Stacking-fault energies versus training epoch (2 rows x slip-system cols).
+
+    One column per slip system (title = system name), shared x (epoch); top row
+    is the stable SFE ``gamma_sf`` (local min), bottom row the unstable SFE
+    ``gamma_usf`` (local max). One default-coloured (C0) line per panel (circle
+    marker every 50 epochs); no legend (the system is the column + y label). A
+    system with no stable minimum simply leaves its top panel empty.
+
+    Args:
+        df: DataFrame with column ``epoch`` and ``usf_<type>`` / ``sf_<type>``
+            columns (built in ``PeiN2p2.post_epoch_scan``).
+        file_path: Output figure path (e.g. p_post_epoch_gsfe.pdf).
+        types: Column order of slip systems. Defaults to the Au FCC/HCP set
+            (FCC_111, FCC_100, then the four HCP systems).
+    """
+    if types is None:
+        types = ['FCC_111', 'FCC_100', 'HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']
+
+    d = df.copy()
+    ep = d['epoch'].to_numpy()
+
+    fig, ax = my_plot(fig_subp=[2, len(types)], fig_sharex=True, grid=False,
+                      if_keep_wspace_hspace=True, hspace=_EPOCH_HSPACE)
+    ax = np.atleast_2d(ax)
+    _clear_default_labels(ax)
+
+    # 行：0 = 稳定层错能 sf，1 = 不稳定层错能 usf（与 post_epoch_scan 的列名一致）
+    ylabels = {'sf': r'$\gamma_{\mathrm{sf}}$ (mJ/m$^2$)',
+               'usf': r'$\gamma_{\mathrm{usf}}$ (mJ/m$^2$)'}
+    for j, t in enumerate(types):
+        for i, pref in enumerate(('sf', 'usf')):
+            col = f'{pref}_{t}'
+            if col in d:
+                _epoch_panel(ax[i, j], ep, d[col].to_numpy())
+            ax[i, j].set_ylabel(ylabels[pref])             # 每个面板都标 y
+        ax[0, j].set_title(_pretty_type(t))                # 列标题：滑移系（首字母大写）
+        ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
+
+    fig.savefig(file_path, bbox_inches='tight')
     return fig, ax

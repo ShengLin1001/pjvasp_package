@@ -13,9 +13,12 @@ Functions:
     - load_from_outcar(outcarfile, index, tag, comment_file): Load dataset from a VASP OUTCAR file
     - write(outfile_name, append): Write the dataset to an NNP input data file
     - get_dict(): Get the internal dataset as a dictionary
+    - read_dft_reference(dir_dft_root, ...): Batch-read DFT (VASP) reference
+      stretch/cij/gsfe properties into one dict for comparison with NNP epoch scans.
 
 Change Log:
     - 2025.10.19 Integrated all functions into the nnpdata class for better encapsulation.
+    - 2026.06.23 Added read_dft_reference() to collect DFT property baselines.
 """
 
 
@@ -27,6 +30,7 @@ import numpy as np
 import pandas as pd
 import re
 from collections import defaultdict
+from pathlib import Path
 
 
 class nnpdata:
@@ -375,3 +379,127 @@ class nnpdata:
                 elif fields[0] == 'end':
                     ltag.append(tag)
         return ltag
+
+
+# DFT (VASP) 参考基线，作为 PeiN2p2.post_epoch_scan 的对照量：post_epoch_scan 逐 epoch 读取
+# LAMMPS (pair_style hdnnp) 的 p_post_stretch.txt / y_post_cij_energy.txt / y_post_gsfe.txt，
+# 本函数用同一批读取器（my_read_stretch / read_cij_energy / read_output）从 construct_dataset 的
+# DFT 计算归档里读出同样的物理量，键名与 post_epoch_scan 的行字典一一对应，便于画图时叠加 DFT 水平参考线。
+# 相<->标签映射（construct_dataset/README.md）：A11=HCP, A12=FCC, A13=BCC；A21=HCP 缺陷, A22=FCC 缺陷。
+#   stretch  {tag}/y_stretch/p_post_stretch.txt        -> a_<lat>, c_<lat>, E_<lat>, ca_hcp, dE_*_fcc
+#   cij      {tag}/y_cij_energy/y_post_cij_energy.txt   -> C11_<lat> ... C44_<lat>
+#   gsfe     {tag}/{type}/y_gsfe_{type}/y_post_gsfe.txt -> usf_<type>, sf_<type>（缺失留 NaN）
+# 缺文件不报错，跳过该项（DFT 归档可能只覆盖部分相/滑移系），返回的子字典只含读到的键。
+def read_dft_reference(dir_dft_root,
+                       lats=('fcc', 'bcc', 'hcp'),
+                       cij_keys=('C11', 'C12', 'C13', 'C33', 'C44'),
+                       stretch_tag=None, cij_tag=None,
+                       gsfe_tag=None, gsfe_types=None,
+                       verbose=True) -> dict:
+    """Batch-read DFT (VASP) reference properties into one dict.
+
+    Reads the same per-phase stretch / Cij / GSFE post-processing files that
+    ``PeiN2p2.post_epoch_scan`` reads per training epoch, but from the DFT
+    archive under ``dir_dft_root`` (e.g. ``construct_dataset/calculate``). Uses
+    the identical readers (:func:`mymetal.post.stretch.my_read_stretch`,
+    :func:`mymetal.post.Cij_energy.read_cij_energy`,
+    :func:`mymetal.post.gsfe.read_output`) so the returned keys line up with the
+    epoch-scan row dicts and can be overlaid as horizontal reference lines.
+
+    Args:
+        dir_dft_root (str | Path): Root of the DFT archive holding the ``A1x``/
+            ``A2x`` tag directories.
+        lats (tuple): Phases to read for stretch/cij. Default ``('fcc','bcc','hcp')``.
+        cij_keys (tuple): Elastic-constant keys to pull from each cij file.
+        stretch_tag (dict, optional): phase -> tag for stretch files.
+            Default ``{'fcc':'A12-1','bcc':'A13-1','hcp':'A11-1'}``.
+        cij_tag (dict, optional): phase -> tag for cij files.
+            Default ``{'fcc':'A12-2','bcc':'A13-2','hcp':'A11-2'}``.
+        gsfe_tag (dict, optional): phase -> tag for gsfe files.
+            Default ``{'fcc':'A22-2','hcp':'A21-2'}``.
+        gsfe_types (dict, optional): phase -> list of slip-system type names.
+            Default matches ``post_epoch_scan``'s ``gsfe_types``.
+        verbose (bool): Print a line for each missing/skipped file.
+
+    Returns:
+        dict: ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}}`` with flat
+        sub-dicts keyed like the ``post_epoch_scan`` columns (no ``epoch``).
+        ``stretch``: ``a_<lat>``, ``c_<lat>``, ``E_<lat>`` (eV/atom) plus derived
+        ``ca_hcp`` (-) and ``dE_hcp_fcc`` / ``dE_bcc_fcc`` (meV/atom);
+        ``cij``: ``<C..>_<lat>`` (GPa); ``gsfe``: ``usf_<type>`` / ``sf_<type>``
+        (mJ/m^2, NaN if that extremum is absent).
+    """
+    # 与 post_epoch_scan 一致：就地局部 import，避免给 dataset 顶层引入 mymetal.post 依赖
+    from contextlib import redirect_stdout
+    from io import StringIO
+    from mymetal.post.stretch import my_read_stretch
+    from mymetal.post.Cij_energy import read_cij_energy
+    from mymetal.post.gsfe import read_output
+
+    if stretch_tag is None:
+        stretch_tag = {'fcc': 'A12-1', 'bcc': 'A13-1', 'hcp': 'A11-1'}
+    if cij_tag is None:
+        cij_tag = {'fcc': 'A12-2', 'bcc': 'A13-2', 'hcp': 'A11-2'}
+    if gsfe_tag is None:
+        gsfe_tag = {'fcc': 'A22-2', 'hcp': 'A21-2'}
+    if gsfe_types is None:
+        gsfe_types = {'fcc': ['FCC_100', 'FCC_111'],
+                      'hcp': ['HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']}
+
+    root = Path(dir_dft_root)
+
+    # 1) stretch：各相平衡 a/c (Extr rvector) 与 E/atom (Extr infos)
+    stretch = {}
+    for lat in lats:
+        tag = stretch_tag.get(lat)
+        if tag is None:
+            continue
+        ps = root / tag / 'y_stretch' / 'p_post_stretch.txt'
+        if not ps.is_file():
+            if verbose:
+                print(f'skip dft stretch {lat}: missing {ps}')
+            continue
+        with redirect_stdout(StringIO()):              # my_read_stretch 会回显注释头，抑制
+            *_, (_, _, extr_y, extr_rvec) = my_read_stretch(str(ps))
+        stretch[f'a_{lat}'] = float(extr_rvec[0])
+        stretch[f'c_{lat}'] = float(extr_rvec[2])
+        stretch[f'E_{lat}'] = float(extr_y)
+    if 'a_hcp' in stretch and 'c_hcp' in stretch:
+        stretch['ca_hcp'] = stretch['c_hcp'] / stretch['a_hcp']
+    if 'E_hcp' in stretch and 'E_fcc' in stretch:
+        stretch['dE_hcp_fcc'] = (stretch['E_hcp'] - stretch['E_fcc']) * 1e3
+    if 'E_bcc' in stretch and 'E_fcc' in stretch:
+        stretch['dE_bcc_fcc'] = (stretch['E_bcc'] - stretch['E_fcc']) * 1e3
+
+    # 2) cij：各相 C11..C44（立方相文件同样写满 5 个，C13/C33 与 C12/C11 近似重复）
+    cij = {}
+    for lat in lats:
+        tag = cij_tag.get(lat)
+        if tag is None:
+            continue
+        pc = root / tag / 'y_cij_energy' / 'y_post_cij_energy.txt'
+        if not pc.is_file():
+            if verbose:
+                print(f'skip dft cij {lat}: missing {pc}')
+            continue
+        d = read_cij_energy(str(pc))
+        for k in cij_keys:
+            cij[f'{k}_{lat}'] = d[k]
+
+    # 3) gsfe：逐滑移系读取 usf(local max)/sf(local min)，某类极值缺失留 NaN
+    gsfe = {}
+    for phase, ltype in gsfe_types.items():
+        tag = gsfe_tag.get(phase)
+        if tag is None:
+            continue
+        for t in ltype:
+            pg = root / tag / t / f'y_gsfe_{t}' / 'y_post_gsfe.txt'
+            if not pg.is_file():
+                if verbose:
+                    print(f'skip dft gsfe {t}: missing {pg}')
+                continue
+            g = read_output(str(pg))
+            gsfe[f'usf_{t}'] = g['usf_max'] if g['usf_max'] is not None else np.nan
+            gsfe[f'sf_{t}'] = g['sf_min'] if g['sf_min'] is not None else np.nan
+
+    return {'stretch': stretch, 'cij': cij, 'gsfe': gsfe}

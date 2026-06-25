@@ -302,8 +302,19 @@ def read_output(save_txt_path: Union[str, Path] = "./y_post_gsfe.txt",
                 - a11 (float): Lattice constant along a1 (Å).
                 - a22 (float): Lattice constant along a2 (Å).
                 - E0bulk (float): Per-atom bulk energy (eV).
-                - sf_min (Optional[float]): Local minimum GSFE (mJ/m²).
-                - usf_max (Optional[float]): Local maximum GSFE (mJ/m²).
+                - sf_min (float): Stable stacking-fault energy (mJ/m²), read from
+                  the ``local min`` line. Fallback when that line is absent (the
+                  GSFE curve has no interior local minimum in the sampled slip
+                  range): the last gamma value, ``gamma[-1]``.
+                - usf_max (float): Unstable stacking-fault energy (mJ/m²), read
+                  from the ``local max`` line. Fallback when that line is absent
+                  (no interior local maximum): the gamma column maximum,
+                  ``max(gamma)``.
+
+            Note:
+                With these fallbacks, ``sf_min`` and ``usf_max`` are always
+                populated (an explicit local extremum when present, otherwise the
+                gamma-column fallback), since the data table always has >= 1 row.
 
             Arrays:
                 - jobn (np.ndarray): Job identifiers.
@@ -346,7 +357,9 @@ def read_output(save_txt_path: Union[str, Path] = "./y_post_gsfe.txt",
     if Asf is None:
         raise ValueError("Could not find Asf/a11/a22/E0bulk block in file.")
 
-    # 2) 读 local min / local max（可能不存在）
+    # 2) 读 local min / local max（文件里可能没有这两行）。
+    #    先置 None，等下面 gamma 列解析出来后再兜底（见 step 4 末尾、与 docstring 一致）：
+    #    usf_max 缺失 -> max(gamma)，sf_min 缺失 -> gamma[-1]。
     sf_min: Optional[float] = None
     usf_max: Optional[float] = None
 
@@ -400,6 +413,13 @@ def read_output(save_txt_path: Union[str, Path] = "./y_post_gsfe.txt",
     da32_over_a22 = np.array([float(row[4]) for row in data_rows], dtype=float)
     slip = np.array([float(row[5]) for row in data_rows], dtype=float)
     da33 = np.array([float(row[6]) for row in data_rows], dtype=float)
+
+    # local min/max 兜底（gamma 已就绪，data_rows 非空保证 gamma 至少 1 个元素）：
+    #   极大值缺失 -> gamma 列最大值；极小值缺失 -> gamma 列最后一个值。
+    if usf_max is None:
+        usf_max = float(np.max(gamma))
+    if sf_min is None:
+        sf_min = float(gamma[-1])
 
     out: Dict[str, Any] = dict(
         Asf=Asf, a11=a11, a22=a22, E0bulk=E0bulk,
