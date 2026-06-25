@@ -9,6 +9,9 @@ pei_slurm_univ_submit —— 通用 Slurm 作业脚本生成 / 提交 CLI。
     每个命令行选项名都与库函数的形参严格同名（dest 一致），因此 main 里可以直接
     `pei_slurm_univ_submit(**vars(args))` 透传，无需手抄一份参数映射、也不会漏改。
     所有结构性 / 枚举 / None / 正整数校验都下推给库函数，这里只搬运。
+
+TODO:
+    each-subdir的父脚本应该在一个任务里
 """
 
 import argparse
