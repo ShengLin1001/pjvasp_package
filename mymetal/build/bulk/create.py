@@ -117,7 +117,43 @@ def create_hcp_prism2(a: float = None, c: float = None, size: tuple = (1, 1, 1),
 # todo: BCC (110) Plane
 
 
-##### This part is taken from 
+# Vectorized drop-in replacement for myvasp.vasp_create.create_supercell.
+# The original builds atoms_pos by np.vstack inside a 4-deep Python loop, which
+# is O(N^2) in memory copies and dominates the runtime of vasp_create_hcp_pyr1/
+# pyr2 (and the other create_* helpers) once the cell holds thousands of atoms.
+# This version preallocates and broadcasts -> O(N), while keeping the exact same
+# atom ordering (cell index k-slow,j,i-fast outermost; motif index m innermost)
+# so the produced model is identical to vf.create_supercell.
+def create_supercell_fast(latt: np.ndarray, motif: np.ndarray,
+                          ncell) -> Atoms:
+    latt = np.asarray(latt, dtype=float)
+    motif = np.asarray(motif, dtype=float)
+    nx, ny, nz = (int(ncell[0]), int(ncell[1]), int(ncell[2]))
+
+    # cell-origin indices in the original loop order: k slowest, then j, then i
+    K, J, I = np.meshgrid(np.arange(nz), np.arange(ny), np.arange(nx),
+                          indexing='ij')
+    I, J, K = I.ravel()[:, None], J.ravel()[:, None], K.ravel()[:, None]
+    # accumulate elementwise in the same ((i*l0 + j*l1) + k*l2) order as the
+    # original loop, so there is no floating-point re-association difference
+    refp = I * latt[0, :] + J * latt[1, :] + K * latt[2, :]     # (ncells, 3)
+
+    motif_cart = motif @ latt                                  # (nmotif, 3)
+
+    # broadcast: cell index slow, motif index fast -> matches original ordering
+    atoms_pos = (refp[:, None, :] + motif_cart[None, :, :]).reshape(-1, 3)
+
+    superlatt = latt.copy()
+    for i in np.arange(3):
+        superlatt[i, :] = superlatt[i, :] * ncell[i]
+
+    atoms = Atoms(cell=superlatt, positions=atoms_pos, pbc=[1, 1, 1])
+    natoms = atoms.positions.shape[0]
+    atoms.set_chemical_symbols(np.ones([natoms, 1]))
+    return atoms
+
+
+##### This part is taken from
 # https://github.com/BinglunYin/myalloy_package/blob/master/myvasp/vasp_create_hcp.py
 
 #===================
@@ -150,7 +186,7 @@ def vasp_create_hcp_basal(a, ca, ncell, bp=33):
         [1/3,  2/3,  1/2],
     ])
 
-    atoms = vf.create_supercell(latt, motif, ncell)
+    atoms = create_supercell_fast(latt, motif, ncell)
 
     if bp == 33:
         atoms.positions = atoms.positions + np.array([0, 0, 0.1])*a
@@ -177,7 +213,7 @@ def vasp_create_hcp_basal_ortho(a, ca, ncell, bp=33):
         [1/2,  5/6,  1/2],
     ])
 
-    atoms = vf.create_supercell(latt, motif, ncell)
+    atoms = create_supercell_fast(latt, motif, ncell)
     
     if bp == 33:
         atoms.positions = atoms.positions + np.array([0, 0, 0.1])*a
@@ -234,7 +270,7 @@ def vasp_create_hcp_pyr1(a, ca, ncell, bp=33):
     for i in np.arange(3):
         ncell2[i] = ncell[ np.mod(i+2, 3) ]
    
-    atoms = vf.create_supercell(latt, motif, ncell2)
+    atoms = create_supercell_fast(latt, motif, ncell2)
     atoms = vf.make_SFP_xy(atoms, i1=1)
     atoms = vf.make_a3_ortho(atoms)
 
@@ -274,7 +310,7 @@ def vasp_create_hcp_pyr2(a, ca, ncell, bp=33):
     for i in np.arange(3):
         ncell2[i] = ncell[ np.mod(i+2, 3) ]
    
-    atoms = vf.create_supercell(latt, motif, ncell2)
+    atoms = create_supercell_fast(latt, motif, ncell2)
     atoms = vf.make_SFP_xy(atoms, i1=1)
     atoms = vf.make_a3_ortho(atoms)
     
@@ -310,7 +346,7 @@ def vasp_create_fcc_100(a, ncell, bp=33):
         [0,  0.5,  0.5],
     ])
 
-    atoms = vf.create_supercell(latt, motif, ncell)
+    atoms = create_supercell_fast(latt, motif, ncell)
     atoms.pos_a0 = a 
 
     if bp == 33:
