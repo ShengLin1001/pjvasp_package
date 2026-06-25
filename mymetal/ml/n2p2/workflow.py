@@ -56,6 +56,12 @@ class PeiN2p2:
         dir_lmp_utils: LAMMPS 物性测试模板与后处理工具目录。
         path_python: 物性测试后处理所用 Python 解释器路径。
         lele: 从 input.nn.nosf 读取的元素列表。
+
+    TODO:
+        - 将初始训练集的每个atoms的原子数调整到36-72，离48最近
+        - 选取最后的势函数作MD升温模拟，挑选出某些结构，放到DFT中计算，并append到训练集，形成迭代式训练
+        - 添加收集各个势函数的平衡结构
+        - 将平衡结构用DFT再计算，并append到训练集，形成迭代式训练
     """
 
     def __init__(self, dir_data: Path = Path("./data"), dir_sf: Path = Path("./sf"), dir_train: Path = Path("./train"), dir_file: Path = Path("./file"),
@@ -173,7 +179,9 @@ class PeiN2p2:
         return elements
 
 
-    def generate_data(self, dir_data_source: Path = None, data_tag_dict: dict = None):
+    def generate_data(self, dir_data_source: Path = None, data_tag_dict: dict = None,
+                      if_adjust_size: bool = False, size_top: int = 72,
+                      size_bottom: int = 36, size_close: int = 48):
         """从 VASP OUTCAR 生成 n2p2 训练数据。
 
         遍历 ``dir_data_source/<tag>/<subdir>/y_dir`` 下的每个子目录，用
@@ -189,6 +197,12 @@ class PeiN2p2:
         Args:
             dir_data_source: 按 tag 分类存放 VASP 计算结果的根目录。
             data_tag_dict: tag 到子目录列表的映射。
+            if_adjust_size: 是否把每个结构的原子数规整到 [size_bottom, size_top] 区间
+                内并尽量逼近 size_close（仅面内 a,b 超胞复制，nz 恒为 1）。默认 False，
+                保持原结构不变。
+            size_top: 原子数上限。原子数已超过此值的结构（如大平板）保持原样不复制。
+            size_bottom: 原子数下限。
+            size_close: 规整目标原子数，复制方案在区间内尽量逼近此值。
 
         Raises:
             FileNotFoundError: 某个数据子目录下缺少 y_dir。
@@ -222,6 +236,8 @@ class PeiN2p2:
                         comment_file = '/'.join(d.parts[8:])
                         mynnpdata = nnpdata()
                         mynnpdata.load_from_outcar(outcarfile=d / 'OUTCAR', index='-1', tag=tag, comment_file=comment_file)
+                        if if_adjust_size:
+                            mynnpdata.adjust_size(size_top=size_top, size_bottom=size_bottom, size_close=size_close)
                         mynnpdata.write(outfile_name=path_data_train / f'input_{tag}.data', append=True)
                         mynnpdata.write(outfile_name=path_data_train / 'input.data', append=True)
                         mydict = mynnpdata.get_dict()
@@ -803,6 +819,9 @@ class PeiN2p2:
         dir_run = Path(dir_run)
         dir_post = dir_run.parent.parent / 'y_post' / dir_run.name
         dir_props = dir_post / 'properties'
+        if dir_props.is_dir():
+            shutil.rmtree(dir_props)
+
         os.makedirs(dir_props, exist_ok=True)
 
         # 1. 校验 + cutoff（pair_style hdnnp 近邻表 cutoff 必须 >= 最大对称函数 rc，留 0.01 Å 余量）
