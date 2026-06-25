@@ -33,6 +33,59 @@ from collections import defaultdict
 from pathlib import Path
 
 
+def _choose_inplane_rep(n0: int, size_top: int = 72, size_bottom: int = 36,
+                        size_close: int = 48) -> tuple:
+    """Pick an in-plane (a, b) supercell factor to normalize the atom count.
+
+    Returns ``(nx, ny)`` so that ``n0 * nx * ny`` lies in
+    ``[size_bottom, size_top]`` and is as close as possible to ``size_close``.
+    Replication can only grow the atom count, so structures already larger than
+    ``size_top`` are kept untouched (returns ``(1, 1)``).
+
+    Args:
+        n0 (int): Atom count of the original structure.
+        size_top (int): Upper bound of the allowed atom count.
+        size_bottom (int): Lower bound of the allowed atom count.
+        size_close (int): Target atom count to approach.
+
+    Returns:
+        tuple: ``(nx, ny)`` in-plane replication factors (``nz`` stays 1).
+
+    Notes:
+        For any ``n0 <= size_top`` a valid factor always exists: when
+        ``n0`` already falls in ``[size_bottom, size_top]`` then ``k=1`` is a
+        candidate, and when ``n0 < size_bottom`` the window length
+        ``size_top - size_bottom`` is wide enough (>= n0) to contain a multiple.
+        The chosen total multiplier ``k`` is then split into the most balanced
+        ``nx * ny`` (a prime ``k`` degenerates to a ``1 x k`` in-plane strip).
+    """
+    if n0 > size_top:
+        return (1, 1)
+
+    best_k = None
+    best_diff = None
+    for k in range(1, size_top // n0 + 1):
+        n = n0 * k
+        if n < size_bottom or n > size_top:
+            continue
+        diff = abs(n - size_close)
+        if best_diff is None or diff < best_diff:
+            best_diff = diff
+            best_k = k
+
+    if best_k is None:  # 理论上 n0 <= size_top 时不会发生，留作兜底
+        return (1, 1)
+
+    # 把 k 拆成尽量均衡的 nx * ny（nx <= ny）
+    nx = 1
+    for d in range(int(best_k ** 0.5), 0, -1):
+        if best_k % d == 0:
+            nx = d
+            break
+    ny = best_k // nx
+    return (nx, ny)
+
+
 class nnpdata:
     """A class for handling NNP input datasets.
 
@@ -258,6 +311,59 @@ class nnpdata:
             'lfull_struct_numbers': lfull_struct_numbers,
             'lforces': lforces,
             'lenergies': lenergies
+        }
+
+    def adjust_size(self, size_top: int = 72, size_bottom: int = 36, size_close: int = 48):
+        """In-place: replicate each loaded structure in-plane to normalize atom count.
+
+        For every Atoms in ``self.latoms`` an in-plane ``(nx, ny)`` factor is
+        chosen via :func:`_choose_inplane_rep` so that the atom count lands in
+        ``[size_bottom, size_top]`` and approaches ``size_close``; ``nz`` stays 1
+        to protect the vacuum direction of slabs. Structures already larger than
+        ``size_top`` are left untouched.
+
+        On replication (``M = nx * ny``) the total energy scales as ``E * M`` and
+        the forces are tiled ``np.tile(F, (M, 1))`` (matching ASE ``repeat``'s
+        block-wise atom order); a fresh ``SinglePointCalculator`` is attached
+        because ``repeat`` drops the calculator. ``lforces`` / ``lenergies`` and
+        ``self.dict`` are updated in sync so ``write()`` and the npy dumps agree.
+
+        Args:
+            size_top (int): Upper bound of the allowed atom count.
+            size_bottom (int): Lower bound of the allowed atom count.
+            size_close (int): Target atom count to approach.
+        """
+        for i, atoms in enumerate(self.latoms):
+            n0 = len(atoms)
+            nx, ny = _choose_inplane_rep(n0, size_top=size_top,
+                                         size_bottom=size_bottom, size_close=size_close)
+            M = nx * ny
+            if M == 1:
+                continue
+
+            energy = atoms.get_potential_energy()
+            forces = atoms.get_forces(apply_constraint=False)
+
+            sc = atoms.repeat((nx, ny, 1))
+            new_forces = np.tile(forces, (M, 1))
+            new_energy = energy * M
+            sc.calc = SinglePointCalculator(sc, energy=new_energy, forces=new_forces)
+
+            self.latoms[i] = sc
+            self.lforces[i] = new_forces
+            self.lenergies[i] = new_energy
+            tag = self.ltags[i] if i < len(self.ltags) else 'all'
+            print(f"  ↗ resize {n0}→{n0 * M} (×{nx}×{ny}) [{tag}]")
+
+        self.dict = {
+            'latoms': self.latoms,
+            'ltags': self.ltags,
+            'lcomment_files': self.lcomment_files,
+            'lfiles': self.lfiles,
+            'lstruct_numbers': self.lstruct_numbers,
+            'lfull_struct_numbers': self.lfull_struct_numbers,
+            'lforces': self.lforces,
+            'lenergies': self.lenergies
         }
 
     # OUTCAR to n2p2
