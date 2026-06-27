@@ -452,19 +452,47 @@ class PeiN2p2:
 
 
     @staticmethod
-    def _snapshot_jobids() -> set:
+    def _snapshot_jobids(retries: int = 99, retry_interval: int = 10) -> set:
         """当前用户排队/运行中的全部作业号集合。
 
         用于捕获经第三方提交器（如 pei_slurm_univ_submit）提交、无法直接拿到作业号的
         child 作业：提交前后各取一次快照，差集即本次新提交的作业。
 
+        关键：squeue 偶发失败（slurmctld 繁忙/超时）时，stdout 为空。**绝不能**把空输出
+        当作"队列里没作业"——那会让 wait_jobs 误判作业已离队、在训练还在跑时就开始后处理
+        （曾导致读到半截 learning-curve 的非 5 倍数 epoch、缺权重文件而崩溃）。故这里检查
+        returncode，失败则重试，重试用尽仍失败就抛 RuntimeError 让调用方显式处理，而不是
+        静默返回空集。
+
+        Args:
+            retries: squeue 失败时的重试次数。
+            retry_interval: 每次重试前等待的秒数。
+
         Returns:
             作业号字符串集合。
+
+        Raises:
+            RuntimeError: squeue 连续失败、无法获得可靠的队列快照。
         """
         user = os.environ.get('USER') or getpass.getuser()
-        out = subprocess.run(['squeue', '-u', user, '-h', '-o', '%i'],
-                             capture_output=True, text=True)
-        return set(x.strip() for x in out.stdout.split() if x.strip())
+        last_err = ''
+        for attempt in range(1, retries + 1):
+            try:
+                out = subprocess.run(['squeue', '-u', user, '-h', '-o', '%i'],
+                                     capture_output=True, text=True)
+            except Exception as e:
+                # try 发生异常走这里
+                last_err = repr(e)
+            else:
+                # try 成功走这里
+                # returncode==0 才信任 stdout；非 0 时空 stdout 不代表队列为空
+                if out.returncode == 0:
+                    return set(x.strip() for x in out.stdout.split() if x.strip())
+                last_err = f'returncode={out.returncode}, stderr={out.stderr.strip()}'
+            if attempt < retries:
+                print(f"  ⚠️  squeue failed (attempt {attempt}/{retries}): {last_err}; retry in {retry_interval}s")
+                time.sleep(retry_interval)
+        raise RuntimeError(f"❌ squeue failed after {retries} attempts: {last_err}")
 
 
     @staticmethod
@@ -486,7 +514,14 @@ class PeiN2p2:
         print(f"  [wait:{label}] waiting for {len(ljobid)} job(s): {sorted(ljobid)}")
         t0 = datetime.now()
         while True:
-            remaining = PeiN2p2._snapshot_jobids() & ljobid
+            try:
+                remaining = PeiN2p2._snapshot_jobids() & ljobid
+            except RuntimeError as e:
+                # 快照不可靠时只能保守地认为作业仍在队列，继续等——
+                # 宁可多等，也绝不在拿不到可靠队列状态时误判作业已结束
+                print(f"  [wait:{label}] {e}; assume jobs still running, keep waiting.")
+                time.sleep(poll_interval)
+                continue
             if not remaining:
                 break
             time.sleep(poll_interval)
