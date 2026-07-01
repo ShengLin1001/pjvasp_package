@@ -32,8 +32,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from mymetal.universal.plot.general import general_set_all_rcParams
 from pathlib import Path
-from typing import Union, Any, Dict, Optional, List
-import re
+from typing import Union, Any, Dict, List
 
 
 def post_gsfe( post_data_path: str = None,
@@ -302,19 +301,16 @@ def read_output(save_txt_path: Union[str, Path] = "./y_post_gsfe.txt",
                 - a11 (float): Lattice constant along a1 (Å).
                 - a22 (float): Lattice constant along a2 (Å).
                 - E0bulk (float): Per-atom bulk energy (eV).
-                - sf_min (float): Stable stacking-fault energy (mJ/m²), read from
-                  the ``local min`` line. Fallback when that line is absent (the
-                  GSFE curve has no interior local minimum in the sampled slip
-                  range): the last gamma value, ``gamma[-1]``.
-                - usf_max (float): Unstable stacking-fault energy (mJ/m²), read
-                  from the ``local max`` line. Fallback when that line is absent
-                  (no interior local maximum): the gamma column maximum,
-                  ``max(gamma)``.
+                - sf_min (float): Stable stacking-fault energy (mJ/m²), forced to
+                  the last gamma value, ``gamma[-1]``.
+                - usf_max (float): Unstable stacking-fault energy (mJ/m²), forced
+                  to the gamma column maximum, ``max(gamma)``.
 
             Note:
-                With these fallbacks, ``sf_min`` and ``usf_max`` are always
-                populated (an explicit local extremum when present, otherwise the
-                gamma-column fallback), since the data table always has >= 1 row.
+                ``local min`` / ``local max`` lines in the text file are parsed
+                neither as authority nor as fallback. ``sf_min`` and ``usf_max``
+                are always derived from the gamma table, since the data table
+                always has >= 1 row.
 
             Arrays:
                 - jobn (np.ndarray): Job identifiers.
@@ -357,25 +353,8 @@ def read_output(save_txt_path: Union[str, Path] = "./y_post_gsfe.txt",
     if Asf is None:
         raise ValueError("Could not find Asf/a11/a22/E0bulk block in file.")
 
-    # 2) 读 local min / local max（文件里可能没有这两行）。
-    #    先置 None，等下面 gamma 列解析出来后再兜底（见 step 4 末尾、与 docstring 一致）：
-    #    usf_max 缺失 -> max(gamma)，sf_min 缺失 -> gamma[-1]。
-    sf_min: Optional[float] = None
-    usf_max: Optional[float] = None
-
-    # 你的 write_output 写的是：
-    #   'local min (mJ/m^2): %16.8f'
-    #   'local max (mJ/m^2): %16.8f'
-    # 注意：你写 usf 的时候用的是 usf.min()（可能是 bug），但读文件只按文字解析，不做纠正
-    for ln in lines:
-        m = re.search(r"local min\s*\(mJ/m\^2\)\s*:\s*([-\d\.Ee+]+)", ln)
-        if m:
-            sf_min = float(m.group(1))
-        m = re.search(r"local max\s*\(mJ/m\^2\)\s*:\s*([-\d\.Ee+]+)", ln)
-        if m:
-            usf_max = float(m.group(1))
-
-    # 3) 定位表头行，然后读数据行直到遇到空行/非数据
+    # 2) 定位表头行，然后读数据行直到遇到空行/非数据。
+    #    local min / local max 行只保留在原始文本里；汇总用 gamma 表强制重算。
     header_idx = None
     for i, ln in enumerate(lines):
         if ln.strip().startswith("jobn") and "dE" in ln and "gamma" in ln and "da33" in ln:
@@ -405,7 +384,7 @@ def read_output(save_txt_path: Union[str, Path] = "./y_post_gsfe.txt",
     if not data_rows:
         raise ValueError("No data rows found under the table header.")
 
-    # 4) 转成数组
+    # 3) 转成数组
     jobn = np.array([row[0] for row in data_rows], dtype=object)
     dE = np.array([float(row[1]) for row in data_rows], dtype=float)
     gamma = np.array([float(row[2]) for row in data_rows], dtype=float)
@@ -414,12 +393,9 @@ def read_output(save_txt_path: Union[str, Path] = "./y_post_gsfe.txt",
     slip = np.array([float(row[5]) for row in data_rows], dtype=float)
     da33 = np.array([float(row[6]) for row in data_rows], dtype=float)
 
-    # local min/max 兜底（gamma 已就绪，data_rows 非空保证 gamma 至少 1 个元素）：
-    #   极大值缺失 -> gamma 列最大值；极小值缺失 -> gamma 列最后一个值。
-    if usf_max is None:
-        usf_max = float(np.max(gamma))
-    if sf_min is None:
-        sf_min = float(gamma[-1])
+    # 强制使用 gamma 表定义，不受文件里已有的 local min/local max 行影响。
+    usf_max = float(np.max(gamma))
+    sf_min = float(gamma[-1])
 
     out: Dict[str, Any] = dict(
         Asf=Asf, a11=a11, a22=a22, E0bulk=E0bulk,

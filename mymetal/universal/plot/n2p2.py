@@ -391,10 +391,10 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None) -> 
     """Stacking-fault energies versus training epoch (2 rows x slip-system cols).
 
     One column per slip system (title = system name), shared x (epoch); top row
-    is the stable SFE ``gamma_sf`` (local min), bottom row the unstable SFE
-    ``gamma_usf`` (local max). One default-coloured (C0) line per panel (circle
+    is the stable SFE ``gamma_sf`` (last gamma), bottom row the unstable SFE
+    ``gamma_usf`` (max gamma). One default-coloured (C0) line per panel (circle
     marker every 50 epochs); no legend (the system is the column + y label). A
-    system with no stable minimum simply leaves its top panel empty.
+    system with a valid GSFE table has both panels populated.
 
     Args:
         df: DataFrame with column ``epoch`` and ``usf_<type>`` / ``sf_<type>``
