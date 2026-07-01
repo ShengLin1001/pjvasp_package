@@ -26,7 +26,7 @@ from mymetal.ml.n2p2.calculate.post import (read_learning_curve, read_normalizat
                                             read_trainforces, rmse_me, build_rmse_by_tag_df)
 from mymetal.universal.plot.n2p2 import (my_plot_learning_curve, my_plot_compare, my_plot_rmse_by_tag,
                                          my_plot_epoch_stretch, my_plot_epoch_cij, my_plot_epoch_gsfe)
-from mymetal.ml.n2p2.dataset import nnpdata
+from mymetal.ml.n2p2.dataset import nnpdata, read_dft_reference
 from mymetal.io.general import general_write
 from mymetal.slurm.submit import pei_slurm_univ_submit
 import numpy as np
@@ -930,7 +930,8 @@ class PeiN2p2:
         return dir_props
 
 
-    def post_epoch_scan(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001')) -> Path:
+    def post_epoch_scan(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
+                        dir_dft_root: Path = None) -> Path:
         """汇总跨 epoch 的 LAMMPS 物性扫描结果。
 
         把 ``properties/y_epoch_scan/y_dir/<epoch>/`` 各 epoch 的物性结果汇总到与 y_dir
@@ -951,12 +952,15 @@ class PeiN2p2:
 
         Args:
             dir_run: n2p2 训练运行目录。
+            dir_dft_root: DFT (VASP) 计算归档根目录（如 construct_dataset/calculate）。
+                给定时用 :func:`read_dft_reference` 读出同样的物理量，叠成灰色虚线参考线
+                画进三张 epoch 扫描图，并把读到的值打印到屏幕；为 None 时只画 LAMMPS 曲线。
 
         Returns:
             epoch 扫描汇总目录。
 
         Raises:
-            FileNotFoundError: 缺少 properties/y_epoch_scan/y_dir 目录。
+            FileNotFoundError: 缺少 properties/y_epoch_scan/y_dir 目录，或给定的 dir_dft_root 不存在。
         """
 
         from contextlib import redirect_stdout
@@ -1049,13 +1053,27 @@ class PeiN2p2:
 
         nstretch, n_cij, n_gsfe = 0, 0, 0
 
+        # DFT 参考基线（construct_dataset 归档）：与逐 epoch 量同读取器、同键名，叠成灰色虚线参考。
+        # 给定 dir_dft_root 才读；目录不存在直接报错（结构性前提），缺单个文件由 read_dft_reference 跳过。
+        dft = None
+        if dir_dft_root is not None:
+            if not Path(dir_dft_root).is_dir():
+                raise FileNotFoundError(f"❌ Missing DFT archive root {dir_dft_root}.")
+            dft = read_dft_reference(dir_dft_root)
+            print(f"================ 📊 DFT reference ({dir_dft_root})")
+            for group in ('stretch', 'cij', 'gsfe'):
+                print(f"  [{group}] {len(dft[group])} value(s)")
+                for k, v in dft[group].items():
+                    print(f"    {k:16s} = {v:.6g}")
+
         if rows_stretch:
             df_stretch = pd.DataFrame(rows_stretch).sort_values('epoch').reset_index(drop=True)[cols_stretch]
             self._write_table(dir_scan / 'p_post_epoch_stretch.txt',
                             ['# LAMMPS (pair_style hdnnp) equilibrium stretch properties vs training epoch',
                             '# a/c (A), c/a (-), E (eV/atom), dE (meV/atom)'],
                             df_stretch, float_format='14.6f')
-            my_plot_epoch_stretch(df_stretch, dir_scan / 'p_post_epoch_stretch.pdf')
+            my_plot_epoch_stretch(df_stretch, dir_scan / 'p_post_epoch_stretch.pdf',
+                                  dft=dft['stretch'] if dft else None)
             nstretch = len(df_stretch)
         else:
             print('No complete stretch epochs; skip stretch.txt/pdf.')
@@ -1066,7 +1084,8 @@ class PeiN2p2:
                               ['# LAMMPS (pair_style hdnnp) elastic constants Cij vs training epoch',
                                '# Cij (GPa); cubic phases use C11=C33, C12=C13'],
                               df_cij, float_format='12.4f')
-            my_plot_epoch_cij(df_cij, dir_scan / 'p_post_epoch_cij.pdf')
+            my_plot_epoch_cij(df_cij, dir_scan / 'p_post_epoch_cij.pdf',
+                              dft=dft['cij'] if dft else None)
             n_cij = len(df_cij)
         else:
             print('No complete cij epochs; skip cij.txt/pdf.')
@@ -1077,7 +1096,8 @@ class PeiN2p2:
                               ['# LAMMPS (pair_style hdnnp) stacking-fault energies vs training epoch',
                                '# usf = unstable SFE (local max), sf = stable SFE (local min); units mJ/m^2'],
                               df_gsfe, float_format='12.4f')
-            my_plot_epoch_gsfe(df_gsfe, dir_scan / 'p_post_epoch_gsfe.pdf', types=all_types)
+            my_plot_epoch_gsfe(df_gsfe, dir_scan / 'p_post_epoch_gsfe.pdf', types=all_types,
+                               dft=dft['gsfe'] if dft else None)
             n_gsfe = len(df_gsfe)
         else:
             print('No gsfe epochs; skip gsfe.txt/pdf.')
