@@ -944,7 +944,7 @@ class PeiN2p2:
         物理量全部经 mymetal 的逐 epoch post 读取器取得（单一数据来源，避免重复解析逻辑）：
         ``my_read_stretch`` 读 p_post_stretch.txt 的 Extr infos(E)/rvector(a,c)，
         ``read_cij_energy`` 读 y_post_cij_energy.txt 的 C11..C44，
-        ``read_output`` 读 y_post_gsfe.txt 的 usf_max/sf_min。
+        ``read_output`` 从 y_post_gsfe.txt 的 gamma 表强制取 usf=max(gamma)、sf=最后一个 gamma。
 
         Note:
             某 epoch 缺 stretch/cij 的任一相则该表跳过此 epoch；gsfe 按滑移系逐个读取，
@@ -1024,7 +1024,7 @@ class PeiN2p2:
             else:
                 print(f'skip epoch {epp}: incomplete cij')
 
-            # 3) gsfe：逐滑移系读取 usf/sf，缺失留 NaN，只要本 epoch 有任一滑移系即成行
+            # 3) gsfe：逐滑移系读取 usf=max(gamma)、sf=最后一个 gamma，缺失留 NaN
             rec, ok = {'epoch': ep}, True
             for phase, ltype in gsfe_types.items():
                 for t in ltype:
@@ -1070,7 +1070,7 @@ class PeiN2p2:
             df_stretch = pd.DataFrame(rows_stretch).sort_values('epoch').reset_index(drop=True)[cols_stretch]
             self._write_table(dir_scan / 'p_post_epoch_stretch.txt',
                             ['# LAMMPS (pair_style hdnnp) equilibrium stretch properties vs training epoch',
-                            '# a/c (A), c/a (-), E (eV/atom), dE (meV/atom)'],
+                            '# FCC/BCC a/c are conventional cubic lengths; HCP a/c are hexagonal; E (eV/atom), dE (meV/atom)'],
                             df_stretch, float_format='14.6f')
             my_plot_epoch_stretch(df_stretch, dir_scan / 'p_post_epoch_stretch.pdf',
                                   dft=dft['stretch'] if dft else None)
@@ -1094,7 +1094,7 @@ class PeiN2p2:
             df_gsfe = pd.DataFrame(rows_gsfe).sort_values('epoch').reset_index(drop=True).reindex(columns=cols_gsfe)
             self._write_table(dir_scan / 'p_post_epoch_gsfe.txt',
                               ['# LAMMPS (pair_style hdnnp) stacking-fault energies vs training epoch',
-                               '# usf = unstable SFE (local max), sf = stable SFE (local min); units mJ/m^2'],
+                               '# usf = max(gamma), sf = last gamma value; units mJ/m^2'],
                               df_gsfe, float_format='12.4f')
             my_plot_epoch_gsfe(df_gsfe, dir_scan / 'p_post_epoch_gsfe.pdf', types=all_types,
                                dft=dft['gsfe'] if dft else None)

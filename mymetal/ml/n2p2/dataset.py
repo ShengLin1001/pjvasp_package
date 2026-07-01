@@ -487,14 +487,52 @@ class nnpdata:
         return ltag
 
 
+def _is_orthogonal_cell(cell: np.ndarray, atol: float = 1e-6) -> bool:
+    """Return whether the three cell vectors are mutually orthogonal."""
+    arr = np.asarray(cell, dtype=float)
+    if arr.shape != (3, 3):
+        return False
+    lengths = np.linalg.norm(arr, axis=1)
+    if np.any(lengths <= 0):
+        return False
+    dots = arr @ arr.T
+    off_diag = dots - np.diag(np.diag(dots))
+    scale = float(np.max(lengths) ** 2)
+    return bool(np.all(np.abs(off_diag) <= atol * scale))
+
+
+def _stretch_lattice_values_for_epoch_convention(
+        lat: str, extr_rvec: np.ndarray, cell_ref: np.ndarray) -> tuple:
+    """Convert DFT stretch row-vector lengths to the LAMMPS epoch-scan convention.
+
+    The VASP archive stores FCC/BCC equilibrium structures as primitive cells, so
+    ``my_read_stretch`` returns primitive row-vector lengths. LAMMPS y_post scans
+    use conventional cubic cells for FCC/BCC. HCP already uses the same hexagonal
+    ``a``/``c`` convention on both sides.
+    """
+    rvec = np.asarray(extr_rvec, dtype=float)
+    a = float(rvec[0])
+    c = float(rvec[2])
+    if _is_orthogonal_cell(cell_ref):
+        return a, c
+    if lat == 'fcc':
+        factor = np.sqrt(2.0)
+        return a * factor, c * factor
+    if lat == 'bcc':
+        factor = 2.0 / np.sqrt(3.0)
+        return a * factor, c * factor
+    return a, c
+
+
 # DFT (VASP) 参考基线，作为 PeiN2p2.post_epoch_scan 的对照量：post_epoch_scan 逐 epoch 读取
 # LAMMPS (pair_style hdnnp) 的 p_post_stretch.txt / y_post_cij_energy.txt / y_post_gsfe.txt，
 # 本函数用同一批读取器（my_read_stretch / read_cij_energy / read_output）从 construct_dataset 的
 # DFT 计算归档里读出同样的物理量，键名与 post_epoch_scan 的行字典一一对应，便于画图时叠加 DFT 水平参考线。
 # 相<->标签映射（construct_dataset/README.md）：A11=HCP, A12=FCC, A13=BCC；A21=HCP 缺陷, A22=FCC 缺陷。
 #   stretch  {tag}/y_stretch/p_post_stretch.txt        -> a_<lat>, c_<lat>, E_<lat>, ca_hcp, dE_*_fcc
+#              FCC/BCC 的 VASP primitive rvector 会换算为 LAMMPS y_post 的 conventional cubic a
 #   cij      {tag}/y_cij_energy/y_post_cij_energy.txt   -> C11_<lat> ... C44_<lat>
-#   gsfe     {tag}/{type}/y_gsfe_{type}/y_post_gsfe.txt -> usf_<type>, sf_<type>（缺失留 NaN）
+#   gsfe     {tag}/{type}/y_gsfe_{type}/y_post_gsfe.txt -> usf_<type>=max(gamma), sf_<type>=最后一个 gamma
 # 缺文件不报错，跳过该项（DFT 归档可能只覆盖部分相/滑移系），返回的子字典只含读到的键。
 def read_dft_reference(dir_dft_root,
                        lats=('fcc', 'bcc', 'hcp'),
@@ -511,6 +549,8 @@ def read_dft_reference(dir_dft_root,
     :func:`mymetal.post.Cij_energy.read_cij_energy`,
     :func:`mymetal.post.gsfe.read_output`) so the returned keys line up with the
     epoch-scan row dicts and can be overlaid as horizontal reference lines.
+    FCC/BCC DFT primitive-cell stretch vectors are converted to conventional
+    cubic lattice constants to match LAMMPS y_post.
 
     Args:
         dir_dft_root (str | Path): Root of the DFT archive holding the ``A1x``/
@@ -531,9 +571,11 @@ def read_dft_reference(dir_dft_root,
         dict: ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}}`` with flat
         sub-dicts keyed like the ``post_epoch_scan`` columns (no ``epoch``).
         ``stretch``: ``a_<lat>``, ``c_<lat>``, ``E_<lat>`` (eV/atom) plus derived
-        ``ca_hcp`` (-) and ``dE_hcp_fcc`` / ``dE_bcc_fcc`` (meV/atom);
+        ``ca_hcp`` (-) and ``dE_hcp_fcc`` / ``dE_bcc_fcc`` (meV/atom). FCC/BCC
+        ``a``/``c`` are conventional cubic lengths when the DFT archive uses
+        primitive VASP cells;
         ``cij``: ``<C..>_<lat>`` (GPa); ``gsfe``: ``usf_<type>`` / ``sf_<type>``
-        (mJ/m^2, NaN if that extremum is absent).
+        (mJ/m^2; forced from the GSFE gamma table as max(gamma) / last gamma).
     """
     # 与 post_epoch_scan 一致：就地局部 import，避免给 dataset 顶层引入 mymetal.post 依赖
     from contextlib import redirect_stdout
@@ -566,9 +608,10 @@ def read_dft_reference(dir_dft_root,
                 print(f'skip dft stretch {lat}: missing {ps}')
             continue
         with redirect_stdout(StringIO()):              # my_read_stretch 会回显注释头，抑制
-            *_, (_, _, extr_y, extr_rvec) = my_read_stretch(str(ps))
-        stretch[f'a_{lat}'] = float(extr_rvec[0])
-        stretch[f'c_{lat}'] = float(extr_rvec[2])
+            *_, cell_ref, (_, _, extr_y, extr_rvec) = my_read_stretch(str(ps))
+        a_lat, c_lat = _stretch_lattice_values_for_epoch_convention(lat, extr_rvec, cell_ref)
+        stretch[f'a_{lat}'] = a_lat
+        stretch[f'c_{lat}'] = c_lat
         stretch[f'E_{lat}'] = float(extr_y)
     if 'a_hcp' in stretch and 'c_hcp' in stretch:
         stretch['ca_hcp'] = stretch['c_hcp'] / stretch['a_hcp']
@@ -592,7 +635,7 @@ def read_dft_reference(dir_dft_root,
         for k in cij_keys:
             cij[f'{k}_{lat}'] = d[k]
 
-    # 3) gsfe：逐滑移系读取 usf(local max)/sf(local min)，某类极值缺失留 NaN
+    # 3) gsfe：逐滑移系读取 usf=max(gamma)、sf=最后一个 gamma
     gsfe = {}
     for phase, ltype in gsfe_types.items():
         tag = gsfe_tag.get(phase)
