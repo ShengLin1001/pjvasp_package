@@ -76,6 +76,7 @@ def my_plot_learning_curve(epochs: np.ndarray = None, e_rmse_mev: np.ndarray = N
     for a in ax:
         general_modify_legend(a.legend(loc='upper right', bbox_to_anchor=(0.95, 0.95)))
     fig.savefig(file_path)
+    plt.close(fig)
 
     return fig, ax
 
@@ -151,6 +152,7 @@ def my_plot_compare(e_ref: np.ndarray = None, e_nnp: np.ndarray = None, tag_e: n
     if text_f:
         ax[0, 1].text(0.04, 0.96, text_f, transform=ax[0, 1].transAxes, va='top', fontsize=22)
     fig.savefig(file_path)
+    plt.close(fig)
     return fig, ax
 
 
@@ -197,6 +199,7 @@ def my_plot_rmse_by_tag(df=None, file_path: str = None) -> tuple:
     ax[1].set_xticklabels(tags, rotation=45)
     ax[1].set_xlabel('Tag')
     fig.savefig(file_path)
+    plt.close(fig)
     return fig, ax
 
 
@@ -215,7 +218,27 @@ def _clear_default_labels(ax) -> None:
         a.set_ylabel('')
 
 
-def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY) -> None:
+def _dft_ref_val(dft: dict, key: str):
+    """Return the finite DFT reference for ``key``, or ``None`` when unavailable.
+
+    ``dft`` is one of the flat sub-dicts returned by
+    :func:`mymetal.ml.n2p2.dataset.read_dft_reference` (keys identical to the
+    epoch-scan columns, e.g. ``a_fcc`` / ``C11_hcp`` / ``usf_FCC_111``). Returns
+    ``None`` when ``dft`` is falsy, lacks the key, or the value is NaN (that
+    phase / slip system is simply absent from the DFT archive). Shared by
+    :func:`_epoch_panel` (to widen the y-limit) and :func:`_epoch_dft_ref` (to
+    draw the reference line), so both agree on what counts as a valid reference.
+    """
+    if not dft:
+        return None
+    val = dft.get(key)
+    if val is None or not np.isfinite(val):
+        return None
+    return float(val)
+
+
+def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY,
+                 dft: dict = None, key: str = None) -> None:
     """Draw one epoch series with house defaults and a data-driven y-limit.
 
     Full line in the default style (C0, default linewidth) with a circle marker
@@ -223,8 +246,11 @@ def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY) -> None:
     markers are coloured C1 so they stand out against the C0 line;
     marker size keeps its default. The y-limits span the last 75% of the (finite)
     data with a 5% margin top and bottom, so the early, still-converging epochs
-    don't squash the converged tail. An all-NaN panel (e.g. a slip system without
-    a stable SFE) is left empty.
+    don't squash the converged tail. When a finite DFT reference (``dft[key]``)
+    lies outside that data range it is folded in as an extra bound, so the grey
+    dashed reference line drawn by :func:`_epoch_dft_ref` stays inside the axes
+    instead of falling off it. An all-NaN panel (e.g. a slip system without a
+    stable SFE) is left empty.
     """
     x = np.asarray(x)
     y = np.asarray(y, dtype=float)
@@ -238,9 +264,25 @@ def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY) -> None:
     tail = tail[np.isfinite(tail)]
     if tail.size:
         lo, hi = float(tail.min()), float(tail.max())
+        ref = _dft_ref_val(dft, key)                       # DFT 参考也算作数据边界，避免虚线跑出坐标轴
+        if ref is not None:
+            lo, hi = min(lo, ref), max(hi, ref)
         span = hi - lo
         pad = 0.05 * span if span > 0 else (0.05 * abs(hi) if hi else 0.05)
         a.set_ylim(lo - pad, hi + pad)
+
+
+def _epoch_dft_ref(a, dft: dict, key: str) -> None:
+    """Overlay the DFT reference for ``key`` as a grey dashed line on panel ``a``.
+
+    No-op when :func:`_dft_ref_val` reports no finite reference for ``key``.
+    Linewidth stays at the house default so the line reads as a flat reference,
+    not another data series.
+    """
+    val = _dft_ref_val(dft, key)
+    if val is None:
+        return
+    a.axhline(val, ls='--', color='gray', zorder=1)
 
 
 def _pretty_type(t: str) -> str:
@@ -249,7 +291,7 @@ def _pretty_type(t: str) -> str:
 
 
 def my_plot_epoch_stretch(df=None, file_path: str = None,
-                          phases=('hcp', 'fcc', 'bcc')) -> tuple:
+                          phases=('hcp', 'fcc', 'bcc'), dft=None) -> tuple:
     """Equilibrium stretch quantities versus training epoch (3 rows x phase cols).
 
     One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch). Rows top to
@@ -263,6 +305,8 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
             ``E_<p>`` plus ``ca_hcp`` (built in ``PeiN2p2.post_epoch_scan``).
         file_path: Output figure path (e.g. p_post_epoch_stretch.pdf).
         phases: Column order (default hcp/fcc/bcc).
+        dft: Optional ``read_dft_reference(...)['stretch']`` sub-dict; each
+            matching quantity is drawn as a grey dashed horizontal reference line.
     """
     d = df.copy()
     ep = d['epoch'].to_numpy()
@@ -274,29 +318,34 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
 
     for j, p in enumerate(phases):
         if f'a_{p}' in d:                                  # row 0: a
-            _epoch_panel(ax[0, j], ep, d[f'a_{p}'].to_numpy())
+            _epoch_panel(ax[0, j], ep, d[f'a_{p}'].to_numpy(), dft=dft, key=f'a_{p}')
+        _epoch_dft_ref(ax[0, j], dft, f'a_{p}')            # 叠 DFT 灰色虚线参考
         ax[0, j].set_ylabel(r'$a$ ($\mathrm{\AA}$)')
         if p == 'hcp':                                     # row 1: HCP 列画 c/a
             if 'ca_hcp' in d:
-                _epoch_panel(ax[1, j], ep, d['ca_hcp'].to_numpy())
+                _epoch_panel(ax[1, j], ep, d['ca_hcp'].to_numpy(), dft=dft, key='ca_hcp')
+            _epoch_dft_ref(ax[1, j], dft, 'ca_hcp')
             ax[1, j].set_ylabel(r'$c/a$ (-)')
         else:                                              # row 1: 立方相画 c
             if f'c_{p}' in d:
-                _epoch_panel(ax[1, j], ep, d[f'c_{p}'].to_numpy())
+                _epoch_panel(ax[1, j], ep, d[f'c_{p}'].to_numpy(), dft=dft, key=f'c_{p}')
+            _epoch_dft_ref(ax[1, j], dft, f'c_{p}')
             ax[1, j].set_ylabel(r'$c$ ($\mathrm{\AA}$)')
         if f'E_{p}' in d:                                  # row 2: E
-            _epoch_panel(ax[2, j], ep, d[f'E_{p}'].to_numpy())
+            _epoch_panel(ax[2, j], ep, d[f'E_{p}'].to_numpy(), dft=dft, key=f'E_{p}')
+        _epoch_dft_ref(ax[2, j], dft, f'E_{p}')
         ax[2, j].set_ylabel('Energy (eV/atom)')
         ax[0, j].set_title(p.upper())                      # 列标题：相
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
 
     fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
     return fig, ax
 
 
 def my_plot_epoch_cij(df=None, file_path: str = None,
                       phases=('hcp', 'fcc', 'bcc'),
-                      comps=('11', '12', '13', '33', '44')) -> tuple:
+                      comps=('11', '12', '13', '33', '44'), dft=None) -> tuple:
     """Elastic constants Cij versus training epoch (5 rows x phase cols).
 
     One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch); rows top to
@@ -310,6 +359,8 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
         file_path: Output figure path (e.g. p_post_epoch_cij.pdf).
         phases: Column order (default hcp/fcc/bcc).
         comps: Cij components, one row each (default 11/12/13/33/44).
+        dft: Optional ``read_dft_reference(...)['cij']`` sub-dict; each matching
+            Cij is drawn as a grey dashed horizontal reference line.
     """
     d = df.copy()
     ep = d['epoch'].to_numpy()
@@ -323,7 +374,8 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
         for j, p in enumerate(phases):
             col = f'C{c}_{p}'
             if col in d:
-                _epoch_panel(ax[i, j], ep, d[col].to_numpy())
+                _epoch_panel(ax[i, j], ep, d[col].to_numpy(), dft=dft, key=col)
+            _epoch_dft_ref(ax[i, j], dft, col)             # 叠 DFT 灰色虚线参考
             ax[i, j].set_ylabel(rf'$C_{{{c}}}$ (GPa)')     # 每个面板都标 y
             if i == 0:
                 ax[i, j].set_title(p.upper())              # 列标题：相
@@ -331,10 +383,11 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
 
     fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
     return fig, ax
 
 
-def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None) -> tuple:
+def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None) -> tuple:
     """Stacking-fault energies versus training epoch (2 rows x slip-system cols).
 
     One column per slip system (title = system name), shared x (epoch); top row
@@ -349,6 +402,8 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None) -> tuple:
         file_path: Output figure path (e.g. p_post_epoch_gsfe.pdf).
         types: Column order of slip systems. Defaults to the Au FCC/HCP set
             (FCC_111, FCC_100, then the four HCP systems).
+        dft: Optional ``read_dft_reference(...)['gsfe']`` sub-dict; each matching
+            usf/sf is drawn as a grey dashed horizontal reference line.
     """
     if types is None:
         types = ['FCC_111', 'FCC_100', 'HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']
@@ -368,10 +423,12 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None) -> tuple:
         for i, pref in enumerate(('sf', 'usf')):
             col = f'{pref}_{t}'
             if col in d:
-                _epoch_panel(ax[i, j], ep, d[col].to_numpy())
+                _epoch_panel(ax[i, j], ep, d[col].to_numpy(), dft=dft, key=col)
+            _epoch_dft_ref(ax[i, j], dft, col)             # 叠 DFT 灰色虚线参考
             ax[i, j].set_ylabel(ylabels[pref])             # 每个面板都标 y
         ax[0, j].set_title(_pretty_type(t))                # 列标题：滑移系（首字母大写）
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
 
     fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
     return fig, ax
