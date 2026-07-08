@@ -344,7 +344,7 @@ class PeiN2p2:
         return lblock
 
 
-    def select_sf_by_cur(self, n_select: int = 48, max_zero_frac: float = 0.05, zero_atol: float = 0.0, if_copy_to_train: bool = True) -> list:
+    def select_sf_by_cur(self, n_select: int = 48, max_zero_frac: float = 0.05, zero_atol: float = 0.0, if_copy_to_train: bool = True, n_select_by_type: dict = None) -> list:
         """用零值过滤和 CUR 从候选对称函数中选择最终集合。
 
         从每个 scaling 子目录的 function.data 收集每条候选 SF 的特征，先剔除零值比例
@@ -357,10 +357,13 @@ class PeiN2p2:
             "准零"也算上，从而改变剔除和选择结果（n2p2 的 function.data 为 10 位小数）。
 
         Args:
-            n_select: CUR 选择的对称函数数量。
+            n_select: CUR 选择的对称函数数量（仅在 n_select_by_type 为 None 时生效）。
             max_zero_frac: 允许的最大零值比例。
             zero_atol: 判定近零值的绝对容差。
             if_copy_to_train: 是否将最终 input.nn 复制到训练目录。
+            n_select_by_type: 若给定（{symfunction_type: 数量}，如 {2: 15, 9: 5}），对每个
+                对称函数类型单独 CUR、各选够指定数量，忽略 n_select。用于保证类型配额
+                （纯体积拉伸下角度型 G9 方差低，全局 CUR 会把它们全部忽略）。
 
         Returns:
             被选中的对称函数行列表。
@@ -400,14 +403,32 @@ class PeiN2p2:
         print(f"Dropped {len(dropped_idx)} sfs (zero fraction > {max_zero_frac}), {len(kept_idx)} sfs left for CUR.")
 
         # CUR 选择（基于逐帧平均特征，与参考模板一致）
-        lidx_selected = cur_select(feat_av[:, kept_idx], n_select=n_select)
-        # 返回的lidx_selected是去0后的索引，需要映射回原始索引
-        # sort 仅为了美观
-        lsf_selected = sorted([lsf_all[kept_idx[i]] for i in lidx_selected])
+        if n_select_by_type is None:
+            lidx_selected = cur_select(feat_av[:, kept_idx], n_select=n_select)
+            # 返回的lidx_selected是去0后的索引，需要映射回原始索引
+            # sort 仅为了美观
+            lsf_selected = sorted([lsf_all[kept_idx[i]] for i in lidx_selected])
+        else:
+            # 分类型配额：对每个 symfunction type 单独 CUR，保证各类型恰好选够 n_select_by_type[type]。
+            # type 取每行第 3 个字段（symfunction_short <center> <type> ...）。
+            def _sf_type(line):
+                fields = line.split()
+                return int(fields[2]) if len(fields) >= 3 and fields[0] == 'symfunction_short' else None
+            lsf_selected = []
+            for sftype, n_sel_t in n_select_by_type.items():
+                kept_t = [gi for gi in kept_idx if _sf_type(lsf_all[gi]) == int(sftype)]
+                if len(kept_t) < n_sel_t:
+                    raise ValueError(f"❌ type {sftype}: only {len(kept_t)} candidate sfs left after "
+                                     f"zero-filter, need {n_sel_t}. Loosen max_zero_frac or generate "
+                                     f"more type-{sftype} candidates.")
+                sel_local = cur_select(feat_av[:, kept_t], n_select=n_sel_t)
+                lsf_selected += [lsf_all[kept_t[i]] for i in sel_local]
+            lsf_selected = sorted(lsf_selected)
         with open(dir_sf_file / 'SFs_selected.dat', 'w', encoding='utf-8') as f:
             for line in lsf_selected:
                 f.write(line)
-        print(f"Selected {len(lsf_selected)} sfs by CUR.")
+        by_type_msg = '' if n_select_by_type is None else f' (by type {dict(n_select_by_type)})'
+        print(f"Selected {len(lsf_selected)} sfs by CUR{by_type_msg}.")
 
         # 最终 input.nn = 干净的 input.nn.nosf（不含 dummy sf）+ 选中的 sf
         # 为了保证不含dummy sf, 已经把前面的逻辑改为在subdir里追加sf，
@@ -531,7 +552,7 @@ class PeiN2p2:
 
     def submit_train(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
                      lfile: list = ['input.data', 'sub.n2p2.train.sh'], if_sbatch: bool = False,
-                     random_seed: int = None):
+                     random_seed: int = None, sed_overrides: dict = None):
         """准备单次 n2p2 训练目录并可选提交作业。
 
         在 ``dir_run`` 下汇齐最终 input.nn（CUR 选出的 SF）、input.data 和提交脚本后
@@ -546,11 +567,15 @@ class PeiN2p2:
             if_sbatch: 是否提交 Slurm 作业。
             random_seed: 若给定，则在拷贝 input.nn 后、sbatch 前 sed 改写本 run input.nn
                 的 random_seed。多 seed ensemble 由此外部控制（各 dir_run 用不同种子）。
+            sed_overrides: 若给定（{关键词: 取值}），在拷贝 input.nn 后、sbatch 前逐个 sed 就地
+                改写本 run input.nn 的对应标量关键词（如 {'force_weight': 0.6,
+                'short_force_fraction': 0.04}）。参数扫描由此外部控制（各 dir_run 用不同超参、
+                同一 random_seed）。改后立即校验，未命中即报错以防扫描退化为同一参数。
 
         Raises:
             FileNotFoundError: 缺少 input.nn、input.data 或提交脚本。
             FileExistsError: 目标训练目录中已存在训练产物。
-            RuntimeError: sed 改写 random_seed 失败或未生效。
+            RuntimeError: sed 改写 random_seed / sed_overrides 失败或未生效。
         """
 
         os.chdir(self.dir_root)
@@ -594,6 +619,24 @@ class PeiN2p2:
                 raise RuntimeError(f"❌ random_seed not set to {seed} in {path_run_nn} "
                                    f"(found: {None if m is None else m.group(1)}).")
             print(f"  set random_seed={seed} in {path_run_nn}")
+
+        # 参数扫描：拷贝之后、sbatch 之前用 sed 就地改写本 run input.nn 的任意标量关键词
+        # （只换第一个取值 token、保留对齐与行尾注释），改后逐个校验。
+        if sed_overrides:
+            import re as _re
+            path_run_nn = dir_run / 'input.nn'
+            for key, val in sed_overrides.items():
+                val_str = f'{val:g}' if isinstance(val, float) else str(val)
+                rc = os.system("sed -i -E 's/^(%s[[:space:]]+)[^[:space:]#]+/\\1%s/' %s"
+                               % (key, val_str, shlex.quote(str(path_run_nn))))
+                if os.waitstatus_to_exitcode(rc) != 0:
+                    raise RuntimeError(f"❌ sed {key} failed for {path_run_nn} (exit {rc}).")
+                m = _re.search(rf'(?m)^{_re.escape(key)}\s+(\S+)',
+                               path_run_nn.read_text(encoding='utf-8'))
+                if m is None or abs(float(m.group(1)) - float(val)) > 1e-12:
+                    raise RuntimeError(f"❌ {key} not set to {val_str} in {path_run_nn} "
+                                       f"(found: {None if m is None else m.group(1)}).")
+                print(f"  set {key}={val_str} in {path_run_nn}")
 
         n_sf = 0
         with open(path_input_nn, 'r', encoding='utf-8') as f:
