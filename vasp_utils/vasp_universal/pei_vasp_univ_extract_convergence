@@ -1,0 +1,82 @@
+#!/bin/bash
+# Extract per-ionic-step convergence data from y_dir/*/OUTCAR.
+#
+# For every sub-directory of y_dir this writes one text data file
+#   y_post_convergence/y_post_convergence_<subdir>.txt
+# holding, per ionic step:
+#     energy(sigma->0)   (eV)
+#     max force norm      (eV/Ang)
+# plus natoms / EDIFFG / ISIF metadata in the header.
+#
+# The heavy lifting (grep/awk over OUTCAR) is done here in bash because it is
+# fast; the plotting is done separately by pei_vasp_plot_convergence.py.
+#
+# Run from the directory that contains y_dir (same place as pei_vasp_univ_post).
+#
+# J. Pei, 2026-07-05
+
+
+workdir="y_dir"
+outdir="y_post_convergence"
+
+
+if [ ! -d "$workdir" ]; then
+    echo "❌ no $workdir in $(pwd), abort."
+    exit 1
+fi
+
+mkdir -p "$outdir"
+echo "==> extract convergence data into $outdir/"
+
+
+for subdir in "$workdir"/*/; do
+    name=$(basename "$subdir")
+
+    # accept OUTCAR or OUTCAR.gz
+    if [ -f "${subdir}OUTCAR" ]; then
+        cat_cmd=(cat "${subdir}OUTCAR")
+    elif [ -f "${subdir}OUTCAR.gz" ]; then
+        cat_cmd=(zcat "${subdir}OUTCAR.gz")
+    else
+        echo "    ⏭️  no OUTCAR in $subdir, skip."
+        continue
+    fi
+
+    out="${outdir}/${outdir}_${name}.txt"
+
+    "${cat_cmd[@]}" | awk '
+        # ---- metadata (first occurrence) --------------------------------
+        /number of ions     NIONS/ { nat = $NF }
+        /EDIFFG/ { if (ediffg == "") ediffg = $3 }
+        /ISIF/   { if (isif   == "") isif   = $3 }
+
+        # ---- per ionic step: max force norm from TOTAL-FORCE block ------
+        /TOTAL-FORCE/ { inb = 1; nl = 0; mx = 0; next }
+        inb && /^ *---/ { next }
+        inb {
+            n = sqrt($4*$4 + $5*$5 + $6*$6)
+            if (n > mx) mx = n
+            nl++
+            if (nl == nat) { nf++; force[nf] = mx; inb = 0 }
+        }
+
+        # ---- per ionic step: energy(sigma->0) from free-energy block ----
+        /FREE ENERGIE OF THE ION-ELECTRON SYSTEM/ { grab = 1; next }
+        grab && /energy\(sigma->0\)/ { ne++; ener[ne] = $NF; grab = 0 }
+
+        END {
+            printf "# convergence data extracted from OUTCAR\n"
+            printf "# natoms %s\n", nat
+            printf "# ediffg %s\n", ediffg
+            printf "# isif %s\n", isif
+            printf "%8s %24s %24s\n", "frame", "energy_sigma0(eV)", "max_force_norm(eV/A)"
+            n = (nf < ne ? nf : ne)
+            for (i = 1; i <= n; i++)
+                printf "%8d %24.8f %24.8f\n", i, ener[i], force[i]
+        }
+    ' > "$out"
+
+    echo "    ✅ $out"
+done
+
+echo "==> done."
