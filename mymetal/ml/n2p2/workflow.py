@@ -7,6 +7,12 @@ pipeline on top of the lower-level helpers in this subpackage:
 
     generate_data -> generate_lsf -> select_sf_by_cur -> submit_train
     -> post_training -> check_interface -> post_properties -> post_epoch_scan
+    -> post_training_summary / post_check_interface_summary / post_epoch_scan_summary
+
+The three ``post_*_summary`` steps are the only cross-run ones. They re-read the
+per-run tables under ``y_post/<run-id>/`` and reduce the training ensemble to a
+mean plus a min-max band (or mean +/- std), writing ``*_summary.txt/pdf`` beside
+the run directories in ``y_post/``. They never touch a run's own outputs.
 
 It does not hold any model weights itself; it drives the n2p2 tool-chain
 (nnp-scaling / nnp-train / nnp-predict) and the LAMMPS ``pair_style hdnnp``
@@ -25,7 +31,8 @@ from mymetal.ml.n2p2.calculate.cur import collect_sf_features, filter_zero_colum
 from mymetal.ml.n2p2.calculate.post import (read_learning_curve, read_normalization, read_trainpoints,
                                             read_trainforces, rmse_me, build_rmse_by_tag_df)
 from mymetal.universal.plot.n2p2 import (my_plot_learning_curve, my_plot_compare, my_plot_rmse_by_tag,
-                                         my_plot_epoch_stretch, my_plot_epoch_cij, my_plot_epoch_gsfe)
+                                         my_plot_epoch_stretch, my_plot_epoch_cij, my_plot_epoch_gsfe,
+                                         my_plot_epoch_rmse, my_plot_check_interface, VERDICT_CODE)
 from mymetal.ml.n2p2.dataset import nnpdata, read_dft_reference
 from mymetal.io.general import general_write
 from mymetal.slurm.submit import pei_slurm_univ_submit
@@ -39,6 +46,50 @@ import shlex
 import subprocess
 import time
 import getpass
+import warnings
+
+
+# epoch 扫描的物性字典与列顺序：post_epoch_scan（逐 run 读 LAMMPS 结果）与
+# post_epoch_scan_summary（跨 run 汇总）共用同一份定义，保证两者列名/列序一致，
+# 也与 mymetal.universal.plot.n2p2 的面板行列顺序对齐。
+_LATS = ['fcc', 'bcc', 'hcp']
+_CIJ_KEYS = ['C11', 'C12', 'C13', 'C33', 'C44']
+# 滑移系：phase 子目录 -> 该相下的 gsfe 类型（与 data_tag_dict 中 A21-2/A22-2 一致）
+# FCC 顺序 111 在前、100 在后，与 my_plot_epoch_gsfe 的列顺序保持一致（读取顺序无关）
+_GSFE_TYPES = {'fcc': ['FCC_111', 'FCC_100'],
+               'hcp': ['HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']}
+_ALL_GSFE_TYPES = [t for ltype in _GSFE_TYPES.values() for t in ltype]
+
+# c_fcc/c_bcc 立方相 c==a，但绘图 3x3 的 c 行需要，故一并保留
+_COLS_STRETCH = ['epoch', 'a_fcc', 'a_bcc', 'a_hcp', 'c_fcc', 'c_bcc', 'c_hcp', 'ca_hcp',
+                 'E_fcc', 'E_bcc', 'E_hcp', 'dE_hcp_fcc', 'dE_bcc_fcc']
+_COLS_CIJ = ['epoch'] + [f'{k}_{lat}' for lat in _LATS for k in _CIJ_KEYS]
+_COLS_GSFE = ['epoch'] + [f'{p}_{t}' for t in _ALL_GSFE_TYPES for p in ['usf', 'sf']]
+
+# 三类 epoch 扫描产物的共同元数据：kind -> (列顺序, 表格浮点格式, 表头量纲说明)
+# post_epoch_scan_summary 据此遍历三类产物，避免为每类各写一遍相同的读表/统计/写表逻辑。
+_EPOCH_KINDS = {
+    'stretch': (_COLS_STRETCH, '14.6f',
+                'FCC/BCC a/c are conventional cubic lengths; HCP a/c are hexagonal; '
+                'E (eV/atom), dE (meV/atom)'),
+    'cij': (_COLS_CIJ, '12.4f',
+            'Cij (GPa); cubic phases use C11=C33, C12=C13'),
+    'gsfe': (_COLS_GSFE, '12.4f',
+             'usf = max(gamma), sf = last gamma value; units mJ/m^2'),
+}
+
+# 训练误差表的列（post_training 写出，post_training_summary 读回）：
+#   _COLS_RMSE            p_post_learning_curve.txt：逐 epoch 的训练集 E/F RMSE
+#   _COLS_RMSE_BY_TAG     p_post_rmse_by_tag.txt 中需要跨 run 统计的误差列
+#   _COLS_RMSE_BY_TAG_COUNT  同表中的计数列（数据集属性，各 run 相同，不做统计、原样透传）
+_COLS_RMSE = ['epoch', 'E_RMSE_meV/at', 'F_RMSE_meV/A']
+_COLS_RMSE_BY_TAG = ['tag', 'E_RMSE_meV/at', 'E_ME_meV/at', 'F_RMSE_meV/A', 'F_ME_meV/A']
+_COLS_RMSE_BY_TAG_COUNT = ['n_struct', 'n_fcomp']
+
+# post_*_summary 的色带/误差棒取法 -> 图例文案（{n} 由 run 数填充）。
+# 'minmax' 是逐点的跨 run 上下限；'std' 是 mean ± 样本标准差（chap_4 图 1.3 的透明背景读法）。
+_BAND_LABEL = {'minmax': 'Min-max over {n} runs',
+               'std': 'Mean $\\pm$ std over {n} runs'}
 
 
 class PeiN2p2:
@@ -675,6 +726,7 @@ class PeiN2p2:
             f.write('\n')
 
 
+    # y_n2p2_train/y_dir
     def post_training(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'), epoch: int = None) -> Path:
         """后处理 n2p2 训练结果并生成误差表格和图像。
 
@@ -853,6 +905,7 @@ class PeiN2p2:
         return ' '.join(parts)
 
 
+    # y_n2p2_train/y_post
     def post_properties(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
                         if_sbatch: bool = False,
                         dict_args_to_submit: dict = {'preset': 'zcm6-lammps-0',
@@ -1020,13 +1073,8 @@ class PeiN2p2:
         if not scan.is_dir():
             raise FileNotFoundError(f"❌ Missing {scan}. Run post_properties(if_sbatch=True) first.")
 
-        lats = ['fcc', 'bcc', 'hcp']
-        cij_keys = ['C11', 'C12', 'C13', 'C33', 'C44']
-        # 滑移系：phase 子目录 -> 该相下的 gsfe 类型（与 data_tag_dict 中 A21-2/A22-2 一致）
-        # FCC 顺序 111 在前、100 在后，与 my_plot_epoch_gsfe 的列顺序保持一致（读取顺序无关）
-        gsfe_types = {'fcc': ['FCC_111', 'FCC_100'],
-                      'hcp': ['HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']}
-        all_types = [t for ltype in gsfe_types.values() for t in ltype]
+        lats, cij_keys = _LATS, _CIJ_KEYS
+        gsfe_types, all_types = _GSFE_TYPES, _ALL_GSFE_TYPES
 
         epochs = sorted([int(d.name) for d in scan.iterdir() if d.is_dir() and d.name.isdigit()])
 
@@ -1088,11 +1136,7 @@ class PeiN2p2:
                              f"Check {scan} for missing files.")
 
         # 列顺序（缺的列在 reindex 时自动补 NaN，不影响表/图）
-        # c_fcc/c_bcc 立方相 c==a，但绘图 3x3 的 c 行需要，故一并保留
-        cols_stretch = ['epoch', 'a_fcc', 'a_bcc', 'a_hcp', 'c_fcc', 'c_bcc', 'c_hcp', 'ca_hcp',
-                        'E_fcc', 'E_bcc', 'E_hcp', 'dE_hcp_fcc', 'dE_bcc_fcc']
-        cols_cij = ['epoch'] + [f'{k}_{lat}' for lat in lats for k in cij_keys]
-        cols_gsfe = ['epoch'] + [f'{p}_{t}' for t in all_types for p in ['usf', 'sf']]
+        cols_stretch, cols_cij, cols_gsfe = _COLS_STRETCH, _COLS_CIJ, _COLS_GSFE
 
         nstretch, n_cij, n_gsfe = 0, 0, 0
 
@@ -1336,3 +1380,409 @@ class PeiN2p2:
                             'check nnp/nnforces.out and lmp/forces.dump.\n')
                     print(f"  ❌ could not compare forces (nnp {sh_n}, lmp {sh_l})")
         return dir_chk
+
+
+    # summary y_post 下的所有信息：check_interface、properties、training
+    @staticmethod
+    def _read_epoch_table(path: Path) -> pd.DataFrame:
+        """读回 ``post_epoch_scan`` 写出的 ``p_post_epoch_*.txt`` 定宽表。
+
+        ``_write_table`` 的格式是若干 ``#`` 注释行 + 列名行 + 右对齐的定宽数据行，
+        故按空白切分、丢弃注释即可还原 DataFrame（含 ``epoch`` 列）。
+
+        Args:
+            path: p_post_epoch_{stretch,cij,gsfe}.txt 之一。
+
+        Returns:
+            以原列名为列的 DataFrame。
+        """
+        return pd.read_csv(path, sep=r'\s+', comment='#')
+
+
+    @staticmethod
+    def _ensemble_stats(ldf: list, cols: list, index_col: str = 'epoch',
+                        band: str = 'minmax') -> tuple:
+        """把多个 run 的同一张表叠成 across-run 的均值 / 包络 / 标准差。
+
+        各 run 的索引键（epoch 或 tag）取并集后对齐（某 run 缺的行或列补 NaN），再沿
+        run 轴做 nan-aware 统计，因此 run 之间行数不一致（例如某 run 少了 epoch 0）
+        不会丢掉其余 run 在该行上的信息。
+
+        Args:
+            ldf: 各 run 的 DataFrame 列表，每个含 ``index_col`` 列。
+            cols: 期望的列顺序（可含 ``index_col``，会被剔除）；缺的列补 NaN。
+            index_col: 对齐用的索引列名，``'epoch'``（epoch 扫描 / 学习曲线）或
+                ``'tag'``（按 tag 的 RMSE）。
+            band: 色带取法。``'minmax'`` 用逐行的跨 run 上下限（默认，对应 chap_4
+                图 1.3/1.5 中的“上下限”读法）；``'std'`` 用 mean ± std。
+
+        Returns:
+            tuple: ``(df_mean, df_lo, df_hi, df_out)``。前三者以 ``index_col`` 打头、
+            列名与 ``cols`` 一致，直接喂给绘图函数；``df_out`` 是写盘用的宽表
+            （``index_col``、``n_runs``，以及每个量的 ``_mean/_min/_max/_std``）。
+
+        Raises:
+            ValueError: band 不是 'minmax' 或 'std'。
+        """
+        if band not in _BAND_LABEL:
+            raise ValueError(f"band must be one of {sorted(_BAND_LABEL)}, got {band!r}")
+
+        lcol = [c for c in cols if c != index_col]
+        lkey = sorted(set().union(*(set(df[index_col]) for df in ldf)))
+
+        # (n_run, n_key, n_col)：对齐到索引并集 x 期望列，缺失处为 NaN
+        arr = np.full((len(ldf), len(lkey), len(lcol)), np.nan)
+        for i, df in enumerate(ldf):
+            arr[i] = df.set_index(index_col).reindex(index=lkey, columns=lcol).to_numpy(dtype=float)
+
+        # 全 NaN 的 (key, col) 切片会让 nanmean/nanmin 报 RuntimeWarning 并返回 NaN；
+        # NaN 正是我们想要的“该点无数据”，故只静音警告。std 用 ddof=1（样本标准差），
+        # 单 run 时退化为 NaN —— 与“无法估计离散度”一致。
+        with np.errstate(invalid='ignore'), warnings.catch_warnings():
+            warnings.simplefilter('ignore', RuntimeWarning)
+            mean = np.nanmean(arr, axis=0)
+            vmin = np.nanmin(arr, axis=0)
+            vmax = np.nanmax(arr, axis=0)
+            std = np.nanstd(arr, axis=0, ddof=1) if len(ldf) > 1 else np.full_like(mean, np.nan)
+
+        lo, hi = (vmin, vmax) if band == 'minmax' else (mean - std, mean + std)
+        # n_runs：该行有几个 run 提供了数据（整行至少一个有限值）
+        n_runs = np.isfinite(arr).any(axis=2).sum(axis=0)
+
+        def _frame(a):
+            return pd.DataFrame(a, columns=lcol).assign(**{index_col: lkey})[[index_col] + lcol]
+
+        df_out = pd.DataFrame({index_col: lkey, 'n_runs': n_runs})
+        for j, c in enumerate(lcol):                        # 每个量 4 列，保持 cols 的顺序
+            df_out[f'{c}_mean'] = mean[:, j]
+            df_out[f'{c}_min'] = vmin[:, j]
+            df_out[f'{c}_max'] = vmax[:, j]
+            df_out[f'{c}_std'] = std[:, j]
+
+        return _frame(mean), _frame(lo), _frame(hi), df_out
+
+
+    @staticmethod
+    def _read_check_interface(path: Path) -> dict:
+        """从 ``p_post_check_interface.txt`` 抽出 verdict 与量化偏差。
+
+        ``check_interface`` 写的是人读格式，不是表格；本函数按行首关键字取值：
+        ``verdict_E`` / ``verdict_F`` 行含 ``PASS`` 或 ``FAIL``（解析失败时该行整个
+        缺失，此时留 NaN，绘图上表现为空缺而不是默认通过）；``|delta_E|`` 与
+        ``max|dF_comp|`` 行的第二个字段是数值。
+
+        Args:
+            path: 某个 run 的 p_post_check_interface.txt。
+
+        Returns:
+            dict: ``epoch``、``tag``、``verdict_E``/``verdict_F``（1=PASS，2=FAIL，
+            缺失为 NaN）、``delta_E_eV``、``max_dF_comp_eV_A``。
+        """
+        rec = {'epoch': np.nan, 'tag': '', 'verdict_E': np.nan, 'verdict_F': np.nan,
+               'delta_E_eV': np.nan, 'max_dF_comp_eV_A': np.nan}
+        for line in Path(path).read_text(encoding='utf-8').splitlines():
+            lfield = line.split()
+            if not lfield:
+                continue
+            head = lfield[0]
+            if head == 'structure':                        # structure src_index=.., tag=.., epoch=..
+                for kv in line.replace(',', ' ').split():
+                    if kv.startswith('tag='):
+                        rec['tag'] = kv.split('=', 1)[1]
+                    elif kv.startswith('epoch='):
+                        rec['epoch'] = int(kv.split('=', 1)[1])
+            elif head in ('verdict_E', 'verdict_F'):
+                if 'PASS' in line:
+                    rec[head] = VERDICT_CODE['PASS']
+                elif 'FAIL' in line:
+                    rec[head] = VERDICT_CODE['FAIL']
+            elif head == '|delta_E|':
+                rec['delta_E_eV'] = float(lfield[1])
+            elif head == 'max|dF_comp|':
+                rec['max_dF_comp_eV_A'] = float(lfield[1])
+        return rec
+
+
+    def _summary_root(self, ldir_run: list, band: str = None) -> tuple:
+        """校验汇总入参并解析出 run 目录列表与写盘根目录（各 run 共同的 ``y_post/``）。
+
+        三个 ``post_*_summary`` 共用：先校验再落盘，参数写错时不产生任何文件。
+
+        Args:
+            ldir_run: 参与汇总的 n2p2 训练运行目录列表。
+            band: 若给定则一并校验其取值合法。
+
+        Returns:
+            tuple: ``(ldir_run, dir_post_root)``，均为 Path。
+
+        Raises:
+            ValueError: 未给 ldir_run，或 band 不是 'minmax'/'std'。
+        """
+        os.chdir(self.dir_root)
+        if not ldir_run:
+            raise ValueError("ldir_run must be a non-empty list of training run dirs.")
+        if band is not None and band not in _BAND_LABEL:
+            raise ValueError(f"band must be one of {sorted(_BAND_LABEL)}, got {band!r}")
+        ldir_run = [Path(d) for d in ldir_run]
+        return ldir_run, ldir_run[0].parent.parent / 'y_post'
+
+
+    def _collect_run_tables(self, ldir_run: list, dir_post_root: Path, rel_path: Path) -> tuple:
+        """读取每个 run 的 ``y_post/<run-id>/<rel_path>`` 表，缺文件的 run 跳过并告警。
+
+        Args:
+            ldir_run: 训练运行目录列表（只用其 ``name`` 定位 y_post 子目录）。
+            dir_post_root: ``y_post/`` 根目录。
+            rel_path: 相对 ``y_post/<run-id>/`` 的表文件路径。
+
+        Returns:
+            tuple: ``(ldf, lrid)`` —— 成功读到的 DataFrame 列表与对应的 run-id 列表。
+        """
+        ldf, lrid = [], []
+        for dir_run in ldir_run:
+            p = dir_post_root / dir_run.name / rel_path
+            if not p.is_file():
+                print(f'skip run {dir_run.name}: missing {p}')
+                continue
+            ldf.append(self._read_epoch_table(p))
+            lrid.append(dir_run.name)
+        return ldf, lrid
+
+
+    def post_epoch_scan_summary(self, ldir_run: list = None, dir_dft_root: Path = None,
+                                dir_summary: Path = None, band: str = 'minmax') -> Path:
+        """把多个 run 的 epoch 扫描曲线汇总成 ensemble 均值 + 上下限图（chap_4 图 1.3/1.5 风格）。
+
+        :meth:`post_epoch_scan` 已为每个 run 在 ``y_post/<run-id>/properties/y_epoch_scan/``
+        下写好 ``p_post_epoch_{stretch,cij,gsfe}.txt``；本方法只**读**这些表，跨 run 对齐
+        epoch 后统计，把汇总产物直接写在 ``y_post/`` 下（与各 run 目录平级）：
+
+        - ``p_post_epoch_stretch_summary.txt/pdf``
+        - ``p_post_epoch_cij_summary.txt/pdf``
+        - ``p_post_epoch_gsfe_summary.txt/pdf``
+
+        图沿用逐 run 的面板布局（stretch 3x3、cij 5x3、gsfe 2x6），同一物理量在汇总图
+        中的行列位置与它在单 run 图中的位置一致；每个面板画跨 run 均值（C0 线 + C1 圆点）
+        并把上下限填成同色半透明色带，DFT 参考仍是灰色水平虚线。
+
+        Note:
+            纯读取 + 汇总，不触碰任何 run 自己的 ``y_post/<run-id>/`` 产物，可安全重跑。
+            各 run 的 epoch 数允许不同（并集对齐、nan-aware 统计）。DFT 的 Cij 参考来自
+            ``read_dft_reference`` 的默认 ``cij_subdir='y_cij_energy_small'``（小应变谐性
+            弹性常数），与逐 epoch 的 LAMMPS 评估口径一致。
+
+        Args:
+            ldir_run: 参与汇总的 n2p2 训练运行目录列表（如 ``[.../y_dir/001, ...]``）；
+                汇总输出落在这些 run 共同的 ``y_post/`` 下。
+            dir_dft_root: DFT (VASP) 计算归档根目录；给定时叠加灰色虚线 DFT 参考。
+            dir_summary: 汇总输出目录；默认就是 ``y_post/`` 本身。
+            band: 色带取法，``'minmax'``（默认，逐 epoch 跨 run 上下限）或 ``'std'``
+                （mean ± 样本标准差，对应 chap_4 图 1.3 的透明背景读法）。
+
+        Returns:
+            汇总输出目录。缺表的 run 只跳过并告警；三类全缺时不写任何文件。
+
+        Raises:
+            ValueError: 未给 ldir_run，或 band 不是 'minmax'/'std'。
+            FileNotFoundError: 给定的 dir_dft_root 不存在。
+        """
+        # 先校验入参再读 DFT / 落盘：参数写错时不产生任何文件
+        ldir_run, dir_post_root = self._summary_root(ldir_run, band)
+        dir_summary = Path(dir_summary) if dir_summary else dir_post_root
+
+        # DFT 参考基线：与逐 run 图同一读取器、同一键名，故可直接叠成灰色水平虚线
+        dft = None
+        if dir_dft_root is not None:
+            if not Path(dir_dft_root).is_dir():
+                raise FileNotFoundError(f"❌ Missing DFT archive root {dir_dft_root}.")
+            dft = read_dft_reference(dir_dft_root)
+            print(f"================ 📊 DFT reference ({dir_dft_root})")
+            for group in ('stretch', 'cij', 'gsfe'):
+                print(f"  [{group}] {len(dft[group])} value(s)")
+                for k, v in dft[group].items():
+                    print(f"    {k:16s} = {v:.6g}")
+
+        os.makedirs(dir_summary, exist_ok=True)            # 只保证存在；不动已算好的 y_post/<run-id>/
+
+        lplot = {'stretch': my_plot_epoch_stretch, 'cij': my_plot_epoch_cij, 'gsfe': my_plot_epoch_gsfe}
+        band_label = _BAND_LABEL[band]
+
+        nwritten = 0
+        for kind, (cols, float_format, unit_note) in _EPOCH_KINDS.items():
+            ldf, lrid = self._collect_run_tables(
+                ldir_run, dir_post_root, Path('properties') / 'y_epoch_scan' / f'p_post_epoch_{kind}.txt')
+            if not ldf:
+                print(f'No run has p_post_epoch_{kind}.txt; skip {kind} summary.')
+                continue
+
+            lnep = {rid: len(df) for rid, df in zip(lrid, ldf)}
+            if len(set(lnep.values())) > 1:                 # epoch 数不齐只是提示；统计已按并集对齐
+                print(f"⚠️ {kind}: runs disagree on epoch count {lnep}; "
+                      f"aligning on the union and using nan-aware statistics.")
+
+            df_mean, df_lo, df_hi, df_out = self._ensemble_stats(ldf, cols, 'epoch', band)
+            self._write_table(dir_summary / f'p_post_epoch_{kind}_summary.txt',
+                              [f'# Ensemble summary of LAMMPS (pair_style hdnnp) {kind} vs training epoch',
+                               f'# {unit_note}',
+                               f'# {len(ldf)} run(s): {", ".join(lrid)}',
+                               '# n_runs = runs contributing to this epoch; per quantity: _mean/_min/_max/_std '
+                               '(std is the sample std, ddof=1, over runs)'],
+                              df_out, float_format=float_format)
+
+            kwargs = {'types': _ALL_GSFE_TYPES} if kind == 'gsfe' else {}
+            lplot[kind](df_mean, dir_summary / f'p_post_epoch_{kind}_summary.pdf',
+                        dft=dft[kind] if dft else None,
+                        df_lo=df_lo, df_hi=df_hi, band_label=band_label.format(n=len(ldf)),
+                        **kwargs)
+            nwritten += 1
+            print(f'  {kind}: {len(ldf)} run(s), {len(df_out)} epoch(s) -> '
+                  f'p_post_epoch_{kind}_summary.txt/pdf')
+
+        print(f"✅ Ensemble epoch-scan summary ({band}) -> {dir_summary}: {nwritten}/3 group(s) written")
+        return dir_summary
+
+    def post_training_summary(self, ldir_run: list = None, dir_summary: Path = None,
+                              band: str = 'minmax') -> Path:
+        """跨 run 汇总 ``y_post/<run-id>/training/`` 的训练误差，写在 ``y_post/`` 下。
+
+        两组产物，都用与 epoch 物性汇总相同的 ensemble 读法（均值 + 上下限）：
+
+        - ``p_post_rmse_summary.txt/pdf``：训练集 E/F RMSE 随 epoch 的曲线，2 个 panel
+          （上能量、下力）。数据来自各 run 的 ``p_post_learning_curve.txt`` —— 那是
+          唯一含逐 epoch RMSE 的表；``p_post_rmse.txt`` 只有末 epoch 的 4 个标量，
+          撑不起“均值线 + 色带 vs epoch”的画法（其数值等于本汇总里 by-tag 的 TOTAL 行）。
+        - ``p_post_rmse_by_tag_summary.txt/pdf``：按 tag 的 E/F RMSE 柱状图，柱高为跨 run
+          均值，误差棒为跨 run 上下限（或 mean ± std）。
+
+        Note:
+            纯读取 + 汇总，不触碰任何 run 自己的 ``y_post/<run-id>/`` 产物，可安全重跑。
+            by-tag 表按 ``tag`` 对齐（不是按行号），故某 run 少一个 tag 也不会错位；
+            ``n_struct`` / ``n_fcomp`` 是数据集属性而非训练结果，取第一个 run 的值透传，
+            各 run 不一致时告警。
+
+        Args:
+            ldir_run: 参与汇总的 n2p2 训练运行目录列表。
+            dir_summary: 汇总输出目录；默认就是 ``y_post/`` 本身。
+            band: ``'minmax'``（默认）或 ``'std'``，同时决定色带与误差棒的含义。
+
+        Returns:
+            汇总输出目录。
+
+        Raises:
+            ValueError: 未给 ldir_run，或 band 不是 'minmax'/'std'。
+        """
+        ldir_run, dir_post_root = self._summary_root(ldir_run, band)
+        dir_summary = Path(dir_summary) if dir_summary else dir_post_root
+        os.makedirs(dir_summary, exist_ok=True)
+        band_label = _BAND_LABEL[band]
+
+        # 1) 学习曲线 -> p_post_rmse_summary（2 panel：上 energy RMSE、下 force RMSE）
+        ldf, lrid = self._collect_run_tables(ldir_run, dir_post_root,
+                                             Path('training') / 'p_post_learning_curve.txt')
+        if ldf:
+            df_mean, df_lo, df_hi, df_out = self._ensemble_stats(ldf, _COLS_RMSE, 'epoch', band)
+            self._write_table(dir_summary / 'p_post_rmse_summary.txt',
+                              ['# Ensemble summary of training-set RMSE vs epoch (from p_post_learning_curve.txt)',
+                               '# E_RMSE (meV/atom), F_RMSE (meV/A); physical units',
+                               f'# {len(ldf)} run(s): {", ".join(lrid)}',
+                               '# n_runs = runs contributing to this epoch; per quantity: _mean/_min/_max/_std '
+                               '(std is the sample std, ddof=1, over runs)'],
+                              df_out, float_format='16.6f')
+            my_plot_epoch_rmse(df_mean, dir_summary / 'p_post_rmse_summary.pdf',
+                               df_lo=df_lo, df_hi=df_hi, band_label=band_label.format(n=len(ldf)))
+            print(f'  rmse: {len(ldf)} run(s), {len(df_out)} epoch(s) -> p_post_rmse_summary.txt/pdf')
+        else:
+            print('No run has p_post_learning_curve.txt; skip p_post_rmse_summary.')
+
+        # 2) 按 tag 的 RMSE -> p_post_rmse_by_tag_summary（柱高 = 均值，误差棒 = 上下限）
+        ldf, lrid = self._collect_run_tables(ldir_run, dir_post_root,
+                                             Path('training') / 'p_post_rmse_by_tag.txt')
+        if not ldf:
+            print('No run has p_post_rmse_by_tag.txt; skip p_post_rmse_by_tag_summary.')
+            return dir_summary
+
+        df_mean, df_lo, df_hi, df_out = self._ensemble_stats(ldf, _COLS_RMSE_BY_TAG, 'tag', band)
+        # n_struct / n_fcomp 是数据集属性（各 run 相同），不做统计，按 tag 透传第一个 run 的值
+        counts = ldf[0].set_index('tag')[_COLS_RMSE_BY_TAG_COUNT]
+        for other, rid in zip(ldf[1:], lrid[1:]):
+            if not counts.equals(other.set_index('tag')[_COLS_RMSE_BY_TAG_COUNT]):
+                print(f'⚠️ run {rid}: n_struct/n_fcomp differ from run {lrid[0]}; '
+                      f'the summary reports run {lrid[0]} counts.')
+        for j, c in enumerate(_COLS_RMSE_BY_TAG_COUNT):    # 插在 n_runs 之后、各统计列之前
+            df_out.insert(2 + j, c, counts.reindex(df_out['tag'])[c].to_numpy())
+
+        self._write_table(dir_summary / 'p_post_rmse_by_tag_summary.txt',
+                          ['# Ensemble summary of per-tag DFT-vs-NNP error (from p_post_rmse_by_tag.txt)',
+                           '# E per structure (per atom), F per component; ME = mean(NNP - DFT)',
+                           f'# {len(ldf)} run(s): {", ".join(lrid)}',
+                           '# n_runs = runs contributing to this tag; n_struct/n_fcomp taken from the first run; '
+                           'per quantity: _mean/_min/_max/_std (std is the sample std, ddof=1, over runs)'],
+                          df_out, float_format='14.6f')
+        my_plot_rmse_by_tag(df_mean, dir_summary / 'p_post_rmse_by_tag_summary.pdf',
+                            df_lo=df_lo, df_hi=df_hi, band_label=band_label.format(n=len(ldf)))
+        print(f'  rmse_by_tag: {len(ldf)} run(s), {len(df_out)} tag(s) -> p_post_rmse_by_tag_summary.txt/pdf')
+
+        print(f"✅ Ensemble training summary ({band}) -> {dir_summary}")
+        return dir_summary
+
+
+    def post_check_interface_summary(self, ldir_run: list = None, dir_summary: Path = None) -> Path:
+        """跨 run 汇总 ``check_interface`` 的一致性判定，写在 ``y_post/`` 下。
+
+        读各 run 的 ``y_post/<run-id>/check_interface/p_post_check_interface.txt``，
+        写 ``p_post_check_interface_summary.txt/pdf``：两个 panel（上 energy、下 force），
+        横轴为 run，纵轴不写 label，只有两个刻度 —— 1 处标 ``PASS``、2 处标 ``NO``。
+
+        Note:
+            纯读取 + 汇总，不触碰任何 run 自己的 ``y_post/<run-id>/`` 产物，可安全重跑。
+            某个 run 若因解析失败没有写出 verdict 行，则该点留空（NaN），不会被当成通过。
+
+        Args:
+            ldir_run: 参与汇总的 n2p2 训练运行目录列表。
+            dir_summary: 汇总输出目录；默认就是 ``y_post/`` 本身。
+
+        Returns:
+            汇总输出目录。
+
+        Raises:
+            ValueError: 未给 ldir_run。
+        """
+        ldir_run, dir_post_root = self._summary_root(ldir_run)
+        dir_summary = Path(dir_summary) if dir_summary else dir_post_root
+        os.makedirs(dir_summary, exist_ok=True)
+
+        rows = []
+        for dir_run in ldir_run:
+            p = dir_post_root / dir_run.name / 'check_interface' / 'p_post_check_interface.txt'
+            if not p.is_file():
+                print(f'skip run {dir_run.name}: missing {p}')
+                continue
+            rows.append({'run': dir_run.name, **self._read_check_interface(p)})
+        if not rows:
+            print('No run has p_post_check_interface.txt; skip check-interface summary.')
+            return dir_summary
+
+        df = pd.DataFrame(rows)[['run', 'epoch', 'tag', 'verdict_E', 'verdict_F',
+                                 'delta_E_eV', 'max_dF_comp_eV_A']]
+        npass = {c: int((df[c] == VERDICT_CODE['PASS']).sum()) for c in ('verdict_E', 'verdict_F')}
+        nfail = {c: int((df[c] == VERDICT_CODE['FAIL']).sum()) for c in ('verdict_E', 'verdict_F')}
+
+        # 表里写人读的 PASS/FAIL，图里用 1/2 编码（纵轴刻度写 PASS/NO）
+        df_txt = df.copy()
+        code_to_str = {v: k for k, v in VERDICT_CODE.items()}
+        for c in ('verdict_E', 'verdict_F'):
+            df_txt[c] = df_txt[c].map(lambda v: code_to_str.get(v, 'MISSING'))
+        self._write_table(dir_summary / 'p_post_check_interface_summary.txt',
+                          ['# Ensemble summary of the nnp-predict (2.3.0) vs LAMMPS hdnnp (2.2.0) interface check',
+                           '# verdict PASS/FAIL per run (MISSING = the run wrote no verdict line)',
+                           f'# energy {npass["verdict_E"]}/{len(df)} PASS, force {npass["verdict_F"]}/{len(df)} PASS',
+                           '# delta_E (eV) targets ~1e-5; max|dF_comp| (eV/A) targets <~1e-5'],
+                          df_txt, float_format='16.6e')
+        my_plot_check_interface(df, dir_summary / 'p_post_check_interface_summary.pdf')
+
+        verdict = '✅' if not any(nfail.values()) else '❌'
+        print(f"{verdict} Ensemble check-interface summary -> {dir_summary}: "
+              f"{len(df)} run(s), energy {npass['verdict_E']} PASS / {nfail['verdict_E']} FAIL, "
+              f"force {npass['verdict_F']} PASS / {nfail['verdict_F']} FAIL "
+              f"(p_post_check_interface_summary.txt/pdf)")
+        return dir_summary
