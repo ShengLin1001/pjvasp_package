@@ -91,6 +91,15 @@ _COLS_RMSE_BY_TAG_COUNT = ['n_struct', 'n_fcomp']
 _BAND_LABEL = {'minmax': 'Min-max over {n} runs',
                'std': 'Mean $\\pm$ std over {n} runs'}
 
+# post_epoch_scan_summary 写出的缺失清单 p_post_absence.txt：列顺序 + status 取值含义。
+# 汇总用 nan-aware 统计把缺失静默吃掉（只在屏幕上告警），这张表把它落盘成可追查的记录。
+_COLS_ABSENCE = ['run', 'kind', 'epoch', 'status', 'item']
+_ABSENCE_STATUS = {
+    'missing_table': 'run 没有该 kind 的 p_post_epoch_<kind>.txt（epoch = -1, item = 表名）',
+    'missing_epoch': '表在，但没有这个 epoch 的行 —— post_epoch_scan 当时判定该 epoch 输入不全（item = *）',
+    'missing_value': '有该 epoch 的行，但 item 这一列是 NaN/inf',
+}
+
 
 class PeiN2p2:
     """n2p2 势函数训练与物性测试的高层调度器。
@@ -1549,6 +1558,71 @@ class PeiN2p2:
         return ldf, lrid
 
 
+    @staticmethod
+    def _scan_epoch_absence(ldir_run: list, dtable: dict) -> pd.DataFrame:
+        """逐 (run, kind, epoch) 找出 epoch 扫描三张表里缺了什么。
+
+        epoch 全集取**跨 run 跨 kind 的并集**：只有某个 run 的某张表独有的 epoch，才能
+        暴露出其它 run / 其它 kind 在该 epoch 上的缺失。这与 :meth:`_ensemble_stats` 的
+        对齐口径一致，故本表列出的每一条都对应汇总里一个 NaN 参与统计的点。
+
+        Args:
+            ldir_run: 参与汇总的 run 目录列表（只用其 ``name``）。
+            dtable: ``kind -> {run-id: DataFrame}``，post_epoch_scan_summary 已读到的表。
+
+        Returns:
+            以 :data:`_COLS_ABSENCE` 为列的 DataFrame，无缺失时为空表。
+        """
+        leps = sorted(set().union(*(set(df['epoch']) for ddf in dtable.values() for df in ddf.values())))
+
+        rows = []
+        for dir_run in ldir_run:
+            rid = dir_run.name
+            for kind, (cols, *_) in _EPOCH_KINDS.items():
+                df = dtable.get(kind, {}).get(rid)
+                if df is None:
+                    rows.append({'run': rid, 'kind': kind, 'epoch': -1,
+                                 'status': 'missing_table', 'item': f'p_post_epoch_{kind}.txt'})
+                    continue
+
+                lcol = [c for c in cols if c != 'epoch']
+                # reindex 到 epoch 全集 x 期望列：缺行、缺列、写进去的 NaN 统一变成 NaN
+                d = df.set_index('epoch').reindex(index=leps, columns=lcol).apply(pd.to_numeric, errors='coerce')
+                bad = ~np.isfinite(d.to_numpy(dtype=float))
+                have = set(df['epoch'])
+                for i, ep in enumerate(leps):
+                    if ep not in have:                     # 整行没进表，逐列展开只会刷屏
+                        rows.append({'run': rid, 'kind': kind, 'epoch': ep,
+                                     'status': 'missing_epoch', 'item': '*'})
+                        continue
+                    for j in np.flatnonzero(bad[i]):
+                        rows.append({'run': rid, 'kind': kind, 'epoch': ep,
+                                     'status': 'missing_value', 'item': lcol[j]})
+        return pd.DataFrame(rows, columns=_COLS_ABSENCE)
+
+
+    def _write_absence(self, path: Path, df: pd.DataFrame, ldir_run: list) -> None:
+        """把 :meth:`_scan_epoch_absence` 的结果写成 ``p_post_absence.txt``。
+
+        无缺失时也写文件（只有注释头），这样"文件不在"永远意味着汇总没跑过，而不是
+        "跑过且什么都不缺"。
+
+        Args:
+            path: 输出路径（``y_post/p_post_absence.txt``）。
+            df: 缺失记录表，可以为空。
+            ldir_run: 参与汇总的 run 目录列表，写进表头备查。
+        """
+        header = ['# Missing / incomplete inputs behind the ensemble epoch-scan summary',
+                  '# One row per (run, kind, epoch, item) that post_epoch_scan_summary had to treat as NaN',
+                  f'# {len(ldir_run)} run(s): {", ".join(d.name for d in ldir_run)}',
+                  '# status:'] + [f'#   {k:14s} {v}' for k, v in _ABSENCE_STATUS.items()]
+        if df.empty:
+            Path(path).write_text('\n'.join(header + ['# (none: every run has every epoch of every kind)', '']),
+                                  encoding='utf-8')
+        else:
+            self._write_table(path, header, df)
+
+
     def post_epoch_scan_summary(self, ldir_run: list = None, dir_dft_root: Path = None,
                                 dir_summary: Path = None, band: str = 'minmax') -> Path:
         """把多个 run 的 epoch 扫描曲线汇总成 ensemble 均值 + 上下限图（chap_4 图 1.3/1.5 风格）。
@@ -1560,6 +1634,9 @@ class PeiN2p2:
         - ``p_post_epoch_stretch_summary.txt/pdf``
         - ``p_post_epoch_cij_summary.txt/pdf``
         - ``p_post_epoch_gsfe_summary.txt/pdf``
+        - ``p_post_absence.txt``：缺失清单，逐 (run, kind, epoch, item) 记录本次汇总里
+          被当成 NaN 的点 —— 缺整张表、缺某个 epoch 的行、或某一列是 NaN。无缺失时也写，
+          只有注释头。
 
         图沿用逐 run 的面板布局（stretch 3x3、cij 5x3、gsfe 2x6），同一物理量在汇总图
         中的行列位置与它在单 run 图中的位置一致；每个面板画跨 run 均值（C0 线 + C1 圆点）
@@ -1580,7 +1657,7 @@ class PeiN2p2:
                 （mean ± 样本标准差，对应 chap_4 图 1.3 的透明背景读法）。
 
         Returns:
-            汇总输出目录。缺表的 run 只跳过并告警；三类全缺时不写任何文件。
+            汇总输出目录。缺表的 run 只跳过并告警；三类全缺时只写 ``p_post_absence.txt``。
 
         Raises:
             ValueError: 未给 ldir_run，或 band 不是 'minmax'/'std'。
@@ -1607,10 +1684,11 @@ class PeiN2p2:
         lplot = {'stretch': my_plot_epoch_stretch, 'cij': my_plot_epoch_cij, 'gsfe': my_plot_epoch_gsfe}
         band_label = _BAND_LABEL[band]
 
-        nwritten = 0
+        nwritten, dtable = 0, {}
         for kind, (cols, float_format, unit_note) in _EPOCH_KINDS.items():
             ldf, lrid = self._collect_run_tables(
                 ldir_run, dir_post_root, Path('properties') / 'y_epoch_scan' / f'p_post_epoch_{kind}.txt')
+            dtable[kind] = dict(zip(lrid, ldf))         # 留给 _scan_epoch_absence，缺表的 run 自然不在其中
             if not ldf:
                 print(f'No run has p_post_epoch_{kind}.txt; skip {kind} summary.')
                 continue
@@ -1637,6 +1715,11 @@ class PeiN2p2:
             nwritten += 1
             print(f'  {kind}: {len(ldf)} run(s), {len(df_out)} epoch(s) -> '
                   f'p_post_epoch_{kind}_summary.txt/pdf')
+
+        # 缺失清单：三类产物看完再写，才能用跨 kind 的 epoch 并集判定缺行
+        df_absence = self._scan_epoch_absence(ldir_run, dtable)
+        self._write_absence(dir_summary / 'p_post_absence.txt', df_absence, ldir_run)
+        print(f'  absence: {len(df_absence)} record(s) -> p_post_absence.txt')
 
         print(f"✅ Ensemble epoch-scan summary ({band}) -> {dir_summary}: {nwritten}/3 group(s) written")
         return dir_summary
