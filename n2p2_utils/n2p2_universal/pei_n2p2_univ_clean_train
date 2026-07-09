@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# ================================================================ 🧹 prune_y_dir.sh
+# 清理 n2p2 param-scan (y_n2p2_param_scan/y_dir) 训练产生的中间文件。
+#
+# 背景：每个子目录 = 一次 nnp-train，随 epoch (每 50 步) 会累积一批
+#       "诊断文件族"，每族一个 epoch 一个文件（如 neuron-stats.000000.out
+#       ... neuron-stats.001000.out）。post 结束后只需最终 epoch 的那个，
+#       其余可删以省空间 / 减文件数。
+#
+# 做法：对传入 y_dir 的每个"直接子目录"，把下列文件族各自
+#       "只保留最大 epoch 的那一个"，其余删除：
+#         neuron-stats / trainpoints / testpoints / trainforces / testforces
+#       weights.<elem>.<epoch>.out 默认【不动】(它是势函数本体)，
+#       需要时用 --include-weights 才按元素分组各留最终 epoch。
+#
+# 安全：
+#   * 默认 dry-run —— 只打印将删什么，绝不真删。看清后再加 --apply。
+#   * 真删时逐个明确路径 rm -- <file>，绝不 rm -rf / 递归 / 通配一把梭，
+#     符合本机删除安全约束。
+#   * MPI 逐 rank 日志 (nnp-scaling.log.NNNN / nnp-train.log.NNNN)、
+#     sf.*.histo、scaling.data 等【一律不碰】——它们不是按 epoch 编号，
+#     "保留最后一个"对它们没有意义。
+#
+# 用法：
+#   ./prune_y_dir.sh <y_dir>                  # dry-run，只看
+#   ./prune_y_dir.sh <y_dir> --apply          # 真删诊断族
+#   ./prune_y_dir.sh <y_dir> --include-weights --apply   # 连 weights 也只留末尾
+# ================================================================
+set -euo pipefail
+shopt -s nullglob   # 无匹配的 glob 展开成空，而非字面量，方便数组判空
+
+# ---- 配置：要处理的 epoch 编号诊断文件族（查表，不散写魔法字符串） ----
+LFAMILY=( neuron-stats trainpoints testpoints trainforces testforces )
+
+# ---- 运行态全局（编排层填写，helper 读取） ----
+ROOT=""
+APPLY=0            # 0=dry-run 只打印；1=真删
+INCLUDE_WEIGHTS=0  # 是否也裁剪 weights.<elem>.<epoch>.out
+N_DEL=0            # 计划/实际删除文件数
+N_KEEP=0           # 保留的文件数（各族末尾）
+BYTES_FREED=0      # 释放（或将释放）的字节数
+
+### helper: 错误 / 警告 -------------------------------------------------
+fail() { printf '❌ ERROR: %s\n' "$1" >&2; exit 1; }
+warn() { printf '⚠️  %s\n'      "$1" >&2; }
+
+usage() {
+    grep -E '^#( |$)' "$0" | sed -E 's/^# ?//'
+    exit "${1:-0}"
+}
+
+### helper: 人类可读大小 ------------------------------------------------
+get_human_size() {
+    # $1 = 字节数 → 尽量 IEC 化，无 numfmt 时退回原始字节
+    if command -v numfmt >/dev/null 2>&1; then
+        numfmt --to=iec --suffix=B "$1"
+    else
+        printf '%sB' "$1"
+    fi
+}
+
+### helper: 裁剪单个文件族（保留最大 epoch，删其余） --------------------
+prune_family() {
+    # $1 = 子目录绝对路径；$2 = 相对 glob（如 neuron-stats.*.out）；$3 = 展示标签
+    local subdir="$1" pattern="$2" label="$3"
+    local -a lfile
+    lfile=( "$subdir"/$pattern )         # subdir 加引号、pattern 不加 → 让 glob 展开
+    local n=${#lfile[@]}
+    if (( n <= 1 )); then
+        printf '   %-16s %d 个 → 无需处理\n' "$label:" "$n"
+        (( n == 1 )) && { (( N_KEEP++ )) || true; }
+        return 0
+    fi
+
+    # 文件名 epoch 已零填充，version 排序 == 数值排序；末元素 = 最大 epoch
+    local -a lsorted
+    mapfile -t lsorted < <(printf '%s\n' "${lfile[@]}" | sort -V)
+    local last_idx=$(( ${#lsorted[@]} - 1 ))     # bash4.2 不支持 [-1]，显式算下标
+    local keep="${lsorted[$last_idx]}"
+    printf '   %-16s %d 个 → 保留 %s，删 %d\n' \
+        "$label:" "$n" "$(basename "$keep")" "$(( n - 1 ))"
+    (( N_KEEP++ )) || true
+
+    local f sz
+    for f in "${lsorted[@]}"; do
+        [[ "$f" == "$keep" ]] && continue
+        sz=$(stat -c %s -- "$f" 2>/dev/null || echo 0)
+        (( BYTES_FREED += sz )) || true
+        (( N_DEL++ ))           || true
+        if (( APPLY )); then
+            rm -- "$f"                                   # 逐个明确路径，绝不递归
+            printf '      🗑  %s\n'          "$(basename "$f")"
+        else
+            printf '      [dry-run] 将删 %s\n' "$(basename "$f")"
+        fi
+    done
+}
+
+### helper: 裁剪 weights（先按元素分组，各组各留末尾 epoch） -------------
+prune_weights() {
+    # $1 = 子目录绝对路径。weights.<elem>.<epoch>.out —— 必须按 <elem> 分组，
+    # 否则跨元素排序会误删别的元素的最终权重。
+    local subdir="$1"
+    local -a lw
+    lw=( "$subdir"/weights.*.out )
+    if (( ${#lw[@]} == 0 )); then
+        printf '   %-16s 0 个 → 无需处理\n' "weights:"
+        return 0
+    fi
+    local -a lelem
+    mapfile -t lelem < <(printf '%s\n' "${lw[@]}" \
+        | sed -E 's#.*/weights\.([0-9]+)\.[0-9]+\.out$#\1#' | sort -u)
+    local elem
+    for elem in "${lelem[@]}"; do
+        prune_family "$subdir" "weights.${elem}.*.out" "weights.${elem}"
+    done
+}
+
+### 编排：check → prepare → main → summary =============================
+main() {
+    ### check：只校验结构性前提（目录存在），业务内容交给下游
+    [[ -n "$ROOT" ]] || fail "未指定 y_dir。用法见 --help。"
+    [[ -d "$ROOT" ]] || fail "目录不存在：$ROOT"
+    ROOT="$(realpath -- "$ROOT")"    # 转绝对路径，后续全程用它，无需 chdir
+
+    ### prepare：收集直接子目录
+    local -a lsubdir
+    lsubdir=( "$ROOT"/*/ )
+    (( ${#lsubdir[@]} > 0 )) || fail "$ROOT 下没有子目录，没什么可清理。"
+
+    printf '================ 🧹 prune_y_dir\n'
+    printf '📁 目标 y_dir : %s\n' "$ROOT"
+    printf '📊 子目录数   : %d\n' "${#lsubdir[@]}"
+    printf '▶️  模式       : %s\n' "$( (( APPLY )) && echo '真删 (--apply)' || echo 'dry-run（不删，仅预览）' )"
+    printf '▶️  weights    : %s\n' "$( (( INCLUDE_WEIGHTS )) && echo '一并裁剪' || echo '保留全部（默认）' )"
+    printf '================\n'
+
+    ### main：逐子目录逐文件族处理
+    local subdir fam
+    for subdir in "${lsubdir[@]}"; do
+        printf '\n📁 %s\n' "$(basename "$subdir")"
+        for fam in "${LFAMILY[@]}"; do
+            prune_family "$subdir" "${fam}.*.out" "$fam"
+        done
+        (( INCLUDE_WEIGHTS )) && prune_weights "$subdir"
+    done
+    # to here: 所有子目录处理完毕
+
+    ### summary：计数 + 释放空间 + 提示（永远保留）
+    printf '\n================ 📊 summary\n'
+    printf '保留（各族末尾） : %d 个\n' "$N_KEEP"
+    if (( APPLY )); then
+        printf '已删除           : %d 个\n' "$N_DEL"
+        printf '释放空间         : %s\n'    "$(get_human_size "$BYTES_FREED")"
+        printf '🎉 完成。\n'
+    else
+        printf '将删除           : %d 个\n' "$N_DEL"
+        printf '将释放空间       : %s\n'    "$(get_human_size "$BYTES_FREED")"
+        printf '⚠️  这是 dry-run，未删任何文件。确认无误后加 --apply 真正执行。\n'
+    fi
+    printf '================\n'
+    return 0
+}
+
+### 参数解析（简单枚举，非法即 fail） ---------------------------------
+while (( $# )); do
+    case "$1" in
+        --apply)           APPLY=1 ;;
+        --include-weights) INCLUDE_WEIGHTS=1 ;;
+        -h|--help)         usage 0 ;;
+        -*)                fail "未知选项：$1（-h 查看用法）" ;;
+        *)                 [[ -z "$ROOT" ]] && ROOT="$1" || fail "多余参数：$1" ;;
+    esac
+    shift
+done
+
+main
+
+# ================================================================ 🧪 手动测试参考
+# 逐条取消注释、替换路径后手动运行，覆盖不同场景：
+#
+#   # 1) 先 dry-run 看单个 y_dir 会删什么
+#   ./prune_y_dir.sh train/stage0/1/train/y_n2p2_param_scan/y_dir
+#
+#   # 2) 确认无误后真删（仅诊断族，保留全部 weights）
+#   ./prune_y_dir.sh train/stage0/1/train/y_n2p2_param_scan/y_dir --apply
+#
+#   # 3) 连 weights 也只留最终 epoch（会丢失挑"最优 epoch"的能力，慎用）
+#   ./prune_y_dir.sh train/stage0/1/train/y_n2p2_param_scan/y_dir --include-weights --apply
+# ================================================================
