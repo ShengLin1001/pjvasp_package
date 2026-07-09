@@ -18,24 +18,48 @@ aggregated from the per-epoch mymetal post readers ``my_read_stretch`` /
     - my_plot_epoch_cij      : C11/C12/C13/C33/C44 vs epoch, 5 rows x phase cols
     - my_plot_epoch_gsfe     : stable/unstable SFE vs epoch, 2 rows x slip-system cols
 
+Cross-run (ensemble) summaries, driven by ``PeiN2p2.post_*_summary``:
+
+    - my_plot_epoch_rmse     : train E/F RMSE vs epoch, 2 rows (same style as the grids)
+    - my_plot_check_interface: per-run nnp-predict vs LAMMPS verdict, PASS/NO ticks
+
 All three epoch grids share the x-axis (epoch); each panel is one
 default-coloured (C0) line with a C1 circle marker every 50 epochs, labelled by a
 column title (phase / slip system) and its own y-axis label instead of a
 legend. y-limits track the converged tail (last 75% of the data, 5% margin);
 grid is off; axes keep the my_plot preset size with a tightened inter-row gap
 (if_keep_wspace_hspace), and figures are saved with bbox_inches='tight'.
+
+Passing ``df_lo`` / ``df_hi`` to an epoch grid switches it to the ensemble form
+used by ``PeiN2p2.post_epoch_scan_summary``: ``df`` becomes the across-run mean
+and the envelope is filled as a translucent C0 band under it, with a
+figure-level legend (mean / band / DFT line). The panel layout is identical to
+the single-run figure, so a summary panel sits where its per-run panel sat.
 """
 
 import matplotlib
 matplotlib.use('Agg')  # 集群无显示，强制非交互后端
 import matplotlib.pyplot as plt
+from matplotlib.ticker import NullLocator
 import numpy as np
 
 from mymetal.universal.plot.plot import my_plot
 from mymetal.universal.plot.general import general_modify_legend
 
 __all__ = ['my_plot_learning_curve', 'my_plot_compare', 'my_plot_rmse_by_tag',
-           'my_plot_epoch_stretch', 'my_plot_epoch_cij', 'my_plot_epoch_gsfe']
+           'my_plot_epoch_stretch', 'my_plot_epoch_cij', 'my_plot_epoch_gsfe',
+           'my_plot_epoch_rmse', 'my_plot_check_interface', 'VERDICT_CODE']
+
+# check_interface 汇总图的纵轴编码：1 = 通过，2 = 未通过（刻度写 PASS / NO，不写轴标签）。
+# 公开导出：PeiN2p2.post_check_interface_summary 用同一份编码解析 verdict 行，
+# 两边必须一致，故这是模块间的约定而不是绘图内部细节。
+VERDICT_CODE = {'PASS': 1, 'FAIL': 2}
+_VERDICT_TICKS = [1, 2]
+_VERDICT_TICKLABELS = ['PASS', 'NO']
+
+# 训练 RMSE 的两个 panel（上能量、下力），列名与 p_post_learning_curve.txt 一致
+_RMSE_PANELS = (('E_RMSE_meV/at', 'Energy RMSE (meV/atom)'),
+                ('F_RMSE_meV/A', r'Force RMSE (meV/$\mathrm{\AA}$)'))
 
 
 def _tag_colors(ltag: list) -> dict:
@@ -156,13 +180,37 @@ def my_plot_compare(e_ref: np.ndarray = None, e_nnp: np.ndarray = None, tag_e: n
     return fig, ax
 
 
-def my_plot_rmse_by_tag(df=None, file_path: str = None) -> tuple:
+def _bar_yerr(d, df_lo, df_hi, col: str, tag_col: str = 'tag'):
+    """Asymmetric ``yerr`` for the tag bars, aligned to ``d``'s tag order.
+
+    Returns a ``(2, n)`` array ``[bar - lo, hi - bar]`` (clipped at 0 so a
+    rounding wobble can never produce a negative whisker), or ``None`` when no
+    envelope was supplied. Rows of ``df_lo`` / ``df_hi`` are looked up by tag
+    rather than by position, so a tag missing from one run cannot silently shift
+    the whiskers onto the wrong bar.
+    """
+    if df_lo is None or df_hi is None or col not in df_lo or col not in df_hi:
+        return None
+    tags = list(d[tag_col])
+    lo = df_lo.set_index(tag_col).reindex(tags)[col].to_numpy(dtype=float)
+    hi = df_hi.set_index(tag_col).reindex(tags)[col].to_numpy(dtype=float)
+    bar = d[col].to_numpy(dtype=float)
+    return np.vstack([np.clip(bar - lo, 0, None), np.clip(hi - bar, 0, None)])
+
+
+def my_plot_rmse_by_tag(df=None, file_path: str = None,
+                        df_lo=None, df_hi=None, band_label: str = None) -> tuple:
     """Bar chart of per-tag energy/force RMSE (log-y), value labels on bars.
 
     Args:
         df: DataFrame from ``build_rmse_by_tag_df`` (the TOTAL row is shown
-            separately as a reference line, not as a bar).
+            separately as a reference line, not as a bar). For an ensemble
+            summary this holds the across-run mean.
         file_path: Output figure path (e.g. rmse_by_tag.pdf).
+        df_lo, df_hi: Optional lower/upper envelope over the training runs (same
+            ``tag`` rows and value columns as ``df``), drawn as asymmetric error
+            bars on each mean bar.
+        band_label: Legend text for those error bars (e.g. ``'Min-max over 10 runs'``).
     """
     d = df[df['tag'] != 'TOTAL'].reset_index(drop=True)
     total = df[df['tag'] == 'TOTAL']
@@ -179,17 +227,32 @@ def my_plot_rmse_by_tag(df=None, file_path: str = None) -> tuple:
              (ax[1], 'F_RMSE_meV/A', r'RMSE of force (meV/$\mathrm{\AA}$)')]
     for a, col, yl in specs:
         vals = d[col].values
-        a.bar(x, vals, color=color, edgecolor=None, zorder=2)
+        yerr = _bar_yerr(d, df_lo, df_hi, col)
+        a.bar(x, vals, color=color, edgecolor=None, zorder=2, yerr=yerr, capsize=4,
+              error_kw={'ecolor': 'black', 'elinewidth': 1.5, 'zorder': 3})
         a.set_yscale('log')
         a.set_ylabel(yl)
+
+        lhandle, llabel = [], []
         if len(total) and np.isfinite(total[col].values[0]):
             tot = total[col].values[0]
             a.axhline(tot, ls='--', color='gray', zorder=1,
                       label=f'Total = {_format_plain(tot, 3)}')
-            general_modify_legend(a.legend(loc='lower left', bbox_to_anchor=(0.00, 1.01)))
-        for xi, v in zip(x, vals):
+            lhandle, llabel = a.get_legend_handles_labels()
+        if yerr is not None and band_label:                 # 误差棒的图例条目（bar 本身按 tag 上色，不进图例）
+            from matplotlib.lines import Line2D
+            lhandle.append(Line2D([], [], color='black', marker='|', markersize=14, ls='none'))
+            llabel.append(band_label)
+        if lhandle:
+            general_modify_legend(a.legend(lhandle, llabel, loc='lower left',
+                                           bbox_to_anchor=(0.00, 1.01), ncol=len(lhandle)))
+
+        # 数值标签放到误差棒上端之外，避免和 cap 重叠。
+        # nan_to_num：单 run 时 std 为 NaN（ddof=1），误差棒本就不画，标签退回柱顶而不是落到 NaN 坐标
+        top = vals if yerr is None else vals + np.nan_to_num(yerr[1])
+        for xi, v, t in zip(x, vals, top):
             if np.isfinite(v):
-                a.text(xi, v, _format_plain(v, 2), ha='center', va='bottom', rotation=90)
+                a.text(xi, t, _format_plain(v, 2), ha='center', va='bottom', rotation=90)
         y_low, _ = a.get_ylim()
         a.margins(y=0.2)
         _, y_high = a.get_ylim()
@@ -198,7 +261,7 @@ def my_plot_rmse_by_tag(df=None, file_path: str = None) -> tuple:
     ax[1].set_xticks(x)
     ax[1].set_xticklabels(tags, rotation=45)
     ax[1].set_xlabel('Tag')
-    fig.savefig(file_path)
+    fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
     return fig, ax
 
@@ -207,8 +270,10 @@ def my_plot_rmse_by_tag(df=None, file_path: str = None) -> tuple:
 #   _EPOCH_HSPACE   行间留白（英寸）。配合 my_plot(if_keep_wspace_hspace=True) 让每个 axes 保持
 #                   预设大小（7.31 x 5.89），只缩小竖直间距而不是把 axes 撑大；wspace 不传、保持默认。
 #   _EPOCH_MARK_EVERY  每隔多少 epoch 打一个 marker。
+#   _EPOCH_BAND_ALPHA  ensemble 上下限色带的透明度（同色浅背景衬在均值线之下）。
 _EPOCH_HSPACE = 1.0
 _EPOCH_MARK_EVERY = 50
+_EPOCH_BAND_ALPHA = 0.25
 
 
 def _clear_default_labels(ax) -> None:
@@ -238,7 +303,8 @@ def _dft_ref_val(dft: dict, key: str):
 
 
 def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY,
-                 dft: dict = None, key: str = None) -> None:
+                 dft: dict = None, key: str = None,
+                 ylo=None, yhi=None) -> None:
     """Draw one epoch series with house defaults and a data-driven y-limit.
 
     Full line in the default style (C0, default linewidth) with a circle marker
@@ -251,19 +317,40 @@ def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY,
     dashed reference line drawn by :func:`_epoch_dft_ref` stays inside the axes
     instead of falling off it. An all-NaN panel (e.g. a slip system without a
     stable SFE) is left empty.
+
+    When ``ylo`` / ``yhi`` are given (ensemble summary over several training
+    runs), ``y`` is the across-run mean and the ``[ylo, yhi]`` envelope is filled
+    as a translucent C0 band underneath it; the band's converged tail widens the
+    y-limit the same way the mean does, so the whole envelope stays on-axes.
     """
     x = np.asarray(x)
     y = np.asarray(y, dtype=float)
     if not np.isfinite(y).any():
         return
     mark_idx = np.nonzero(x % mark_every == 0)[0]          # marker 落在 epoch 的整 mark_every 倍处
-    a.plot(x, y, marker='o', markevery=mark_idx.tolist(),
-           markeredgecolor='C1')     # 线默认 C0，marker 统一用 C1
 
-    tail = y[int(round(0.25 * len(y))):]                   # 后 75% 数据定 ylim
-    tail = tail[np.isfinite(tail)]
-    if tail.size:
-        lo, hi = float(tail.min()), float(tail.max())
+    lband = []
+    if ylo is not None and yhi is not None:
+        ylo = np.asarray(ylo, dtype=float)
+        yhi = np.asarray(yhi, dtype=float)
+        ok = np.isfinite(ylo) & np.isfinite(yhi)           # 缺任一端的 epoch 不参与填充
+        if ok.any():
+            # 色带先画（zorder 低于线），where=ok 让缺失段自然断开而不是插值连过去
+            a.fill_between(x, ylo, yhi, where=ok, alpha=_EPOCH_BAND_ALPHA,
+                           color='C0', linewidth=0, zorder=1.5)
+            lband = [ylo, yhi]
+
+    a.plot(x, y, marker='o', markevery=mark_idx.tolist(),
+           markeredgecolor='C1', zorder=2)     # 线默认 C0，marker 统一用 C1
+
+    def _tail(v):                                          # 后 75% 的有限值，定 ylim
+        t = np.asarray(v, dtype=float)[int(round(0.25 * len(v))):]
+        return t[np.isfinite(t)]
+
+    ltail = [t for t in (_tail(v) for v in [y, *lband]) if t.size]
+    if ltail:
+        lo = min(float(t.min()) for t in ltail)
+        hi = max(float(t.max()) for t in ltail)
         ref = _dft_ref_val(dft, key)                       # DFT 参考也算作数据边界，避免虚线跑出坐标轴
         if ref is not None:
             lo, hi = min(lo, ref), max(hi, ref)
@@ -285,13 +372,56 @@ def _epoch_dft_ref(a, dft: dict, key: str) -> None:
     a.axhline(val, ls='--', color='gray', zorder=1)
 
 
+def _epoch_col(d, key: str):
+    """``d[key]`` as a float array, or ``None`` when ``d`` is None or lacks ``key``."""
+    if d is None or key not in d:
+        return None
+    return d[key].to_numpy(dtype=float)
+
+
+def _epoch_cell(a, x, d, key: str, dft: dict = None, df_lo=None, df_hi=None) -> None:
+    """Populate one grid cell: the ``key`` series (+ optional band) and its DFT line.
+
+    Collapses the per-panel pattern shared by the three epoch grids — draw the
+    column when present, then always try the grey dashed DFT reference (a phase
+    can have a DFT value even where the LAMMPS column is missing).
+    """
+    if key in d:
+        _epoch_panel(a, x, d[key].to_numpy(), dft=dft, key=key,
+                     ylo=_epoch_col(df_lo, key), yhi=_epoch_col(df_hi, key))
+    _epoch_dft_ref(a, dft, key)
+
+
+def _epoch_legend(fig, dft: dict = None, mean_label: str = None,
+                  band_label: str = None) -> None:
+    """Figure-level legend for the ensemble grids (mean line / band / DFT line).
+
+    Only the summary plots call this: the single-run grids identify each panel by
+    its column title and y label and deliberately carry no legend. Anchored just
+    above the top row, so ``bbox_inches='tight'`` keeps it in the saved figure.
+    """
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
+
+    lhandle = [Line2D([], [], color='C0', marker='o', markeredgecolor='C1',
+                      label=mean_label or 'Mean over runs'),
+               Patch(facecolor='C0', alpha=_EPOCH_BAND_ALPHA,
+                     label=band_label or 'Min-max over runs')]
+    if dft:
+        lhandle.append(Line2D([], [], color='gray', ls='--', label='DFT reference'))
+    legend = fig.legend(handles=lhandle, loc='lower center', bbox_to_anchor=(0.5, 1.0),
+                        ncol=len(lhandle))
+    general_modify_legend(legend)
+
+
 def _pretty_type(t: str) -> str:
     """'HCP_basal' -> 'HCP Basal' (capitalise each token, keep all-caps tokens like FCC/HCP)."""
     return ' '.join(p if p.isupper() else p.capitalize() for p in t.split('_'))
 
 
 def my_plot_epoch_stretch(df=None, file_path: str = None,
-                          phases=('hcp', 'fcc', 'bcc'), dft=None) -> tuple:
+                          phases=('hcp', 'fcc', 'bcc'), dft=None,
+                          df_lo=None, df_hi=None, band_label: str = None) -> tuple:
     """Equilibrium stretch quantities versus training epoch (3 rows x phase cols).
 
     One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch). Rows top to
@@ -303,10 +433,15 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
     Args:
         df: DataFrame with column ``epoch`` and (per phase) ``a_<p>``, ``c_<p>``,
             ``E_<p>`` plus ``ca_hcp`` (built in ``PeiN2p2.post_epoch_scan``).
+            For an ensemble summary this holds the across-run mean.
         file_path: Output figure path (e.g. p_post_epoch_stretch.pdf).
         phases: Column order (default hcp/fcc/bcc).
         dft: Optional ``read_dft_reference(...)['stretch']`` sub-dict; each
             matching quantity is drawn as a grey dashed horizontal reference line.
+        df_lo, df_hi: Optional lower/upper envelope over the training runs (same
+            columns as ``df``), filled as a translucent band under the mean line
+            and summarised by a figure legend.
+        band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
     """
     d = df.copy()
     ep = d['epoch'].to_numpy()
@@ -317,26 +452,21 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
     _clear_default_labels(ax)
 
     for j, p in enumerate(phases):
-        if f'a_{p}' in d:                                  # row 0: a
-            _epoch_panel(ax[0, j], ep, d[f'a_{p}'].to_numpy(), dft=dft, key=f'a_{p}')
-        _epoch_dft_ref(ax[0, j], dft, f'a_{p}')            # 叠 DFT 灰色虚线参考
+        _epoch_cell(ax[0, j], ep, d, f'a_{p}', dft, df_lo, df_hi)          # row 0: a
         ax[0, j].set_ylabel(r'$a$ ($\mathrm{\AA}$)')
         if p == 'hcp':                                     # row 1: HCP 列画 c/a
-            if 'ca_hcp' in d:
-                _epoch_panel(ax[1, j], ep, d['ca_hcp'].to_numpy(), dft=dft, key='ca_hcp')
-            _epoch_dft_ref(ax[1, j], dft, 'ca_hcp')
+            _epoch_cell(ax[1, j], ep, d, 'ca_hcp', dft, df_lo, df_hi)
             ax[1, j].set_ylabel(r'$c/a$ (-)')
         else:                                              # row 1: 立方相画 c
-            if f'c_{p}' in d:
-                _epoch_panel(ax[1, j], ep, d[f'c_{p}'].to_numpy(), dft=dft, key=f'c_{p}')
-            _epoch_dft_ref(ax[1, j], dft, f'c_{p}')
+            _epoch_cell(ax[1, j], ep, d, f'c_{p}', dft, df_lo, df_hi)
             ax[1, j].set_ylabel(r'$c$ ($\mathrm{\AA}$)')
-        if f'E_{p}' in d:                                  # row 2: E
-            _epoch_panel(ax[2, j], ep, d[f'E_{p}'].to_numpy(), dft=dft, key=f'E_{p}')
-        _epoch_dft_ref(ax[2, j], dft, f'E_{p}')
+        _epoch_cell(ax[2, j], ep, d, f'E_{p}', dft, df_lo, df_hi)          # row 2: E
         ax[2, j].set_ylabel('Energy (eV/atom)')
         ax[0, j].set_title(p.upper())                      # 列标题：相
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
+
+    if df_lo is not None and df_hi is not None:
+        _epoch_legend(fig, dft, band_label=band_label)
 
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
@@ -345,7 +475,8 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
 
 def my_plot_epoch_cij(df=None, file_path: str = None,
                       phases=('hcp', 'fcc', 'bcc'),
-                      comps=('11', '12', '13', '33', '44'), dft=None) -> tuple:
+                      comps=('11', '12', '13', '33', '44'), dft=None,
+                      df_lo=None, df_hi=None, band_label: str = None) -> tuple:
     """Elastic constants Cij versus training epoch (5 rows x phase cols).
 
     One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch); rows top to
@@ -355,12 +486,17 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
 
     Args:
         df: DataFrame with column ``epoch`` and ``C<ij>_<p>`` columns
-            (built in ``PeiN2p2.post_epoch_scan``).
+            (built in ``PeiN2p2.post_epoch_scan``). For an ensemble summary this
+            holds the across-run mean.
         file_path: Output figure path (e.g. p_post_epoch_cij.pdf).
         phases: Column order (default hcp/fcc/bcc).
         comps: Cij components, one row each (default 11/12/13/33/44).
         dft: Optional ``read_dft_reference(...)['cij']`` sub-dict; each matching
             Cij is drawn as a grey dashed horizontal reference line.
+        df_lo, df_hi: Optional lower/upper envelope over the training runs (same
+            columns as ``df``), filled as a translucent band under the mean line
+            and summarised by a figure legend.
+        band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
     """
     d = df.copy()
     ep = d['epoch'].to_numpy()
@@ -372,22 +508,23 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
 
     for i, c in enumerate(comps):
         for j, p in enumerate(phases):
-            col = f'C{c}_{p}'
-            if col in d:
-                _epoch_panel(ax[i, j], ep, d[col].to_numpy(), dft=dft, key=col)
-            _epoch_dft_ref(ax[i, j], dft, col)             # 叠 DFT 灰色虚线参考
+            _epoch_cell(ax[i, j], ep, d, f'C{c}_{p}', dft, df_lo, df_hi)
             ax[i, j].set_ylabel(rf'$C_{{{c}}}$ (GPa)')     # 每个面板都标 y
             if i == 0:
                 ax[i, j].set_title(p.upper())              # 列标题：相
     for j in range(ax.shape[1]):
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
 
+    if df_lo is not None and df_hi is not None:
+        _epoch_legend(fig, dft, band_label=band_label)
+
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
     return fig, ax
 
 
-def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None) -> tuple:
+def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None,
+                       df_lo=None, df_hi=None, band_label: str = None) -> tuple:
     """Stacking-fault energies versus training epoch (2 rows x slip-system cols).
 
     One column per slip system (title = system name), shared x (epoch); top row
@@ -398,12 +535,17 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None) -> 
 
     Args:
         df: DataFrame with column ``epoch`` and ``usf_<type>`` / ``sf_<type>``
-            columns (built in ``PeiN2p2.post_epoch_scan``).
+            columns (built in ``PeiN2p2.post_epoch_scan``). For an ensemble
+            summary this holds the across-run mean.
         file_path: Output figure path (e.g. p_post_epoch_gsfe.pdf).
         types: Column order of slip systems. Defaults to the Au FCC/HCP set
             (FCC_111, FCC_100, then the four HCP systems).
         dft: Optional ``read_dft_reference(...)['gsfe']`` sub-dict; each matching
             usf/sf is drawn as a grey dashed horizontal reference line.
+        df_lo, df_hi: Optional lower/upper envelope over the training runs (same
+            columns as ``df``), filled as a translucent band under the mean line
+            and summarised by a figure legend.
+        band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
     """
     if types is None:
         types = ['FCC_111', 'FCC_100', 'HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']
@@ -421,13 +563,105 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None) -> 
                'usf': r'$\gamma_{\mathrm{usf}}$ (mJ/m$^2$)'}
     for j, t in enumerate(types):
         for i, pref in enumerate(('sf', 'usf')):
-            col = f'{pref}_{t}'
-            if col in d:
-                _epoch_panel(ax[i, j], ep, d[col].to_numpy(), dft=dft, key=col)
-            _epoch_dft_ref(ax[i, j], dft, col)             # 叠 DFT 灰色虚线参考
+            _epoch_cell(ax[i, j], ep, d, f'{pref}_{t}', dft, df_lo, df_hi)
             ax[i, j].set_ylabel(ylabels[pref])             # 每个面板都标 y
         ax[0, j].set_title(_pretty_type(t))                # 列标题：滑移系（首字母大写）
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
+
+    if df_lo is not None and df_hi is not None:
+        _epoch_legend(fig, dft, band_label=band_label)
+
+    fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
+    return fig, ax
+
+
+def my_plot_epoch_rmse(df=None, file_path: str = None,
+                       df_lo=None, df_hi=None, band_label: str = None) -> tuple:
+    """Training-set energy/force RMSE versus epoch (2 rows x 1 col).
+
+    Same drawing convention as the epoch property grids (:func:`my_plot_epoch_cij`
+    and friends): one C0 line with a C1 circle marker every 50 epochs, y-limits
+    tracking the converged tail, and — when an envelope is supplied — a
+    translucent C0 band plus a figure legend. Linear y (not the log-y of
+    :func:`my_plot_learning_curve`), so the converged tail is read on the same
+    footing as the property panels. Top panel is the energy RMSE, bottom the
+    force RMSE. No DFT reference exists for an RMSE, so no grey dashed line.
+
+    Args:
+        df: DataFrame with columns ``epoch``, ``E_RMSE_meV/at``, ``F_RMSE_meV/A``
+            (as written to ``p_post_learning_curve.txt``). For an ensemble
+            summary this holds the across-run mean.
+        file_path: Output figure path (e.g. p_post_rmse_summary.pdf).
+        df_lo, df_hi: Optional lower/upper envelope over the training runs.
+        band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
+    """
+    d = df.copy()
+    ep = d['epoch'].to_numpy()
+
+    fig, ax = my_plot(fig_subp=[2, 1], fig_sharex=True, grid=False,
+                      if_keep_wspace_hspace=True, hspace=_EPOCH_HSPACE)
+    ax = np.atleast_1d(ax).ravel()
+    _clear_default_labels(ax)
+
+    for a, (col, yl) in zip(ax, _RMSE_PANELS):
+        _epoch_cell(a, ep, d, col, None, df_lo, df_hi)
+        a.set_ylabel(yl)
+    ax[-1].set_xlabel('Epoch (-)')                         # 仅底排写 x 轴
+
+    if df_lo is not None and df_hi is not None:
+        _epoch_legend(fig, None, band_label=band_label)
+
+    fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
+    return fig, ax
+
+
+def my_plot_check_interface(df=None, file_path: str = None) -> tuple:
+    """nnp-predict vs LAMMPS hdnnp consistency verdict per run (2 rows x 1 col).
+
+    Top panel is the energy verdict, bottom the force verdict; x is the training
+    run. The y-axis carries no label — only two ticks, ``PASS`` at 1 and ``NO``
+    at 2 — so a run that fails the interface check jumps to the upper row. A run
+    whose ``p_post_check_interface.txt`` never reached a verdict (parse error)
+    is left blank rather than silently counted as a pass.
+
+    Args:
+        df: DataFrame with columns ``run``, ``verdict_E``, ``verdict_F``, the
+            verdicts coded as 1 (PASS) / 2 (FAIL) and NaN when absent.
+        file_path: Output figure path (e.g. p_post_check_interface_summary.pdf).
+    """
+    d = df.copy()
+    x = np.arange(len(d))
+
+    fig, ax = my_plot(fig_subp=[2, 1], fig_sharex=True, grid=False,
+                      if_keep_wspace_hspace=True, hspace=_EPOCH_HSPACE)
+    ax = np.atleast_1d(ax).ravel()
+    _clear_default_labels(ax)
+
+    for a, (col, title) in zip(ax, (('verdict_E', 'Energy'), ('verdict_F', 'Force'))):
+        y = d[col].to_numpy(dtype=float)
+        # PASS 沿用房子风格的空心 C1 圆点；FAIL 画成实心红点。
+        # 必须显式给 markerfacecolor —— rcParams 把它钉死成 'white'，只传 color= 的话
+        # 在 ls='none' 下什么都看不出来，失败点会和通过点长得一模一样。
+        for code, mec, mfc in ((VERDICT_CODE['PASS'], 'C1', 'white'),
+                               (VERDICT_CODE['FAIL'], 'C3', 'C3')):
+            mask = y == code
+            if mask.any():
+                a.plot(x[mask], y[mask], marker='o', ls='none',
+                       markeredgecolor=mec, markerfacecolor=mfc)
+        a.set_yticks(_VERDICT_TICKS)
+        a.set_yticklabels(_VERDICT_TICKLABELS)
+        a.yaxis.set_minor_locator(NullLocator())   # 分类轴不要次刻度
+        a.set_ylim(0.5, 2.5)
+        a.set_ylabel('')                                   # 纵轴不写 label（PASS/NO 已自解释）
+        a.set_title(title)
+
+    ax[-1].set_xticks(x)
+    ax[-1].set_xticklabels(list(d['run']), rotation=45)
+    ax[-1].xaxis.set_minor_locator(NullLocator())
+    ax[-1].set_xlim(-0.5, len(d) - 0.5)
+    ax[-1].set_xlabel('Run')
 
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
