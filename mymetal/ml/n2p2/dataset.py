@@ -531,13 +531,14 @@ def _stretch_lattice_values_for_epoch_convention(
 # 相<->标签映射（construct_dataset/README.md）：A11=HCP, A12=FCC, A13=BCC；A21=HCP 缺陷, A22=FCC 缺陷。
 #   stretch  {tag}/y_stretch/p_post_stretch.txt        -> a_<lat>, c_<lat>, E_<lat>, ca_hcp, dE_*_fcc
 #              FCC/BCC 的 VASP primitive rvector 会换算为 LAMMPS y_post 的 conventional cubic a
-#   cij      {tag}/y_cij_energy/y_post_cij_energy.txt   -> C11_<lat> ... C44_<lat>
+#   cij      {tag}/{cij_subdir}/y_post_cij_energy.txt   -> C11_<lat> ... C44_<lat>
+#              默认 cij_subdir='y_cij_energy_small'（小应变，harmonic 弹性常数），与训练/后处理统一
 #   gsfe     {tag}/{type}/y_gsfe_{type}/y_post_gsfe.txt -> usf_<type>=max(gamma), sf_<type>=最后一个 gamma
 # 缺文件不报错，跳过该项（DFT 归档可能只覆盖部分相/滑移系），返回的子字典只含读到的键。
 def read_dft_reference(dir_dft_root,
                        lats=('fcc', 'bcc', 'hcp'),
                        cij_keys=('C11', 'C12', 'C13', 'C33', 'C44'),
-                       stretch_tag=None, cij_tag=None,
+                       stretch_tag=None, cij_tag=None, cij_subdir='y_cij_energy_small',
                        gsfe_tag=None, gsfe_types=None,
                        verbose=True) -> dict:
     """Batch-read DFT (VASP) reference properties into one dict.
@@ -561,6 +562,11 @@ def read_dft_reference(dir_dft_root,
             Default ``{'fcc':'A12-1','bcc':'A13-1','hcp':'A11-1'}``.
         cij_tag (dict, optional): phase -> tag for cij files.
             Default ``{'fcc':'A12-2','bcc':'A13-2','hcp':'A11-2'}``.
+        cij_subdir (str): Sub-directory under each cij tag holding the
+            post-processed elastic-constant file. Default
+            ``'y_cij_energy_small'`` (small-strain / harmonic Cij, matching the
+            small-strain cij training set and the epoch-scan LAMMPS evaluation).
+            Pass ``'y_cij_energy'`` for the legacy large-strain fit.
         gsfe_tag (dict, optional): phase -> tag for gsfe files.
             Default ``{'fcc':'A22-2','hcp':'A21-2'}``.
         gsfe_types (dict, optional): phase -> list of slip-system type names.
@@ -626,7 +632,7 @@ def read_dft_reference(dir_dft_root,
         tag = cij_tag.get(lat)
         if tag is None:
             continue
-        pc = root / tag / 'y_cij_energy' / 'y_post_cij_energy.txt'
+        pc = root / tag / cij_subdir / 'y_post_cij_energy.txt'
         if not pc.is_file():
             if verbose:
                 print(f'skip dft cij {lat}: missing {pc}')
