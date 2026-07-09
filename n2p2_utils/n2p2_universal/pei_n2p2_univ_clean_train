@@ -1,44 +1,81 @@
 #!/usr/bin/env bash
-# ================================================================ 🧹 prune_y_dir.sh
-# 清理 n2p2 param-scan (y_n2p2_param_scan/y_dir) 训练产生的中间文件。
+# ================================================================ 🧹 pei_n2p2_univ_clean_train
+# 清理一个 n2p2 训练/扫描目录（形如 y_n2p2_param_scan / y_n2p2_train）下的中间数据。
+# 这类目录的典型结构：
 #
-# 背景：每个子目录 = 一次 nnp-train，随 epoch (每 50 步) 会累积一批
-#       "诊断文件族"，每族一个 epoch 一个文件（如 neuron-stats.000000.out
-#       ... neuron-stats.001000.out）。post 结束后只需最终 epoch 的那个，
-#       其余可删以省空间 / 减文件数。
+#   <root>/
+#     y_dir/<job>/                                  ← 阶段 1：nnp-train 工作目录
+#     y_post/<job>/properties/y_epoch_scan/         ← 阶段 2：逐 epoch 性质扫描
+#         p_post_epoch_{cij,gsfe,stretch}.txt       ← 汇总结果（要留）
+#         y_dir/<epoch>/                            ← 逐 epoch 的 LAMMPS 计算（可删）
 #
-# 做法：对传入 y_dir 的每个"直接子目录"，把下列文件族各自
-#       "只保留最大 epoch 的那一个"，其余删除：
-#         neuron-stats / trainpoints / testpoints / trainforces / testforces
-#       weights.<elem>.<epoch>.out 默认【不动】(它是势函数本体)，
-#       需要时用 --include-weights 才按元素分组各留最终 epoch。
+# 阶段 1（--skip-train 关闭）：裁剪 <root>/y_dir 的每个直接子目录。
+#   nnp-train 每 50 步为下列文件族各留一个 epoch 快照，post 结束后只需最后一个：
+#     neuron-stats / trainpoints / testpoints / trainforces / testforces
+#   weights.<elem>.<epoch>.out 默认【不动】(它是势函数本体)，
+#   需要时用 --include-weights 才按元素分组各留最终 epoch。
+#
+# 阶段 2（--skip-post 关闭）：回收 <root>/y_post/*/properties/y_epoch_scan/y_dir。
+#   势函数与汇总数据已被 post 复制/聚合出来，逐 epoch 的 LAMMPS 计算目录不再需要。
+#   删之前必须通过“epoch 覆盖校验”：
+#     每个 p_post_epoch_<name>.txt 都存在、非空，且其 epoch 列覆盖 y_dir 下的
+#     每一个 epoch 子目录。这样能挡住“扫描跑了一半就中断、txt 只写了前几个 epoch”
+#     的情况——只看“文件非空”是挡不住的。
 #
 # 安全：
 #   * 默认 dry-run —— 只打印将删什么，绝不真删。看清后再加 --apply。
-#   * 真删时逐个明确路径 rm -- <file>，绝不 rm -rf / 递归 / 通配一把梭，
-#     符合本机删除安全约束。
+#   * 阶段 1 逐个明确路径 rm -- <file>，绝不递归 / 通配一把梭。
+#   * 阶段 2 需要整棵树回收（单棵可达 ~78k 文件 / 22GB，逐文件 rm 不现实），
+#     经用户明确授权，对【通过校验且路径形状匹配】的单个 y_dir 使用 rm -rf。
+#     形状护栏见 check_safe_ydir()：必须是真目录（非符号链接）、位于 <root> 之下、
+#     且绝对路径匹配 */y_post/*/properties/y_epoch_scan/y_dir。任一不满足即跳过。
 #   * MPI 逐 rank 日志 (nnp-scaling.log.NNNN / nnp-train.log.NNNN)、
 #     sf.*.histo、scaling.data 等【一律不碰】——它们不是按 epoch 编号，
-#     "保留最后一个"对它们没有意义。
+#     “保留最后一个”对它们没有意义。
+#   * y_epoch_scan 下的 p_post_epoch_*.{txt,pdf}、slurm-*.out、sub_slurm_*.sh 一律不碰。
+#   * y_post 下的非 job 兄弟目录（如汇总图表 y_epoch_scan_summary）没有
+#     properties/y_epoch_scan，直接跳过，不计入拦截、不影响退出码。
 #
 # 用法：
-#   ./prune_y_dir.sh <y_dir>                  # dry-run，只看
-#   ./prune_y_dir.sh <y_dir> --apply          # 真删诊断族
-#   ./prune_y_dir.sh <y_dir> --include-weights --apply   # 连 weights 也只留末尾
+#   ./pei_n2p2_univ_clean_train <root>                 # dry-run，只看
+#   ./pei_n2p2_univ_clean_train <root> --apply         # 真删
+#   ./pei_n2p2_univ_clean_train <root> --size          # 顺便统计将释放的空间（慢）
+#   ./pei_n2p2_univ_clean_train <root> --skip-post     # 只做阶段 1
+#   ./pei_n2p2_univ_clean_train <root> --skip-train    # 只做阶段 2
+#   ./pei_n2p2_univ_clean_train <root> --include-weights --apply   # 连 weights 也只留末尾
+#
+# 退出码：
+#   0   全部处理完毕，无待关注项
+#   1   参数/结构错误，或阶段 2 有 job “y_dir 还在但校验未过”被拒绝删除（见 summary）。
+#       此时 y_dir 被原样保留 —— 说明该 job 的 epoch 扫描没跑完，应先补跑 post，
+#       而不是把源数据删掉。
 # ================================================================
 set -euo pipefail
 shopt -s nullglob   # 无匹配的 glob 展开成空，而非字面量，方便数组判空
 
-# ---- 配置：要处理的 epoch 编号诊断文件族（查表，不散写魔法字符串） ----
-LFAMILY=( neuron-stats trainpoints testpoints trainforces testforces )
+# ---- 配置：查表，不散写魔法字符串 ----
+LFAMILY=( neuron-stats trainpoints testpoints trainforces testforces )  # 阶段 1：按 epoch 编号的诊断族
+LREQ=( cij gsfe stretch )                                               # 阶段 2：必须齐备的 p_post_epoch_<name>.txt
 
 # ---- 运行态全局（编排层填写，helper 读取） ----
 ROOT=""
 APPLY=0            # 0=dry-run 只打印；1=真删
 INCLUDE_WEIGHTS=0  # 是否也裁剪 weights.<elem>.<epoch>.out
-N_DEL=0            # 计划/实际删除文件数
-N_KEEP=0           # 保留的文件数（各族末尾）
-BYTES_FREED=0      # 释放（或将释放）的字节数
+SKIP_TRAIN=0
+SKIP_POST=0
+WANT_SIZE=0        # 是否 du 统计体积（1M 文件时很慢，故默认关）
+HAS_TRAIN=0        # <root>/y_dir  实际存在且未被 --skip-train 关掉
+HAS_POST=0         # <root>/y_post 实际存在且未被 --skip-post  关掉
+
+N_DEL=0            # 阶段 1：计划/实际删除文件数
+N_KEEP=0           # 阶段 1：保留的文件数（各族末尾）
+BYTES_FREED=0      # 阶段 1：释放（或将释放）的字节数
+
+N_TREE=0           # 阶段 2：计划/实际删除的 y_dir 棵数
+N_GONE=0           # 阶段 2：本就没有 y_dir（此前已清理）
+N_NOJOB=0          # 阶段 2：不是 job 目录（无 properties/y_epoch_scan，如 y_epoch_scan_summary）
+BYTES_TREE=0       # 阶段 2：释放（或将释放）的字节数
+LBLOCKED=()        # 阶段 2：有 y_dir 但校验未过、被拒绝删除的目标 + 原因
 
 ### helper: 错误 / 警告 -------------------------------------------------
 fail() { printf '❌ ERROR: %s\n' "$1" >&2; exit 1; }
@@ -58,6 +95,14 @@ get_human_size() {
         printf '%sB' "$1"
     fi
 }
+
+### helper: 目录体积（字节）。--size 未开时返回 0，避免百万文件 du 拖死 ----
+get_tree_bytes() {
+    (( WANT_SIZE )) || { printf '0'; return 0; }
+    du -sb -- "$1" 2>/dev/null | awk '{print $1}' || printf '0'
+}
+
+# ================================================================ 阶段 1：y_dir 诊断族裁剪
 
 ### helper: 裁剪单个文件族（保留最大 epoch，删其余） --------------------
 prune_family() {
@@ -116,50 +161,230 @@ prune_weights() {
     done
 }
 
-### 编排：check → prepare → main → summary =============================
-main() {
-    ### check：只校验结构性前提（目录存在），业务内容交给下游
-    [[ -n "$ROOT" ]] || fail "未指定 y_dir。用法见 --help。"
-    [[ -d "$ROOT" ]] || fail "目录不存在：$ROOT"
-    ROOT="$(realpath -- "$ROOT")"    # 转绝对路径，后续全程用它，无需 chdir
-
-    ### prepare：收集直接子目录
+### 阶段 1 编排 ---------------------------------------------------------
+clean_train_dir() {
+    # $1 = <root>/y_dir
+    local ydir="$1"
     local -a lsubdir
-    lsubdir=( "$ROOT"/*/ )
-    (( ${#lsubdir[@]} > 0 )) || fail "$ROOT 下没有子目录，没什么可清理。"
+    lsubdir=( "$ydir"/*/ )
+    if (( ${#lsubdir[@]} == 0 )); then
+        warn "$ydir 下没有子目录，阶段 1 无事可做。"
+        return 0
+    fi
 
-    printf '================ 🧹 prune_y_dir\n'
-    printf '📁 目标 y_dir : %s\n' "$ROOT"
+    printf '\n================ 🧹 阶段 1：裁剪训练目录诊断文件\n'
+    printf '📁 y_dir      : %s\n' "$ydir"
     printf '📊 子目录数   : %d\n' "${#lsubdir[@]}"
-    printf '▶️  模式       : %s\n' "$( (( APPLY )) && echo '真删 (--apply)' || echo 'dry-run（不删，仅预览）' )"
     printf '▶️  weights    : %s\n' "$( (( INCLUDE_WEIGHTS )) && echo '一并裁剪' || echo '保留全部（默认）' )"
-    printf '================\n'
 
-    ### main：逐子目录逐文件族处理
     local subdir fam
     for subdir in "${lsubdir[@]}"; do
         printf '\n📁 %s\n' "$(basename "$subdir")"
         for fam in "${LFAMILY[@]}"; do
             prune_family "$subdir" "${fam}.*.out" "$fam"
         done
-        (( INCLUDE_WEIGHTS )) && prune_weights "$subdir"
+        # 必须写成 if，不能写 `(( X )) && cmd`：后者在 X=0 时让循环（进而让本函数）
+        # 返回 1，被 set -e 当成失败，阶段 2 会被静默跳过。
+        if (( INCLUDE_WEIGHTS )); then
+            prune_weights "$subdir"
+        fi
     done
-    # to here: 所有子目录处理完毕
+    # to here: y_dir 下所有子目录处理完毕
+    return 0
+}
 
-    ### summary：计数 + 释放空间 + 提示（永远保留）
-    printf '\n================ 📊 summary\n'
-    printf '保留（各族末尾） : %d 个\n' "$N_KEEP"
+# ================================================================ 阶段 2：y_epoch_scan/y_dir 回收
+
+### helper: 形状护栏 —— 只有长得完全对的路径才允许整棵回收 ---------------
+check_safe_ydir() {
+    # $1 = 待删目录。通过返回 0；否则 echo 原因并返回 1。
+    local d="$1" rp
+    [[ -L "$d" ]] && { echo "是符号链接，拒绝删除"; return 1; }
+    [[ -d "$d" ]] || { echo "不是目录";           return 1; }
+    rp="$(realpath -- "$d")"
+    [[ "$rp" == "$ROOT"/* ]] \
+        || { echo "解析后不在 <root> 之下：$rp"; return 1; }
+    [[ "$rp" == */y_post/*/properties/y_epoch_scan/y_dir ]] \
+        || { echo "路径形状不匹配 */y_post/*/properties/y_epoch_scan/y_dir：$rp"; return 1; }
+    return 0
+}
+
+### helper: epoch 覆盖校验 ----------------------------------------------
+check_epoch_coverage() {
+    # $1 = y_epoch_scan 目录；$2 = 其下的 y_dir。
+    # 通过返回 0；否则 echo 原因并返回 1。
+    local scan="$1" ydir="$2"
+
+    # 1) y_dir 下的 epoch 子目录 → 十进制整数（10# 前缀，否则 000050 会被当八进制）
+    local -a lepoch
+    local d b
+    for d in "$ydir"/*/; do
+        b="$(basename "$d")"
+        [[ "$b" =~ ^[0-9]+$ ]] || { echo "y_dir 含非 epoch 子目录：$b"; return 1; }
+        lepoch+=( "$(( 10#$b ))" )
+    done
+    if (( ${#lepoch[@]} == 0 )); then
+        echo "y_dir 下没有 epoch 子目录"    # 空壳目录：交给调用方当作可删
+        return 0
+    fi
+
+    # 2) 逐个必需 txt：存在、非空、epoch 列覆盖所有 epoch 子目录
+    local name txt e
+    for name in "${LREQ[@]}"; do
+        txt="$scan/p_post_epoch_${name}.txt"
+        [[ -f "$txt" ]] || { echo "缺少 p_post_epoch_${name}.txt";   return 1; }
+        [[ -s "$txt" ]] || { echo "p_post_epoch_${name}.txt 为空";   return 1; }
+
+        # 数据行首列即 epoch；表头 "epoch" 非数字，天然被过滤掉
+        local -A dict_have=()
+        while read -r e; do dict_have["$e"]=1; done \
+            < <(awk '$1 ~ /^[0-9]+$/ {print $1+0}' "$txt")
+
+        for e in "${lepoch[@]}"; do
+            [[ -n "${dict_have[$e]:-}" ]] \
+                || { echo "p_post_epoch_${name}.txt 未覆盖 epoch $e"; return 1; }
+        done
+    done
+    return 0
+}
+
+### helper: 回收单棵 y_dir ----------------------------------------------
+delete_epoch_ydir() {
+    # $1 = 已通过 check_safe_ydir 的目录
+    local rp; rp="$(realpath -- "$1")"
+    local sz; sz="$(get_tree_bytes "$rp")"
+    (( BYTES_TREE += sz )) || true
+    (( N_TREE++ ))         || true
+
     if (( APPLY )); then
-        printf '已删除           : %d 个\n' "$N_DEL"
-        printf '释放空间         : %s\n'    "$(get_human_size "$BYTES_FREED")"
+        rm -rf -- "$rp"      # 唯一的递归删除点：路径已过形状护栏 + epoch 覆盖校验
+        printf '   🗑  已回收 y_dir%s\n' "$( (( WANT_SIZE )) && echo "（$(get_human_size "$sz")）" )"
+    else
+        printf '   [dry-run] 将回收 y_dir%s\n' "$( (( WANT_SIZE )) && echo "（$(get_human_size "$sz")）" )"
+    fi
+}
+
+### 阶段 2 编排 ---------------------------------------------------------
+clean_post_dir() {
+    # $1 = <root>/y_post
+    local ypost="$1"
+    local -a lsubdir
+    lsubdir=( "$ypost"/*/ )
+    if (( ${#lsubdir[@]} == 0 )); then
+        warn "$ypost 下没有子目录，阶段 2 无事可做。"
+        return 0
+    fi
+
+    printf '\n================ 🧹 阶段 2：回收 y_epoch_scan/y_dir\n'
+    printf '📁 y_post     : %s\n' "$ypost"
+    printf '📊 子目录数   : %d\n' "${#lsubdir[@]}"
+    printf '▶️  判定条件   : p_post_epoch_{%s}.txt 齐备、非空、epoch 列全覆盖\n' \
+        "$(printf '%s,' "${LREQ[@]}" | sed 's/,$//')"
+
+    local subdir job scan ydir reason
+    for subdir in "${lsubdir[@]}"; do
+        job="$(basename "$subdir")"
+        scan="${subdir}properties/y_epoch_scan"
+        ydir="$scan/y_dir"
+        printf '\n📁 %s\n' "$job"
+
+        # y_post 下混有非 job 的兄弟目录（如 y_epoch_scan_summary 汇总图表）。
+        # 它们没有 y_dir，本就无数据可丢，只做提示，不计入 blocked、不影响退出码。
+        if [[ ! -d "$scan" ]]; then
+            printf '   ⏭  无 properties/y_epoch_scan，非 job 目录，跳过\n'
+            (( N_NOJOB++ )) || true
+            continue
+        fi
+        if [[ ! -e "$ydir" ]]; then
+            printf '   ✅ 已无 y_dir（此前已清理）\n'
+            (( N_GONE++ )) || true
+            continue
+        fi
+
+        # 业务内容检查下推到此处：先校验 post 结果完整，再看路径形状
+        if ! reason="$(check_epoch_coverage "$scan" "$ydir")"; then
+            printf '   ❌ 校验未过：%s\n' "$reason"
+            LBLOCKED+=( "$job: $reason" )
+            continue
+        fi
+        if ! reason="$(check_safe_ydir "$ydir")"; then
+            printf '   ❌ 护栏拦截：%s\n' "$reason"
+            LBLOCKED+=( "$job: $reason" )
+            continue
+        fi
+
+        printf '   ✅ 校验通过（p_post_epoch_*.txt 齐备且覆盖全部 epoch）\n'
+        delete_epoch_ydir "$ydir"
+    done
+    # to here: y_post 下所有子目录处理完毕
+    return 0
+}
+
+# ================================================================ 主编排
+
+### summary：计数 + 释放空间 + 逐个列出被拦截项（永远保留）--------------
+print_summary() {
+    printf '\n================ 📊 summary\n'
+    if (( HAS_TRAIN )); then
+        printf '阶段 1 保留（各族末尾） : %d 个\n' "$N_KEEP"
+        printf '阶段 1 %s文件           : %d 个（%s）\n' \
+            "$( (( APPLY )) && echo '已删' || echo '将删' )" \
+            "$N_DEL" "$(get_human_size "$BYTES_FREED")"
+    fi
+    if (( HAS_POST )); then
+        printf '阶段 2 %s y_dir         : %d 棵%s\n' \
+            "$( (( APPLY )) && echo '已回收' || echo '将回收' )" "$N_TREE" \
+            "$( (( WANT_SIZE )) && echo "（$(get_human_size "$BYTES_TREE")）" || echo '（体积未统计，加 --size）' )"
+        printf '阶段 2 本就无 y_dir     : %d 个\n' "$N_GONE"
+        printf '阶段 2 非 job 目录      : %d 个\n' "$N_NOJOB"
+        printf '阶段 2 被拦截           : %d 个\n' "${#LBLOCKED[@]}"
+        # bash 4.2 下 set -u + 空数组展开会报 unbound variable，故先判长度
+        if (( ${#LBLOCKED[@]} > 0 )); then
+            local item
+            for item in "${LBLOCKED[@]}"; do
+                printf '   ❌ %s\n' "$item"
+            done
+        fi
+    fi
+
+    if (( APPLY )); then
         printf '🎉 完成。\n'
     else
-        printf '将删除           : %d 个\n' "$N_DEL"
-        printf '将释放空间       : %s\n'    "$(get_human_size "$BYTES_FREED")"
         printf '⚠️  这是 dry-run，未删任何文件。确认无误后加 --apply 真正执行。\n'
     fi
     printf '================\n'
+
+    (( ${#LBLOCKED[@]} == 0 )) || return 1
     return 0
+}
+
+main() {
+    ### check：只校验结构性前提（目录存在、至少有一个阶段有活干）
+    [[ -n "$ROOT" ]] || fail "未指定 <root>。用法见 --help。"
+    [[ -d "$ROOT" ]] || fail "目录不存在：$ROOT"
+    ROOT="$(realpath -- "$ROOT")"    # 转绝对路径，后续全程用它（护栏依赖它），无需 chdir
+    (( SKIP_TRAIN && SKIP_POST )) && fail "--skip-train 与 --skip-post 同时给出，无事可做。"
+
+    local ydir="$ROOT/y_dir" ypost="$ROOT/y_post"
+    if (( ! SKIP_TRAIN )) && [[ -d "$ydir"  ]]; then HAS_TRAIN=1; fi
+    if (( ! SKIP_POST  )) && [[ -d "$ypost" ]]; then HAS_POST=1;  fi
+    (( HAS_TRAIN || HAS_POST )) \
+        || fail "$ROOT 下既无 y_dir 也无 y_post（或都被 --skip-* 关掉了），没什么可清理。"
+
+    ### prepare：preflight 回显
+    printf '================ 🧹 pei_n2p2_univ_clean_train\n'
+    printf '📁 root       : %s\n' "$ROOT"
+    printf '▶️  模式       : %s\n' "$( (( APPLY )) && echo '真删 (--apply)' || echo 'dry-run（不删，仅预览）' )"
+    printf '▶️  阶段 1     : %s\n' "$( (( SKIP_TRAIN )) && echo '跳过 (--skip-train)' || { (( HAS_TRAIN )) && echo "y_dir  → $ydir" || echo '无 y_dir，跳过'; } )"
+    printf '▶️  阶段 2     : %s\n' "$( (( SKIP_POST  )) && echo '跳过 (--skip-post)'  || { (( HAS_POST  )) && echo "y_post → $ypost" || echo '无 y_post，跳过'; } )"
+    printf '================\n'
+
+    ### main：两阶段依次处理（用 if，避免 && 列表末命令的非零返回被 set -e 捕获）
+    if (( HAS_TRAIN )); then clean_train_dir "$ydir";  fi
+    if (( HAS_POST  )); then clean_post_dir  "$ypost"; fi
+
+    ### summary：被拦截项非空时以 1 退出，提醒人工介入
+    print_summary
 }
 
 ### 参数解析（简单枚举，非法即 fail） ---------------------------------
@@ -167,6 +392,9 @@ while (( $# )); do
     case "$1" in
         --apply)           APPLY=1 ;;
         --include-weights) INCLUDE_WEIGHTS=1 ;;
+        --skip-train)      SKIP_TRAIN=1 ;;
+        --skip-post)       SKIP_POST=1 ;;
+        --size)            WANT_SIZE=1 ;;
         -h|--help)         usage 0 ;;
         -*)                fail "未知选项：$1（-h 查看用法）" ;;
         *)                 [[ -z "$ROOT" ]] && ROOT="$1" || fail "多余参数：$1" ;;
@@ -179,12 +407,25 @@ main
 # ================================================================ 🧪 手动测试参考
 # 逐条取消注释、替换路径后手动运行，覆盖不同场景：
 #
-#   # 1) 先 dry-run 看单个 y_dir 会删什么
-#   ./prune_y_dir.sh train/stage0/1/train/y_n2p2_param_scan/y_dir
+#   # 1) dry-run 看整个 param_scan 会动什么（两阶段都跑）
+#   ./pei_n2p2_univ_clean_train train/stage0/1/train/y_n2p2_param_scan
 #
-#   # 2) 确认无误后真删（仅诊断族，保留全部 weights）
-#   ./prune_y_dir.sh train/stage0/1/train/y_n2p2_param_scan/y_dir --apply
+#   # 2) dry-run + 统计将释放的空间（du 百万文件，慢，可能几分钟）
+#   ./pei_n2p2_univ_clean_train train/stage0/1/train/y_n2p2_param_scan --size
 #
-#   # 3) 连 weights 也只留最终 epoch（会丢失挑"最优 epoch"的能力，慎用）
-#   ./prune_y_dir.sh train/stage0/1/train/y_n2p2_param_scan/y_dir --include-weights --apply
+#   # 3) 只回收 y_post 下的 epoch 扫描目录（本目录 y_dir 已被清掉时的常见场景）
+#   ./pei_n2p2_univ_clean_train train/stage0/1/train/y_n2p2_param_scan --skip-train --apply
+#
+#   # 4) 只裁剪训练目录诊断族，保留全部 weights
+#   ./pei_n2p2_univ_clean_train train/stage0/0/sf/y_scaling --skip-post --apply
+#
+#   # 5) 连 weights 也只留最终 epoch（会丢失挑“最优 epoch”的能力，慎用）
+#   ./pei_n2p2_univ_clean_train <root> --skip-post --include-weights --apply
+#
+# 已在合成 fixture 上验证过的行为（见 --apply 断言）：
+#   * 阶段 1 各诊断族只留末尾 epoch；weights.*/nnp-train.log.*/scaling.data 不动。
+#   * 阶段 2 只删“三 txt 齐备 + 非空 + epoch 全覆盖”的 y_dir；
+#     缺 txt / txt 为空 / epoch 有缺口 → 保留 y_dir 并计入拦截。
+#   * y_dir 是符号链接时拒绝删除，链接与链接目标均完好（防止误删链接指向的目录）。
+#   * 重复 --apply 幂等：第二次删 0 个、y_dir 计入“本就无”。
 # ================================================================
