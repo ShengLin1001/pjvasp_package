@@ -13,25 +13,59 @@ if [ -z "$2" ]; then      # empty is true
     exit
 fi
 
+# For INCAR tag changes, "comment" only comments the existing matched line.
+# Use "comment:value" to rewrite the tag with value and keep it commented.
+comment_mode="none"
+value1=$2
+if [ "$2" = "comment" ]; then
+    comment_mode="keep"
+    value1=""
+elif [[ "$2" == comment:* ]]; then
+    comment_mode="rewrite"
+    value1=${2#comment:}
+fi
+
 
 
 sub_change(){
     file1=$1
     tag1=$2
     str1=$3
-    echo "==> changing '"$tag1"' in '"$file1"' to '"$str1"': "
+
+    if [ "$comment_mode" = "rewrite" ]; then
+        if ! echo "$str1" | grep -q -E "^[[:space:]]*#"; then
+            str1="#$str1"
+        fi
+    fi
+
+    if [ "$comment_mode" = "keep" ]; then
+        echo "==> commenting '"$tag1"' in '"$file1"': "
+    else
+        echo "==> changing '"$tag1"' in '"$file1"' to '"$str1"': "
+    fi
 
     for filen in `find ./ -type f -name $file1`; do
         #echo $filen
         # Be aware that VASP will use the first occurrence. https://www.vasp.at/forum/viewtopic.php?t=19227
         j1=`grep -n -E "^[[:space:]]*#*[[:space:]]*${tag1}[[:space:]]*=" "$filen" | head -1 | cut -d ":" -f1`
         echo $j1
-        echo $str1
+        if [ "$comment_mode" != "keep" ]; then
+            echo $str1
+        fi
         if [ "$j1" = "" ]; then
             echo "no $tag1 in the file"
 	    else 
-            sed $j1's/.*/'"$str1"'/' $filen > temp
-            mv temp $filen
+            if [ "$comment_mode" = "keep" ]; then
+                if sed -n "${j1}p" "$filen" | grep -q -E "^[[:space:]]*#"; then
+                    echo "already commented"
+                else
+                    sed "${j1}s/^/#/" "$filen" > temp
+                    mv temp "$filen"
+                fi
+            else
+                sed $j1's/.*/'"$str1"'/' $filen > temp
+                mv temp $filen
+            fi
         fi
     done
 }
@@ -130,140 +164,156 @@ case "$1" in
 
 
     -ispin) 
-        str=" ISPIN= $2      # 1=non; 2=spin "
+        str=" ISPIN= $value1      # 1=non; 2=spin "
         sub_change  INCAR  "ISPIN"  "$str" 
         ;;
 
 
     -isif) 
-        str=" ISIF= $2      # fix: 2=box; 3=none; 4=volume "
+        str=" ISIF= $value1      # fix: 2=box; 3=none; 4=volume "
         sub_change  INCAR  "ISIF"  "$str"
         ;;
 
 
     -ediffg) 
-        str=" EDIFFG= $2      # -1E-3 "
+        str=" EDIFFG= $value1      # -1E-3 "
         sub_change  INCAR  "EDIFFG"  "$str"
         ;;
 
 
     -ediff)
-        str=" EDIFF= $2      # 1E-6 "
+        str=" EDIFF= $value1      # 1E-6 "
         sub_change  INCAR  "EDIFF"  "$str"
         ;;
 
 
     -isym) 
-        if [ $2 == "default" ]; then
+        if [ "$value1" == "default" ]; then
             str="# ISYM= 0 " 
         else
-            str=" ISYM= $2      # 0=off "
+            str=" ISYM= $value1      # 0=off "
         fi
         sub_change  INCAR  "ISYM"  "$str"
         ;;
 
 
     -nsw)
-        str=" NSW= $2      # ionic steps, 0=static "
+        str=" NSW= $value1      # ionic steps, 0=static "
         sub_change  INCAR  "NSW"  "$str"
         ;;
 
 
     -algo)
-        str=" ALGO= $2      # N=Normal, F=Fast "
+        str=" ALGO= $value1      # N=Normal, F=Fast "
         sub_change  INCAR  "ALGO"  "$str"
         ;;
 
 
     -ismear)
-        str=" ISMEAR= $2      # 1=1st order MP, -5=tetrahedron "
+        str=" ISMEAR= $value1      # 1=1st order MP, -5=tetrahedron "
         sub_change  INCAR  "ISMEAR"  "$str"
         ;;
 
 
     -lreal)
-        str=" LREAL= $2      # F; A=Auto "
+        str=" LREAL= $value1      # F; A=Auto "
         sub_change  INCAR  "LREAL"  "$str"
         ;;
 
 
     -nelm)
-        str=" NELM= $2      # max e-steps "
+        str=" NELM= $value1      # max e-steps "
         sub_change  INCAR  "NELM"  "$str"
         ;;
 
 
     -encut)
-        str=" ENCUT= $2      # plane wave cutoff "
+        str=" ENCUT= $value1      # plane wave cutoff "
         sub_change  INCAR  "ENCUT"  "$str"
         ;;
 
 
     -sigma)
-        str=" SIGMA= $2      # width of smearing "
+        str=" SIGMA= $value1      # width of smearing "
         sub_change  INCAR  "SIGMA"  "$str"
         ;;
 
 
     -lorbit)
-        str=" LORBIT= $2      # 10=LDOS  11=PDOS "
+        str=" LORBIT= $value1      # 10=LDOS  11=PDOS "
         sub_change  INCAR  "LORBIT"  "$str"
         ;;
 
 
     -ibrion)
-        str=" IBRION= $2      # -1=no update  2=CG "
+        str=" IBRION= $value1      # -1=no update  2=CG "
         sub_change  INCAR  "IBRION"  "$str"
         ;;
 
 
     -nedos)
-        str=" NEDOS= $2      # 301=default, 3000=dos, bs"
+        str=" NEDOS= $value1      # 301=default, 3000=dos, bs"
         sub_change  INCAR  "NEDOS"  "$str"
         ;;
 
 
     -icharg)
-        str=" ICHARG= $2      # 1=file; 11=dos, bs"
+        str=" ICHARG= $value1      # 1=file; 11=dos, bs"
         sub_change  INCAR  "ICHARG"  "$str"
         ;;
     
     -lmaxmix)
-        str=" LMAXMIX= $2      # mix which l-quantum number"
+        str=" LMAXMIX= $value1      # mix which l-quantum number"
         sub_change  INCAR  "LMAXMIX"  "$str"
         ;;
 
 
     -nbands)
-        str=" NBANDS= $2      # max: 0.5*NELEC+2*NIONS"
+        str=" NBANDS= $value1      # max: 0.5*NELEC+2*NIONS"
         sub_change  INCAR  "NBANDS"  "$str"
         ;;
 
     -lwave)
-        str=" LWAVE= $2      # write WAVECAR"
+        str=" LWAVE= $value1      # write WAVECAR"
         sub_change  INCAR  "LWAVE"  "$str"
         ;;
 
     -lcharg)
-        str=" LCHARG= $2      # write CHGCAR"
+        str=" LCHARG= $value1      # write CHGCAR"
         sub_change  INCAR  "LCHARG"  "$str"
         ;;
 
     -lelf)
-        str=" LELF= $2      # write electronic localiz. function (ELF), KPAR must be off"
+        str=" LELF= $value1      # write electronic localiz. function (ELF), KPAR must be off"
         sub_change  INCAR  "LELF"  "$str"
         ;;
 
     -potim)
-        str=" POTIM= $2      # defeault 0.5. "
+        str=" POTIM= $value1      # defeault 0.5. "
         sub_change  INCAR  "POTIM"  "$str"
         ;;
 
-    *)  echo "==>  Option $1 not recognized. Abort!" 
+    -ncore)
+        str=" NCORE= $value1      # parallelization over cores, 4"
+        sub_change  INCAR  "NCORE"  "$str"
+        ;;
+
+    -npar)
+        str=" NPAR= $value1      # parallelization over nodes, 8"
+        sub_change  INCAR  "NPAR"  "$str"
+        ;;
+
+    -kpar)
+        str=" KPAR= $value1      # parallelization over k-points, 4"
+        sub_change  INCAR  "KPAR"  "$str"
+        ;;
+
+    -nsim)
+        str=" NSIM= $value1      # parallelization over bands, 4"
+        sub_change  INCAR  "NSIM"  "$str"
+        ;;
+
+    *)  echo "==>  Option $1 not recognized. Abort!"
         exit
-        ;;   
+        ;;
 esac
-
-
-
-
