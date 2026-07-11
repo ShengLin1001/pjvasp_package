@@ -1,0 +1,52 @@
+#!/public3/home/scg6928/mysoft/env/pyenv/dft/bin/python
+# J. Pei, 2026-07-10
+# pei_vasp_run_hoec_energy
+#  >>> Higher-order elastic constants (2nd + 3rd + 4th order) by the energy-strain
+#      method of Wang & Li, Phys. Rev. B 79, 224102 (2009), generalized to cubic (FCC)
+#      and hexagonal (HCP) symmetry.
+#
+#  Run it at the level of `y_full_relax`, exactly like pei_vasp_run_cij_energy. It is
+#  the higher-order sibling of that workflow: same entry point, same y_dir/<strain>
+#  layout. The deformation is tensorial (needs a matrix square root) and there are 11
+#  cubic / 19 hexagonal modes, so it is Python rather than bash; the real work lives in
+#  mymetal.build.workflow.hoec.
+#
+#  It ONLY prepares input directories -- no Slurm script, no sbatch. Submit
+#  y_hoec_energy/*/y_dir/* with your usual flow, then post-process with
+#  pei_vasp_plot_hoec_energy.py.
+#
+#  >>> Example usage:
+#      pei_vasp_run_hoec_energy                        # auto-detect symmetry
+#      pei_vasp_run_hoec_energy --symmetry hex
+#      pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025
+#
+#  Prerequisite: y_full_relax must be a CONVERGED conventional cell (dense k-points,
+#  high ENCUT, tight EDIFF ~1e-8). Fourth-order constants are very sensitive to these
+#  (Wang-Li Fig. 1, 2, 6); this script reuses y_full_relax's KPOINTS/ENCUT unchanged.
+
+import argparse
+from pathlib import Path
+
+from mymetal.build.workflow.hoec import generate_hoec_dirs
+
+parser = argparse.ArgumentParser(
+    description="Generate higher-order elastic-constant VASP input directories from y_full_relax.")
+parser.add_argument("--symmetry", default="auto", choices=["auto", "cubic", "hex"],
+                    help="Crystal symmetry; 'auto' detects it from the reference cell.")
+parser.add_argument("--emax", type=float, default=0.12, help="Max |xi| (default 0.12).")
+parser.add_argument("--de", type=float, default=0.01, help="xi step (default 0.01).")
+parser.add_argument("--srcdir", default="y_full_relax", help="Relaxed reference directory.")
+parser.add_argument("--outdir", default="y_hoec_energy", help="Output directory.")
+args = parser.parse_args()
+
+print("Symmetry   :", args.symmetry)
+print("Max |xi|   :", args.emax)
+print("xi step    :", args.de)
+print("Source dir :", args.srcdir)
+print("Output dir :", args.outdir)
+
+path_root = Path.cwd().resolve()
+print("🟢 ===== pei_vasp_run_hoec_energy in %s" % path_root)
+generate_hoec_dirs(path_root=path_root, symmetry=args.symmetry,
+                   emax=args.emax, de=args.de,
+                   srcdir=args.srcdir, outdir=args.outdir)

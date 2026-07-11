@@ -13,6 +13,15 @@ described here but not imported during the online documentation build.
 
 Important entry points include ``create_fcc_111`` and ``create_hcp_basal``.
 
+Workflow generators
+-------------------
+
+.. automodule:: mymetal.build.workflow.hoec
+   :members:
+
+Principal entry point: ``mymetal.build.workflow.hoec.generate_hoec_dirs``, driven from
+the shell by ``vasp_utils/vasp_workflow_bulk/pei_vasp_run_hoec_energy``.
+
 Film construction
 -----------------
 

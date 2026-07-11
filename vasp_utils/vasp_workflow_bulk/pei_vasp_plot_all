@@ -78,7 +78,16 @@ case "$1" in
     -stretch)
         workdir=y_stretch
         mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_stretch.py
-        sub_plot_all  $workdir  $mycmd 
+        sub_plot_all  $workdir  $mycmd
+        ;;
+
+
+    # higher-order elastic constants; the script itself runs pei_vasp_univ_post
+    # over the whole tree, so no separate post step is needed here
+    -hoec_energy)
+        workdir=y_hoec_energy
+        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_hoec_energy.py
+        sub_plot_all  $workdir  $mycmd
         ;;
 
     -E_in_1_2_bulk)

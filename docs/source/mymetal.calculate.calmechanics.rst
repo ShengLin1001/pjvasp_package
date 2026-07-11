@@ -12,6 +12,14 @@ mymetal.calculate.calmechanics.deformation module
    :undoc-members:
    :show-inheritance:
 
+mymetal.calculate.calmechanics.hoec module
+-------------------------------------------
+
+.. automodule:: mymetal.calculate.calmechanics.hoec
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 mymetal.calculate.calmechanics.strain module
 --------------------------------------------
 

@@ -25,15 +25,15 @@ main(){
     dc=`find ./ -type d -name $workdir  -print | wc -l`  
     echo "==> Number of $workdir: $dc "
     
-    if [ $dc -gt 10 ]; then
-        echo "==> Too many ($dc) dir found. Continue? [y or n] "
-        read icont
+    # if [ $dc -gt 10 ]; then
+    #     echo "==> Too many ($dc) dir found. Continue? [y or n] "
+    #     read icont
       
-        if [ "$icont" == "n" ]; then
-        echo "==> Abort!"
-        exit
-        fi
-    fi
+    #     if [ "$icont" == "n" ]; then
+    #     echo "==> Abort!"
+    #     exit
+    #     fi
+    # fi
     
     mylist=`find ./ -type d -name $workdir`
     for dirn in $mylist; do

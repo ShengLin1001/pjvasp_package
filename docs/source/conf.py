@@ -43,6 +43,7 @@ exclude_patterns = [
 autodoc_mock_imports = [
     'hetbuilder',
     'monty',
+    'myvasp',
     'ovito',
     'palettable',
     'prettytable',

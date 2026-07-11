@@ -4,6 +4,14 @@ mymetal.post package
 Submodules
 ----------
 
+mymetal.post.hoec_energy module
+-------------------------------
+
+.. automodule:: mymetal.post.hoec_energy
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 mymetal.post.newmain module
 ---------------------------
 
