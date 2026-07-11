@@ -1,82 +1,423 @@
-#!/bin/bash
+#!/usr/bin/env python3
+"""Extract VASP structure information for each subdirectory in ``y_dir``.
 
-# ====================
-# Check if work directory exists
-# ====================
-workdir="./y_dir"
-output_file="p_post_struct_infos.txt"
+Functions:
+    get_args: Parse command-line arguments.
+    get_structure_info: Read lattice, thickness, atom count, and CNA counts.
+    get_energy: Read the final sigma->0 energy from OUTCAR.
+    write_table: Write the fixed-width summary table.
+    main: Coordinate checks, extraction, and summary output.
+"""
 
-if [ ! -d "$workdir" ]; then
-    echo "==========================================================="
-    echo "Error: Work directory $workdir does not exist!"
-    echo "==========================================================="
-    exit 1
-fi
+from __future__ import annotations
 
-rm $output_file
-# Prepare output file
-col_width=20
-printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
-"jobn" "a1(Å)" "a2(Å)" "a3(Å)" "c(Å)" "c3(Å)" "energy(eV)" "atoms_num" "FCC" "HCP" "BCC" "ICO" "OTHER"> $output_file
+import argparse
+import re
+from pathlib import Path
+from typing import Any
 
-echo "==> Extracting a, c, energy from VASP outputs (OUTCAR, CONTCAR)"
-echo "    strict: a1 << np.linalg.norm(cell[0]), c << max(positions)-min(positions), c3 << cell(2,2)"
-# ====================
-# Loop through all subdirectories in workdir
-# ====================
-find "$workdir" -mindepth 1 -maxdepth 1 -type d | awk -F '/' '{print $NF}' | sort -n | while read -r dirname; do
-    subdir="$workdir/$dirname"
-
-    if [ -d "$subdir" ]; then
-        echo "==========================================================="
-        echo "Processing directory: $subdir"
-
-        cd "$subdir" || continue  # Enter the subdirectory
-
-        energy=$(grep '  without' OUTCAR | tail -n 1 | awk '{print $7}')
-        read a1 a2 a3 c num c3 fcc hcp bcc ico other <<< $(python3 -c "
+import numpy as np
 from ase.io.vasp import read_vasp
 from mymetal.build.film.extrfilm import my_extr_thick
-import numpy as np
 from ovito.io import import_file
 from ovito.modifiers import CommonNeighborAnalysisModifier
 
-filepath = 'CONTCAR'
 
-# Read in ASE
-atoms = read_vasp(filepath)
-cell = np.array(atoms.get_cell().copy())
-a1 = np.linalg.norm(cell[0])
-a2 = np.linalg.norm(cell[1])
-a3 = np.linalg.norm(cell[2])
+COL_WIDTH = 20
+NA_VALUE = "NA"
+BASE_HEADER = [
+    "jobn",
+    "a1(Å)",
+    "a2(Å)",
+    "a3(Å)",
+    "c(Å)",
+    "c3(Å)",
+    "energy(eV)",
+    "atoms_num",
+    "FCC",
+    "HCP",
+    "BCC",
+    "ICO",
+    "OTHER",
+]
+COMPARE_HEADER = [
+    "POSCAR_atoms",
+    "POSCAR_FCC",
+    "POSCAR_HCP",
+    "same_atoms",
+    "same_FCC",
+    "same_HCP",
+    "same_FCC_HCP",
+]
 
-# Read in OVITO for CNA analysis
-pipeline = import_file(filepath)
-cna_modifier = CommonNeighborAnalysisModifier(mode=CommonNeighborAnalysisModifier.Mode.AdaptiveCutoff)
-pipeline.modifiers.append(cna_modifier)
-results = pipeline.compute()
 
-fcc_count = results.attributes['CommonNeighborAnalysis.counts.FCC']
-hcp_count = results.attributes['CommonNeighborAnalysis.counts.HCP']
-bcc_count = results.attributes['CommonNeighborAnalysis.counts.BCC']
-ico_count = results.attributes['CommonNeighborAnalysis.counts.ICO']
-other_count = results.attributes['CommonNeighborAnalysis.counts.OTHER']
+def fail(str_msg: str) -> None:
+    """Exit on a structural precondition error."""
+    print("❌ ERROR: " + str_msg)
+    raise SystemExit(1)
 
-num = len(atoms)
-thick = my_extr_thick(atoms)
-print(a1, a2, a3, thick, num, atoms.get_cell()[2,2], fcc_count, hcp_count, bcc_count, ico_count, other_count)
-        ")
 
-        printf "%-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s %-${col_width}s\n" \
-            "$dirname" "$a1" "$a2" "$a3" "$c" "$c3" "$energy" "$num" "$fcc" "$hcp" "$bcc" "$ico" "$other" >> "../../$output_file"
+def warn(str_msg: str) -> None:
+    """Print a recoverable batch warning."""
+    print("⚠️ " + str_msg)
 
-        # Return to the parent directory
-        cd ../..
-    else
-        echo "$subdir is not a directory. Skipping..."
-    fi    
-done
 
-echo "==========================================================="
-echo "The slab's information was completely extracted. Results saved in $output_file"
-echo "==========================================================="
+def get_args() -> argparse.Namespace:
+    """Parse command-line arguments.
+
+    Returns:
+        Parsed argparse namespace.
+    """
+    parser = argparse.ArgumentParser(
+        description=(
+            "Extract a/c/energy/atom-count/CNA information from VASP "
+            "calculations under y_dir."
+        )
+    )
+    parser.add_argument(
+        "--workdir",
+        default="./y_dir",
+        help="Directory containing calculation subdirectories. Default: ./y_dir",
+    )
+    parser.add_argument(
+        "--output",
+        default="p_post_struct_infos.txt",
+        help="Output table path. Default: p_post_struct_infos.txt",
+    )
+    parser.add_argument(
+        "--structure",
+        default="CONTCAR",
+        help="VASP structure file to summarize. Default: CONTCAR",
+    )
+    parser.add_argument(
+        "--compare-poscar",
+        action="store_true",
+        help="Also compare CONTCAR atom/FCC/HCP counts with POSCAR.",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Return exit code 1 when any row fails or any POSCAR comparison mismatches.",
+    )
+    return parser.parse_args()
+
+
+def get_path_checked(path_raw: str, str_label: str) -> Path:
+    """Resolve and validate an existing directory path.
+
+    Args:
+        path_raw: Raw path string from the command line.
+        str_label: Human-readable label for diagnostics.
+
+    Returns:
+        Resolved directory path.
+    """
+    path_dir = Path(path_raw).expanduser().resolve()
+    if not path_dir.is_dir():
+        fail(str_label + " does not exist or is not a directory: " + str(path_dir))
+    return path_dir
+
+
+def get_strain_sort_key(path_subdir: Path) -> tuple[float, int, str]:
+    """Sort strain folders as 0, -0.01, +0.01, -0.02, +0.02, ...
+
+    Args:
+        path_subdir: Calculation subdirectory.
+
+    Returns:
+        Sort key.
+    """
+    match = re.search(r"([+-]\d+(?:\.\d+)?)", path_subdir.name)
+    if match is None:
+        return (float("inf"), 0, path_subdir.name)
+
+    float_value = float(match.group(1))
+    int_sign_order = 0 if float_value <= 0.0 else 1
+    return (abs(float_value), int_sign_order, path_subdir.name)
+
+
+def get_lsubdir(path_workdir: Path) -> list[Path]:
+    """Get first-level calculation directories under the work directory.
+
+    Args:
+        path_workdir: Directory containing calculation subdirectories.
+
+    Returns:
+        Sorted calculation directory list.
+    """
+    lsubdir = [path_item for path_item in path_workdir.iterdir() if path_item.is_dir()]
+    return sorted(lsubdir, key=get_strain_sort_key)
+
+
+def get_energy(path_outcar: Path) -> str:
+    """Read the final VASP sigma->0 energy using the legacy grep rule.
+
+    Args:
+        path_outcar: OUTCAR path.
+
+    Returns:
+        Energy string, or NA when unavailable.
+    """
+    if not path_outcar.is_file() or path_outcar.stat().st_size == 0:
+        return NA_VALUE
+
+    str_energy = NA_VALUE
+    with path_outcar.open("r", encoding="utf-8", errors="ignore") as file_in:
+        for str_line in file_in:
+            if "  without" not in str_line:
+                continue
+            lfield = str_line.split()
+            if len(lfield) >= 7:
+                str_energy = lfield[6]
+    return str_energy
+
+
+def get_cna_counts(path_structure: Path) -> dict[str, int]:
+    """Compute CNA counts from a VASP structure with OVITO.
+
+    Args:
+        path_structure: POSCAR/CONTCAR-like file path.
+
+    Returns:
+        CNA count dictionary.
+    """
+    pipeline = import_file(str(path_structure))
+    cna_modifier = CommonNeighborAnalysisModifier(
+        mode=CommonNeighborAnalysisModifier.Mode.AdaptiveCutoff
+    )
+    pipeline.modifiers.append(cna_modifier)
+    results = pipeline.compute()
+    dict_attr = results.attributes
+    return {
+        "FCC": int(dict_attr.get("CommonNeighborAnalysis.counts.FCC", 0)),
+        "HCP": int(dict_attr.get("CommonNeighborAnalysis.counts.HCP", 0)),
+        "BCC": int(dict_attr.get("CommonNeighborAnalysis.counts.BCC", 0)),
+        "ICO": int(dict_attr.get("CommonNeighborAnalysis.counts.ICO", 0)),
+        "OTHER": int(dict_attr.get("CommonNeighborAnalysis.counts.OTHER", 0)),
+    }
+
+
+def get_structure_info(path_structure: Path) -> dict[str, Any]:
+    """Read lattice lengths, thickness, atom count, and CNA counts.
+
+    Args:
+        path_structure: POSCAR/CONTCAR-like file path.
+
+    Returns:
+        Dictionary with values for output columns.
+    """
+    if not path_structure.is_file() or path_structure.stat().st_size == 0:
+        raise FileNotFoundError(str(path_structure))
+
+    atoms = read_vasp(str(path_structure))
+    cell = np.array(atoms.get_cell().copy())
+    dict_cna = get_cna_counts(path_structure)
+    return {
+        "a1": np.linalg.norm(cell[0]),
+        "a2": np.linalg.norm(cell[1]),
+        "a3": np.linalg.norm(cell[2]),
+        "c": my_extr_thick(atoms),
+        "c3": atoms.get_cell()[2, 2],
+        "atoms_num": len(atoms),
+        "FCC": dict_cna["FCC"],
+        "HCP": dict_cna["HCP"],
+        "BCC": dict_cna["BCC"],
+        "ICO": dict_cna["ICO"],
+        "OTHER": dict_cna["OTHER"],
+    }
+
+
+def get_row_value(dict_info: dict[str, Any] | None, str_key: str) -> str:
+    """Convert one structure field into a printable table value.
+
+    Args:
+        dict_info: Structure information dictionary, or None on failure.
+        str_key: Field key.
+
+    Returns:
+        Printable value.
+    """
+    if dict_info is None:
+        return NA_VALUE
+    return str(dict_info.get(str_key, NA_VALUE))
+
+
+def get_same_flag(dict_left: dict[str, Any] | None, dict_right: dict[str, Any] | None, str_key: str) -> str:
+    """Compare one count between two structures.
+
+    Args:
+        dict_left: First structure information dictionary.
+        dict_right: Second structure information dictionary.
+        str_key: Count key.
+
+    Returns:
+        YES, NO, or NA.
+    """
+    if dict_left is None or dict_right is None:
+        return NA_VALUE
+    return "YES" if dict_left.get(str_key) == dict_right.get(str_key) else "NO"
+
+
+def get_compare_values(
+    dict_contcar: dict[str, Any] | None,
+    dict_poscar: dict[str, Any] | None,
+) -> list[str]:
+    """Build POSCAR comparison columns for one row.
+
+    Args:
+        dict_contcar: CONTCAR information dictionary.
+        dict_poscar: POSCAR information dictionary.
+
+    Returns:
+        Comparison column values.
+    """
+    str_same_atoms = get_same_flag(dict_contcar, dict_poscar, "atoms_num")
+    str_same_fcc = get_same_flag(dict_contcar, dict_poscar, "FCC")
+    str_same_hcp = get_same_flag(dict_contcar, dict_poscar, "HCP")
+    if NA_VALUE in [str_same_fcc, str_same_hcp]:
+        str_same_fcc_hcp = NA_VALUE
+    else:
+        str_same_fcc_hcp = "YES" if str_same_fcc == "YES" and str_same_hcp == "YES" else "NO"
+
+    return [
+        get_row_value(dict_poscar, "atoms_num"),
+        get_row_value(dict_poscar, "FCC"),
+        get_row_value(dict_poscar, "HCP"),
+        str_same_atoms,
+        str_same_fcc,
+        str_same_hcp,
+        str_same_fcc_hcp,
+    ]
+
+
+def get_output_line(lvalue: list[str]) -> str:
+    """Format one fixed-width output line.
+
+    Args:
+        lvalue: Column values.
+
+    Returns:
+        Formatted line.
+    """
+    return "".join(str(value).ljust(COL_WIDTH) for value in lvalue).rstrip() + "\n"
+
+
+def write_table(path_output: Path, lrow: list[list[str]], bool_compare_poscar: bool) -> None:
+    """Write output rows to the summary table.
+
+    Args:
+        path_output: Output table path.
+        lrow: Table rows.
+        bool_compare_poscar: Whether POSCAR comparison columns are included.
+    """
+    lheader = BASE_HEADER + (COMPARE_HEADER if bool_compare_poscar else [])
+    with path_output.open("w", encoding="utf-8") as file_out:
+        file_out.write(get_output_line(lheader))
+        for lvalue in lrow:
+            file_out.write(get_output_line(lvalue))
+
+
+def main() -> int:
+    """Run extraction and return a process exit code."""
+    ### check
+    args = get_args()
+    path_workdir = get_path_checked(args.workdir, "workdir")
+    path_output = Path(args.output).expanduser()
+    if not path_output.is_absolute():
+        path_output = (Path.cwd() / path_output).resolve()
+    else:
+        path_output = path_output.resolve()
+    path_output.parent.mkdir(parents=True, exist_ok=True)
+
+    lsubdir = get_lsubdir(path_workdir)
+    if not lsubdir:
+        fail("No calculation subdirectories found in: " + str(path_workdir))
+    ### check to here
+
+    ### prepare
+    print("================ 📁 Directory")
+    print("📍 workdir: " + str(path_workdir))
+    print("📍 output : " + str(path_output))
+    print("📍 rows   : " + str(len(lsubdir)))
+    print("▶️ Extracting a, c, energy from VASP outputs (OUTCAR, " + args.structure + ")")
+    print("▶️ strict: a1 = norm(cell[0]), c = max(z)-min(z), c3 = cell[2,2]")
+    if args.compare_poscar:
+        print("▶️ compare: CONTCAR atoms/FCC/HCP against POSCAR")
+
+    lrow: list[list[str]] = []
+    lfailed: list[str] = []
+    lmismatch: list[str] = []
+    ### prepare to here
+
+    ### main
+    for path_subdir in lsubdir:
+        print("================ ▶️ Processing " + path_subdir.name)
+        path_structure = path_subdir / args.structure
+        path_outcar = path_subdir / "OUTCAR"
+        str_energy = get_energy(path_outcar)
+
+        dict_info: dict[str, Any] | None = None
+        try:
+            dict_info = get_structure_info(path_structure)
+        except Exception as exc:
+            str_msg = path_subdir.name + " " + args.structure + " failed: " + repr(exc)
+            warn(str_msg)
+            lfailed.append(str_msg)
+
+        lvalue = [
+            path_subdir.name,
+            get_row_value(dict_info, "a1"),
+            get_row_value(dict_info, "a2"),
+            get_row_value(dict_info, "a3"),
+            get_row_value(dict_info, "c"),
+            get_row_value(dict_info, "c3"),
+            str_energy,
+            get_row_value(dict_info, "atoms_num"),
+            get_row_value(dict_info, "FCC"),
+            get_row_value(dict_info, "HCP"),
+            get_row_value(dict_info, "BCC"),
+            get_row_value(dict_info, "ICO"),
+            get_row_value(dict_info, "OTHER"),
+        ]
+
+        if args.compare_poscar:
+            dict_poscar: dict[str, Any] | None = None
+            try:
+                dict_poscar = get_structure_info(path_subdir / "POSCAR")
+            except Exception as exc:
+                str_msg = path_subdir.name + " POSCAR failed: " + repr(exc)
+                warn(str_msg)
+                lfailed.append(str_msg)
+
+            lcompare = get_compare_values(dict_info, dict_poscar)
+            lvalue.extend(lcompare)
+            if lcompare[-1] == "NO" or lcompare[3] == "NO":
+                lmismatch.append(path_subdir.name)
+                warn(path_subdir.name + " POSCAR/CONTCAR atom/FCC/HCP mismatch")
+
+        lrow.append(lvalue)
+
+    write_table(path_output, lrow, args.compare_poscar)
+
+    print("================ 📊 Summary")
+    print("✅ rows written: " + str(len(lrow)))
+    print("⚠️ failed rows : " + str(len(lfailed)))
+    print("⚠️ mismatches  : " + str(len(lmismatch)))
+    if lfailed:
+        print("⚠️ failed row list:")
+        for str_item in lfailed:
+            print("  - " + str_item)
+    if lmismatch:
+        print("⚠️ mismatch row list:")
+        for str_item in lmismatch:
+            print("  - " + str_item)
+    print("🎉 Results saved in " + str(path_output))
+    ### main to here
+
+    if args.strict and (lfailed or lmismatch):
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
