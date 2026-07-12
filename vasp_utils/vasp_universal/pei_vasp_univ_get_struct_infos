@@ -6,6 +6,7 @@ Functions:
     get_structure_info: Read lattice, thickness, atom count, and CNA counts.
     get_energy: Read the final sigma->0 energy from OUTCAR.
     write_table: Write the fixed-width summary table.
+    write_table2: Write the POSCAR/CONTCAR per-phase comparison table.
     main: Coordinate checks, extraction, and summary output.
 """
 
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -49,6 +51,27 @@ COMPARE_HEADER = [
     "same_HCP",
     "same_FCC_HCP",
 ]
+FLAG_YES = "✅"
+FLAG_NO = "❌"
+DICT_PHASE_LABEL = {
+    "atoms_num": "atoms",
+    "FCC": "FCC",
+    "HCP": "HCP",
+    "BCC": "BCC",
+    "ICO": "ICO",
+    "OTHER": "OTHER",
+}
+COMPARE2_HEADER = (
+    ["jobn"]
+    + [
+        str_prefix + str_label
+        for str_label in DICT_PHASE_LABEL.values()
+        for str_prefix in ("POSCAR_", "CONTCAR_", "same_")
+    ]
+    + ["same_all"]
+)
+CROSS_JOB_LABEL = "cross_jobs"
+SKIP_VALUE = "-"
 
 
 def fail(str_msg: str) -> None:
@@ -62,6 +85,31 @@ def warn(str_msg: str) -> None:
     print("⚠️ " + str_msg)
 
 
+def get_help_epilog() -> str:
+    """Build the --help epilog with outputs and common usage examples.
+
+    Returns:
+        Epilog text.
+    """
+    return "\n".join(
+        [
+            "outputs:",
+            "  p_post_struct_infos.txt   per-job a/c/energy/CNA summary",
+            "                            (--compare-poscar appends POSCAR columns)",
+            "  p_post_struct_infos2.txt  per-phase POSCAR/CONTCAR counts with same",
+            "                            checks (✅/❌); the " + CROSS_JOB_LABEL + " footer row",
+            "                            checks each count column across all jobs",
+            "",
+            "common usage:",
+            "  pei_vasp_univ_get_struct_infos",
+            "  pei_vasp_univ_get_struct_infos --workdir ./y_dir",
+            "  pei_vasp_univ_get_struct_infos --compare-poscar",
+            "  pei_vasp_univ_get_struct_infos --compare-poscar --strict",
+            "  pei_vasp_univ_get_struct_infos --structure POSCAR --output p_post_struct_infos_poscar.txt",
+        ]
+    )
+
+
 def get_args() -> argparse.Namespace:
     """Parse command-line arguments.
 
@@ -72,7 +120,9 @@ def get_args() -> argparse.Namespace:
         description=(
             "Extract a/c/energy/atom-count/CNA information from VASP "
             "calculations under y_dir."
-        )
+        ),
+        epilog=get_help_epilog(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--workdir",
@@ -85,6 +135,14 @@ def get_args() -> argparse.Namespace:
         help="Output table path. Default: p_post_struct_infos.txt",
     )
     parser.add_argument(
+        "--output2",
+        default="p_post_struct_infos2.txt",
+        help=(
+            "POSCAR/CONTCAR per-phase comparison table path. "
+            "Default: p_post_struct_infos2.txt"
+        ),
+    )
+    parser.add_argument(
         "--structure",
         default="CONTCAR",
         help="VASP structure file to summarize. Default: CONTCAR",
@@ -92,12 +150,15 @@ def get_args() -> argparse.Namespace:
     parser.add_argument(
         "--compare-poscar",
         action="store_true",
-        help="Also compare CONTCAR atom/FCC/HCP counts with POSCAR.",
+        help="Also append POSCAR atom/FCC/HCP comparison columns to the main table.",
     )
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Return exit code 1 when any row fails or any POSCAR comparison mismatches.",
+        help=(
+            "Return exit code 1 when any row fails, any POSCAR comparison "
+            "mismatches, or any count column differs across jobs."
+        ),
     )
     return parser.parse_args()
 
@@ -116,6 +177,20 @@ def get_path_checked(path_raw: str, str_label: str) -> Path:
     if not path_dir.is_dir():
         fail(str_label + " does not exist or is not a directory: " + str(path_dir))
     return path_dir
+
+
+def get_path_output(path_raw: str) -> Path:
+    """Resolve one output path and ensure its parent directory exists.
+
+    Args:
+        path_raw: Raw output path string from the command line.
+
+    Returns:
+        Resolved output path.
+    """
+    path_output = Path(path_raw).expanduser().resolve()
+    path_output.parent.mkdir(parents=True, exist_ok=True)
+    return path_output
 
 
 def get_strain_sort_key(path_subdir: Path) -> tuple[float, int, str]:
@@ -258,6 +333,22 @@ def get_same_flag(dict_left: dict[str, Any] | None, dict_right: dict[str, Any] |
     return "YES" if dict_left.get(str_key) == dict_right.get(str_key) else "NO"
 
 
+def get_emoji_flag(str_flag: str) -> str:
+    """Convert a YES/NO/NA flag into the emoji table tag.
+
+    Args:
+        str_flag: YES, NO, or NA.
+
+    Returns:
+        FLAG_YES for YES, FLAG_NO for NO, NA otherwise.
+    """
+    if str_flag == "YES":
+        return FLAG_YES
+    if str_flag == "NO":
+        return FLAG_NO
+    return NA_VALUE
+
+
 def get_compare_values(
     dict_contcar: dict[str, Any] | None,
     dict_poscar: dict[str, Any] | None,
@@ -290,6 +381,105 @@ def get_compare_values(
     ]
 
 
+def get_compare2_row(
+    str_jobn: str,
+    dict_poscar: dict[str, Any] | None,
+    dict_contcar: dict[str, Any] | None,
+) -> tuple[list[str], str]:
+    """Build one POSCAR/CONTCAR per-phase comparison row.
+
+    Args:
+        str_jobn: Calculation directory name.
+        dict_poscar: POSCAR information dictionary.
+        dict_contcar: CONTCAR information dictionary.
+
+    Returns:
+        Row values and the overall YES/NO/NA same flag.
+    """
+    lvalue = [str_jobn]
+    lflag: list[str] = []
+    for str_key in DICT_PHASE_LABEL:
+        str_flag = get_same_flag(dict_contcar, dict_poscar, str_key)
+        lflag.append(str_flag)
+        lvalue.append(get_row_value(dict_poscar, str_key))
+        lvalue.append(get_row_value(dict_contcar, str_key))
+        lvalue.append(get_emoji_flag(str_flag))
+
+    if NA_VALUE in lflag:
+        str_same_all = NA_VALUE
+    elif all(str_item == "YES" for str_item in lflag):
+        str_same_all = "YES"
+    else:
+        str_same_all = "NO"
+    lvalue.append(get_emoji_flag(str_same_all))
+    return lvalue, str_same_all
+
+
+def get_cross_flag(lcell: list[str]) -> str:
+    """Check whether one count column is identical across all jobs.
+
+    Args:
+        lcell: Column values from every job row.
+
+    Returns:
+        YES, NO, or NA. A real difference wins over missing data, so NA is
+        returned only when the known values agree but some rows are missing.
+    """
+    lknown = [str_cell for str_cell in lcell if str_cell != NA_VALUE]
+    if len(set(lknown)) > 1:
+        return "NO"
+    if len(lknown) < len(lcell) or not lknown:
+        return NA_VALUE
+    return "YES"
+
+
+def get_cross_job_row(lrow2: list[list[str]]) -> tuple[list[str], list[str]]:
+    """Build the cross-job consistency footer row for the comparison table.
+
+    Args:
+        lrow2: Per-job comparison rows.
+
+    Returns:
+        Footer row values and the list of inconsistent column names.
+    """
+    lvalue = [CROSS_JOB_LABEL]
+    lflag: list[str] = []
+    lbad: list[str] = []
+    for int_col in range(1, len(COMPARE2_HEADER) - 1):
+        str_name = COMPARE2_HEADER[int_col]
+        if str_name.startswith("same_"):
+            lvalue.append(SKIP_VALUE)
+            continue
+        str_flag = get_cross_flag([lrow[int_col] for lrow in lrow2])
+        lflag.append(str_flag)
+        lvalue.append(get_emoji_flag(str_flag))
+        if str_flag == "NO":
+            lbad.append(str_name)
+
+    if lbad:
+        str_cross_all = "NO"
+    elif NA_VALUE in lflag:
+        str_cross_all = NA_VALUE
+    else:
+        str_cross_all = "YES"
+    lvalue.append(get_emoji_flag(str_cross_all))
+    return lvalue, lbad
+
+
+def get_display_width(str_value: str) -> int:
+    """Get the terminal display width, counting wide chars as 2.
+
+    Args:
+        str_value: Cell text.
+
+    Returns:
+        Display width.
+    """
+    return sum(
+        2 if unicodedata.east_asian_width(char) in "FW" else 1 for char in str_value
+    )
+
+
 def get_output_line(lvalue: list[str]) -> str:
     """Format one fixed-width output line.
 
@@ -299,7 +489,14 @@ def get_output_line(lvalue: list[str]) -> str:
     Returns:
         Formatted line.
     """
-    return "".join(str(value).ljust(COL_WIDTH) for value in lvalue).rstrip() + "\n"
+    # Emoji flags render 2 columns wide but count as 1 char, so plain ljust
+    # would shift every later column; pad by display width instead.
+    lcell = []
+    for value in lvalue:
+        str_value = str(value)
+        int_pad = max(COL_WIDTH - get_display_width(str_value), 0)
+        lcell.append(str_value + " " * int_pad)
+    return "".join(lcell).rstrip() + "\n"
 
 
 def write_table(path_output: Path, lrow: list[list[str]], bool_compare_poscar: bool) -> None:
@@ -317,17 +514,26 @@ def write_table(path_output: Path, lrow: list[list[str]], bool_compare_poscar: b
             file_out.write(get_output_line(lvalue))
 
 
+def write_table2(path_output2: Path, lrow2: list[list[str]]) -> None:
+    """Write POSCAR/CONTCAR per-phase comparison rows to the second table.
+
+    Args:
+        path_output2: Output table path.
+        lrow2: Table rows.
+    """
+    with path_output2.open("w", encoding="utf-8") as file_out:
+        file_out.write(get_output_line(COMPARE2_HEADER))
+        for lvalue in lrow2:
+            file_out.write(get_output_line(lvalue))
+
+
 def main() -> int:
     """Run extraction and return a process exit code."""
     ### check
     args = get_args()
     path_workdir = get_path_checked(args.workdir, "workdir")
-    path_output = Path(args.output).expanduser()
-    if not path_output.is_absolute():
-        path_output = (Path.cwd() / path_output).resolve()
-    else:
-        path_output = path_output.resolve()
-    path_output.parent.mkdir(parents=True, exist_ok=True)
+    path_output = get_path_output(args.output)
+    path_output2 = get_path_output(args.output2)
 
     lsubdir = get_lsubdir(path_workdir)
     if not lsubdir:
@@ -338,13 +544,17 @@ def main() -> int:
     print("================ 📁 Directory")
     print("📍 workdir: " + str(path_workdir))
     print("📍 output : " + str(path_output))
+    print("📍 output2: " + str(path_output2))
     print("📍 rows   : " + str(len(lsubdir)))
     print("▶️ Extracting a, c, energy from VASP outputs (OUTCAR, " + args.structure + ")")
     print("▶️ strict: a1 = norm(cell[0]), c = max(z)-min(z), c3 = cell[2,2]")
+    print("▶️ compare2: POSCAR vs " + args.structure + " counts for all phases (✅/❌)")
+    print("▶️ cross-job: footer row " + CROSS_JOB_LABEL + " checks count columns across jobs")
     if args.compare_poscar:
-        print("▶️ compare: CONTCAR atoms/FCC/HCP against POSCAR")
+        print("▶️ compare: " + args.structure + " atoms/FCC/HCP against POSCAR")
 
     lrow: list[list[str]] = []
+    lrow2: list[list[str]] = []
     lfailed: list[str] = []
     lmismatch: list[str] = []
     ### prepare to here
@@ -380,8 +590,12 @@ def main() -> int:
             get_row_value(dict_info, "OTHER"),
         ]
 
-        if args.compare_poscar:
-            dict_poscar: dict[str, Any] | None = None
+        # The per-phase comparison table always needs POSCAR counts; reuse
+        # the CONTCAR-side info when the summarized structure is POSCAR itself.
+        dict_poscar: dict[str, Any] | None = None
+        if args.structure == "POSCAR":
+            dict_poscar = dict_info
+        else:
             try:
                 dict_poscar = get_structure_info(path_subdir / "POSCAR")
             except Exception as exc:
@@ -389,20 +603,28 @@ def main() -> int:
                 warn(str_msg)
                 lfailed.append(str_msg)
 
-            lcompare = get_compare_values(dict_info, dict_poscar)
-            lvalue.extend(lcompare)
-            if lcompare[-1] == "NO" or lcompare[3] == "NO":
-                lmismatch.append(path_subdir.name)
-                warn(path_subdir.name + " POSCAR/CONTCAR atom/FCC/HCP mismatch")
+        if args.compare_poscar:
+            lvalue.extend(get_compare_values(dict_info, dict_poscar))
 
         lrow.append(lvalue)
 
+        lvalue2, str_same_all = get_compare2_row(path_subdir.name, dict_poscar, dict_info)
+        lrow2.append(lvalue2)
+        if str_same_all == "NO":
+            lmismatch.append(path_subdir.name)
+            warn(path_subdir.name + " POSCAR/" + args.structure + " phase counts mismatch")
+
+    lvalue_cross, lcross = get_cross_job_row(lrow2)
+    lrow2.append(lvalue_cross)
+
     write_table(path_output, lrow, args.compare_poscar)
+    write_table2(path_output2, lrow2)
 
     print("================ 📊 Summary")
     print("✅ rows written: " + str(len(lrow)))
     print("⚠️ failed rows : " + str(len(lfailed)))
     print("⚠️ mismatches  : " + str(len(lmismatch)))
+    print("⚠️ cross-job   : " + str(len(lcross)))
     if lfailed:
         print("⚠️ failed row list:")
         for str_item in lfailed:
@@ -411,10 +633,15 @@ def main() -> int:
         print("⚠️ mismatch row list:")
         for str_item in lmismatch:
             print("  - " + str_item)
+    if lcross:
+        print("⚠️ cross-job inconsistent columns:")
+        for str_item in lcross:
+            print("  - " + str_item)
     print("🎉 Results saved in " + str(path_output))
+    print("🎉 Phase comparison saved in " + str(path_output2))
     ### main to here
 
-    if args.strict and (lfailed or lmismatch):
+    if args.strict and (lfailed or lmismatch or lcross):
         return 1
     return 0
 
