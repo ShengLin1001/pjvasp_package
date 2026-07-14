@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Extract VASP structure information for each subdirectory in ``y_dir``.
 
+Like ``pei_vasp_univ_post``, the script searches ``--root`` (default ``.``) for
+every ``y_dir`` and writes each table next to the ``y_dir`` it came from, so a
+multi-mode tree such as ``y_hoec_energy/*/y_dir`` is done in one go. Pass
+``--no-recursive`` to fall back to a single explicit work directory.
+
 Functions:
     get_args: Parse command-line arguments.
+    get_lworkdir: Resolve the work directories to process.
     get_structure_info: Read lattice, thickness, atom count, and CNA counts.
     get_energy: Read the final sigma->0 energy from OUTCAR.
     write_table: Write the fixed-width summary table.
     write_table2: Write the POSCAR/CONTCAR per-phase comparison table.
+    run_workdir: Extract one work directory and write its two tables.
     main: Coordinate checks, extraction, and summary output.
 """
 
@@ -99,13 +106,21 @@ def get_help_epilog() -> str:
             "  p_post_struct_infos2.txt  per-phase POSCAR/CONTCAR counts with same",
             "                            checks (✅/❌); the " + CROSS_JOB_LABEL + " footer row",
             "                            checks each count column across all jobs",
+            "  both tables are written next to each y_dir found, like the",
+            "  y_post_* files of pei_vasp_univ_post",
             "",
             "common usage:",
-            "  pei_vasp_univ_get_struct_infos",
-            "  pei_vasp_univ_get_struct_infos --workdir ./y_dir",
+            "  pei_vasp_univ_get_struct_infos                      # every y_dir under .",
             "  pei_vasp_univ_get_struct_infos --compare-poscar",
             "  pei_vasp_univ_get_struct_infos --compare-poscar --strict",
             "  pei_vasp_univ_get_struct_infos --structure POSCAR --output p_post_struct_infos_poscar.txt",
+            "",
+            "batch usage (every y_dir under a tree, e.g. y_hoec_energy/*/y_dir):",
+            "  cd y_hoec_energy && pei_vasp_univ_get_struct_infos",
+            "  pei_vasp_univ_get_struct_infos --root ./y_hoec_energy --compare-poscar",
+            "",
+            "single work directory (no search):",
+            "  pei_vasp_univ_get_struct_infos --no-recursive --workdir ./y_dir",
         ]
     )
 
@@ -125,20 +140,41 @@ def get_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
+        "--root",
+        default=".",
+        help="Root searched recursively for every --workdir. Default: .",
+    )
+    parser.add_argument(
         "--workdir",
         default="./y_dir",
-        help="Directory containing calculation subdirectories. Default: ./y_dir",
+        help=(
+            "Directory containing calculation subdirectories. Only its name is "
+            "used as the search target, unless --no-recursive treats it as the "
+            "one work directory. Default: ./y_dir"
+        ),
+    )
+    parser.add_argument(
+        "--no-recursive",
+        action="store_true",
+        help=(
+            "Do not search --root; process --workdir alone and honour the full "
+            "--output/--output2 paths."
+        ),
     )
     parser.add_argument(
         "--output",
         default="p_post_struct_infos.txt",
-        help="Output table path. Default: p_post_struct_infos.txt",
+        help=(
+            "Output table path. Only its file name is used, next to each y_dir "
+            "found. Default: p_post_struct_infos.txt"
+        ),
     )
     parser.add_argument(
         "--output2",
         default="p_post_struct_infos2.txt",
         help=(
-            "POSCAR/CONTCAR per-phase comparison table path. "
+            "POSCAR/CONTCAR per-phase comparison table path. Only its file name "
+            "is used, next to each y_dir found. "
             "Default: p_post_struct_infos2.txt"
         ),
     )
@@ -157,7 +193,8 @@ def get_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Return exit code 1 when any row fails, any POSCAR comparison "
-            "mismatches, or any count column differs across jobs."
+            "mismatches, any count column differs across jobs, or any work "
+            "directory is empty."
         ),
     )
     return parser.parse_args()
@@ -179,18 +216,48 @@ def get_path_checked(path_raw: str, str_label: str) -> Path:
     return path_dir
 
 
-def get_path_output(path_raw: str) -> Path:
+def get_path_output(path_raw: str, path_base: Path | None = None) -> Path:
     """Resolve one output path and ensure its parent directory exists.
 
     Args:
         path_raw: Raw output path string from the command line.
+        path_base: Directory that hosts the table in recursive mode; the raw
+            path then contributes only its file name.
 
     Returns:
         Resolved output path.
     """
-    path_output = Path(path_raw).expanduser().resolve()
+    if path_base is None:
+        path_output = Path(path_raw).expanduser().resolve()
+    else:
+        path_output = (path_base / Path(path_raw).name).resolve()
     path_output.parent.mkdir(parents=True, exist_ok=True)
     return path_output
+
+
+def get_lworkdir(args: argparse.Namespace) -> list[Path]:
+    """Resolve the work directories to process.
+
+    Args:
+        args: Parsed argparse namespace.
+
+    Returns:
+        Work directory list: every directory named like --workdir under the
+        --root tree, or the single --workdir when --no-recursive is given.
+    """
+    if args.no_recursive:
+        return [get_path_checked(args.workdir, "workdir")]
+
+    path_root = get_path_checked(args.root, "root")
+    str_name = Path(args.workdir).name
+    lworkdir = [path_item for path_item in path_root.rglob(str_name) if path_item.is_dir()]
+    # rglob never yields the root itself, so running inside a y_dir would
+    # otherwise find nothing.
+    if path_root.name == str_name:
+        lworkdir.append(path_root)
+    if not lworkdir:
+        fail("No directory named " + str_name + " found under: " + str(path_root))
+    return sorted(set(lworkdir))
 
 
 def get_strain_sort_key(path_subdir: Path) -> tuple[float, int, str]:
@@ -527,20 +594,30 @@ def write_table2(path_output2: Path, lrow2: list[list[str]]) -> None:
             file_out.write(get_output_line(lvalue))
 
 
-def main() -> int:
-    """Run extraction and return a process exit code."""
-    ### check
-    args = get_args()
-    path_workdir = get_path_checked(args.workdir, "workdir")
-    path_output = get_path_output(args.output)
-    path_output2 = get_path_output(args.output2)
+def run_workdir(
+    path_workdir: Path,
+    path_output: Path,
+    path_output2: Path,
+    args: argparse.Namespace,
+) -> dict[str, list[str]] | None:
+    """Extract one work directory and write its two tables.
 
+    Args:
+        path_workdir: Directory containing calculation subdirectories.
+        path_output: Summary table path.
+        path_output2: Per-phase comparison table path.
+        args: Parsed argparse namespace.
+
+    Returns:
+        Issue lists keyed by ``row``, ``failed``, ``mismatch``, and ``cross``,
+        or None when the work directory holds no calculation subdirectory.
+    """
+    ### prepare
     lsubdir = get_lsubdir(path_workdir)
     if not lsubdir:
-        fail("No calculation subdirectories found in: " + str(path_workdir))
-    ### check to here
+        warn("No calculation subdirectories found in: " + str(path_workdir))
+        return None
 
-    ### prepare
     print("================ 📁 Directory")
     print("📍 workdir: " + str(path_workdir))
     print("📍 output : " + str(path_output))
@@ -641,7 +718,94 @@ def main() -> int:
     print("🎉 Phase comparison saved in " + str(path_output2))
     ### main to here
 
-    if args.strict and (lfailed or lmismatch or lcross):
+    return {
+        "row": [lvalue[0] for lvalue in lrow],
+        "failed": lfailed,
+        "mismatch": lmismatch,
+        "cross": lcross,
+    }
+
+
+def write_total_summary(
+    lworkdir: list[Path],
+    dict_total: dict[Path, dict[str, list[str]]],
+    lskipped: list[Path],
+) -> None:
+    """Print the batch summary over every work directory.
+
+    Args:
+        lworkdir: Work directories found.
+        dict_total: Issue lists keyed by processed work directory.
+        lskipped: Work directories without calculation subdirectories.
+    """
+    int_row = sum(len(dict_item["row"]) for dict_item in dict_total.values())
+    print("================ 📊 Total summary")
+    print("📍 workdirs found : " + str(len(lworkdir)))
+    print("✅ workdirs done  : " + str(len(dict_total)))
+    print("✅ rows written   : " + str(int_row))
+    print("⚠️ workdirs empty : " + str(len(lskipped)))
+    for path_workdir, dict_item in dict_total.items():
+        lissue = []
+        for str_key in ("failed", "mismatch", "cross"):
+            if dict_item[str_key]:
+                lissue.append(str_key + "=" + str(len(dict_item[str_key])))
+        str_flag = (FLAG_NO + " " + ", ".join(lissue)) if lissue else FLAG_YES
+        print("  " + str_flag + " " + str(path_workdir))
+    for path_workdir in lskipped:
+        print("  ⚠️ empty " + str(path_workdir))
+
+
+def main() -> int:
+    """Run extraction and return a process exit code."""
+    ### check
+    args = get_args()
+    lworkdir = get_lworkdir(args)
+    ### check to here
+
+    ### prepare
+    print("================ 📁 Search")
+    if args.no_recursive:
+        print("📍 root    : - (--no-recursive)")
+    else:
+        print("📍 root    : " + str(Path(args.root).expanduser().resolve()))
+    print("📍 workdirs: " + str(len(lworkdir)) + " x " + Path(args.workdir).name)
+    ### prepare to here
+
+    ### main
+    dict_total: dict[Path, dict[str, list[str]]] = {}
+    lskipped: list[Path] = []
+    for path_workdir in lworkdir:
+        # Each table lands beside its own y_dir, matching where
+        # pei_vasp_univ_post drops its y_post_* files. --no-recursive instead
+        # honours the full --output path the caller gave.
+        path_base = None if args.no_recursive else path_workdir.parent
+        path_output = get_path_output(args.output, path_base)
+        path_output2 = get_path_output(args.output2, path_base)
+
+        dict_result = run_workdir(path_workdir, path_output, path_output2, args)
+        if dict_result is None:
+            lskipped.append(path_workdir)
+            continue
+        dict_total[path_workdir] = dict_result
+
+    if not dict_total:
+        fail(
+            "No calculation subdirectories found in any of the "
+            + str(len(lworkdir))
+            + " work directories."
+        )
+
+    # One work directory already printed its own summary above; a second,
+    # identical one would just be noise.
+    if len(lworkdir) > 1 or lskipped:
+        write_total_summary(lworkdir, dict_total, lskipped)
+    ### main to here
+
+    bool_bad = any(
+        dict_item["failed"] or dict_item["mismatch"] or dict_item["cross"]
+        for dict_item in dict_total.values()
+    )
+    if args.strict and (bool_bad or lskipped):
         return 1
     return 0
 
