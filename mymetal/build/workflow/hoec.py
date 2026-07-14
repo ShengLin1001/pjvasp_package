@@ -36,6 +36,12 @@ Change log:
     - Merged into mymetal by J. P. on 2026-07-10; the group-theory core moved to
       ``mymetal.calculate.calmechanics.hoec``, the CLI stayed in
       ``vasp_utils/vasp_workflow_bulk/pei_vasp_run_hoec_energy``.
+    - Revised by J. P. on 2026-07-14: each mode now gets its own, equally severe xi window
+      (``scale_window=True``, the default; ``--no-scale-window`` restores the single shared
+      window). The manifest carries each mode's exact xi list, scale and step.
+    - Revised by J. P. on 2026-07-14: ``relax_ions=False`` (CLI ``--static``) runs every strain
+      as a single ionic step (NSW=0, IBRION=-1). Only valid for structures with no internal
+      degrees of freedom -- see :func:`generate_hoec_dirs`.
 """
 
 import json
@@ -50,7 +56,8 @@ from ase.io import read, write
 from myvasp import vasp_func as vf
 
 from mymetal.calculate.calmechanics.hoec import (
-    MODES, check_symmetry, get_deformation_gradient, get_strain_list)
+    MODES, check_symmetry, get_deformation_gradient, get_mode_severity,
+    get_mode_strain_lists, get_strain_list)
 from mymetal.universal.print.print import fail, warn
 
 # INCAR tags forced on every deformed job. ISIF=2 fixes the box and relaxes the ions
@@ -62,6 +69,14 @@ INCAR_TAGS = {
     'lcharg': 'F',
     'algo': 'Normal',
     'nbands': 'comment',
+}
+
+# added on top of INCAR_TAGS only when relax_ions=False: one ionic step, no relaxation.
+# NOT unconditional -- it would silently freeze the internal degrees of freedom that HCP
+# (and any multi-sublattice cell) really has. See generate_hoec_dirs.
+INCAR_TAGS_STATIC = {
+    'nsw': '0',
+    'ibrion': '-1',
 }
 
 # fully fix the box for the cluster VASP build (constrained-lattice file)
@@ -76,12 +91,13 @@ FIND_AND_CHANGE = "pei_vasp_univ_find_and_change"
 # ---------------------------------------------------------------------------
 # reference preparation
 # ---------------------------------------------------------------------------
-def prepare_hoec_reference(path_full_relax: Path = None, path_tmp: Path = None) -> Path:
+def prepare_hoec_reference(path_full_relax: Path = None, path_tmp: Path = None,
+                           relax_ions: bool = True) -> Path:
     """Copy ``y_full_relax`` to a temp dir and turn it into an elastic-constant reference.
 
-    Ensures a CONTCAR exists, rewrites the INCAR tags in :data:`INCAR_TAGS`, and writes
-    a fully-constrained ``Y_CONSTR_LATT``. Mirrors the preamble of
-    ``pei_vasp_run_cij_energy``.
+    Ensures a CONTCAR exists, rewrites the INCAR tags in :data:`INCAR_TAGS` (plus
+    :data:`INCAR_TAGS_STATIC` when ``relax_ions=False``), and writes a fully-constrained
+    ``Y_CONSTR_LATT``. Mirrors the preamble of ``pei_vasp_run_cij_energy``.
 
     ``pei_vasp_univ_find_and_change`` edits ``INCAR`` relative to the current directory,
     so this chdir's into the temp dir and always restores the original cwd.
@@ -89,6 +105,9 @@ def prepare_hoec_reference(path_full_relax: Path = None, path_tmp: Path = None) 
     Args:
         path_full_relax (Path): The relaxed reference directory.
         path_tmp (Path): Temp directory to create (removed first if present).
+        relax_ions (bool): Relax the ions at fixed cell shape. ``False`` adds NSW=0 /
+            IBRION=-1, which is only correct for a cell with no internal degrees of
+            freedom (see :func:`generate_hoec_dirs`).
 
     Returns:
         Path: Path to the reference CONTCAR inside ``path_tmp``.
@@ -105,10 +124,14 @@ def prepare_hoec_reference(path_full_relax: Path = None, path_tmp: Path = None) 
         warn("CONTCAR missing/empty in reference; copying POSCAR -> CONTCAR")
         shutil.copy(path_tmp / "POSCAR", path_contcar)
 
+    dict_tags = dict(INCAR_TAGS)
+    if not relax_ions:
+        dict_tags.update(INCAR_TAGS_STATIC)
+
     path_back = Path.cwd()
     os.chdir(path_tmp)
     try:
-        for tag, value in INCAR_TAGS.items():
+        for tag, value in dict_tags.items():
             subprocess.run([FIND_AND_CHANGE, "-" + tag, value], check=True)
     finally:
         os.chdir(path_back)      # every caller continues from a known cwd
@@ -144,15 +167,36 @@ def deform_atoms(atoms_ref: Atoms = None, F: np.ndarray = None) -> Atoms:
 # ---------------------------------------------------------------------------
 def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
                        emax: float = 0.12, de: float = 0.01,
+                       scale_window: bool = True, relax_ions: bool = True,
                        srcdir: str = 'y_full_relax',
                        outdir: str = 'y_hoec_energy') -> Path:
     """Generate the deformed VASP input directories and the mode manifest.
 
+    By default each mode gets its own xi window, shrunk so that it deforms the crystal as
+    hard as the uniaxial reference mode does at ``emax`` (see
+    :func:`mymetal.calculate.calmechanics.hoec.get_mode_strain_lists`). The step shrinks by
+    the same factor, so every mode keeps the same number of points. Pass
+    ``scale_window=False`` for one shared ``[-emax, emax]``, the original behaviour.
+
+    ``relax_ions=False`` runs every strain as a single ionic step (NSW=0, IBRION=-1).
+    **This is only valid for a structure with no internal degrees of freedom**, i.e. one
+    where every atom is related to every other by a lattice translation, so that a
+    homogeneous strain leaves all forces zero by symmetry and the relaxation is a no-op.
+    The 4-atom FCC conventional cell is such a structure (Wang & Li chose FCC for exactly
+    this reason: "they do not possess internal deformation"), and it is confirmed here --
+    the largest POSCAR->CONTCAR displacement over a full relaxed FCC run was 1.13e-15 A.
+    **HCP is not**: its two-atom basis has an internal degree of freedom under a general
+    strain, and NSW=0 would silently return unrelaxed (frozen-ion) constants, which are a
+    different quantity from the relaxed ones. Keep the default there.
+
     Args:
         path_root (str): Directory containing ``srcdir``. Defaults to the cwd.
         symmetry (str): 'auto', 'cubic' or 'hex'.
-        emax (float): Maximum |xi|.
-        de (float): Step in xi.
+        emax (float): Maximum |xi| for the uniaxial reference mode.
+        de (float): Step in xi for the uniaxial reference mode.
+        scale_window (bool): Give each mode an equally severe window of its own.
+        relax_ions (bool): Relax the ions at fixed cell shape (ISIF=2). ``False`` forces a
+            single ionic step; see above for when that is legitimate.
         srcdir (str): Reference directory name.
         outdir (str): Output directory name (removed first if present).
 
@@ -175,7 +219,7 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
 
     ### prepare ----------------------------------------------------------------
     print("🧹 Preparing reference from %s" % path_full_relax.name)
-    path_contcar = prepare_hoec_reference(path_full_relax, path_tmp)
+    path_contcar = prepare_hoec_reference(path_full_relax, path_tmp, relax_ions)
     atoms_ref = read(path_contcar, format='vasp')
     cell_ref = np.array(atoms_ref.get_cell())
     v0 = float(abs(np.linalg.det(cell_ref)))
@@ -186,14 +230,37 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     except ValueError as e:
         fail(str(e))
     dict_modes = MODES[symmetry]
+    try:
+        dict_xi = get_mode_strain_lists(symmetry, emax, de, scale_window)
+    except ValueError as e:
+        fail(str(e))
 
     print("📐 symmetry     : %s" % symmetry)
     print("📦 reference    : %d atoms, V0 = %.4f Å³" % (natoms, v0))
     print("🔧 modes        : %d (%s)" % (len(dict_modes), ", ".join(dict_modes)))
-    print("📏 strain xi    : %d points in [%.4f, %.4f] step %.4f"
+    print("📏 strain xi    : %d points per mode, reference window [%.4f, %.4f] step %.4f"
           % (len(lxi), -emax, emax, de))
-    print("📊 total calcs  : %d modes × %d strains = %d single-point relaxations"
-          % (len(dict_modes), len(lxi), len(dict_modes) * len(lxi)))
+    if scale_window:
+        print("📐 per-mode window (equal severity; xi is an amplitude, not a strain):")
+        print("   %-5s %8s %9s %9s %9s" % ("mode", "scale", "xi_max", "d_xi", "severity"))
+        for name, d in dict_modes.items():
+            info = dict_xi[name]
+            print("   %-5s %8.3f %9.4f %9.4f %9.3f"
+                  % (name, info['scale'], info['emax'], info['de'],
+                     get_mode_severity(d, info['emax'])))
+    else:
+        warn("scale_window=False: every mode shares [-%.4f, %.4f]. xi is a mode amplitude, "
+             "not a strain, so the multi-component modes deform the cell far harder than "
+             "the uniaxial one and can leave the Taylor regime entirely." % (emax, emax))
+    print("🧊 ions         : %s" % ("relaxed at fixed cell shape (ISIF=2)" if relax_ions
+                                   else "frozen, single ionic step (NSW=0, IBRION=-1)"))
+    if not relax_ions and symmetry != 'cubic':
+        warn("relax_ions=False on a '%s' cell. A single ionic step only gives the relaxed "
+             "constants when the structure has no internal degree of freedom (FCC). Here it "
+             "returns FROZEN-ION constants, which are a different quantity." % symmetry)
+    print("📊 total calcs  : %d modes × %d strains = %d %s"
+          % (len(dict_modes), len(lxi), len(dict_modes) * len(lxi),
+             "ionic relaxations" if relax_ions else "single-point energies"))
     warn("higher-order constants need CONVERGED dense k-points and ENCUT in "
          "%s (see Wang-Li Fig. 1,2). This does NOT change them." % srcdir)
 
@@ -209,7 +276,7 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         print("\n================ 📁 mode %s  d=%s" % (name, d_dir))
 
         lstrain_dir = []
-        for xi in lxi:
+        for xi in dict_xi[name]['xi']:
             label = "s_%+.4f" % xi
             path_strain = path_ydir / label
             path_strain.mkdir()
@@ -226,14 +293,27 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         print("   ▶️  wrote %d strained POSCARs" % len(lstrain_dir))
         print("   📁 prepared dir: %s" % path_ydir.parent)
 
-        dict_manifest_modes[name] = dict(direction=list(d_dir), strain_dirs=lstrain_dir)
+        # the label rounds xi to 4 decimals, but a scaled step is not on a round grid
+        # (mode J: d_xi = 0.00414). The post-processing must fit against these exact xi,
+        # not against the label, so carry them in the manifest -- and make sure the
+        # rounding never collapses two strains onto one directory.
+        if len(set(lstrain_dir)) != len(lstrain_dir):
+            fail("mode %s: xi step %.6f is too fine for the 's_%%+.4f' label; "
+                 "two strains collide" % (name, dict_xi[name]['de']))
+        dict_manifest_modes[name] = dict(direction=list(d_dir),
+                                         scale=dict_xi[name]['scale'],
+                                         emax=dict_xi[name]['emax'],
+                                         de=dict_xi[name]['de'],
+                                         xi=dict_xi[name]['xi'],
+                                         strain_dirs=lstrain_dir)
     # to here: every mode has a full y_dir of strained inputs
 
     ### write the manifest the post script reads -------------------------------
     # record the same eV/Å³ -> GPa constant mymetal.post uses, so the two never drift
     dict_manifest = dict(symmetry=symmetry, natoms=natoms, v0_ang3=v0,
                          ev_per_a3_to_gpa=vf.phy_const('qe') * 1e21,
-                         emax=emax, de=de, xi=lxi,
+                         emax=emax, de=de, xi=lxi, scale_window=scale_window,
+                         relax_ions=relax_ions,
                          ref_dir=str(path_full_relax), modes=dict_manifest_modes)
     (path_out / "y_hoec_modes.json").write_text(
         json.dumps(dict_manifest, indent=2), encoding='utf-8')

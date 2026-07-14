@@ -45,6 +45,9 @@ Functions:
     - get_model: cached HOECModel.
     - get_strain_list: symmetric list of xi values including 0.
     - get_deformation_gradient: symmetric F with Green-Lagrange strain xi * d.
+    - get_mode_severity: how hard a mode has actually deformed the cell at amplitude xi.
+    - get_mode_window: largest |xi| a mode may take within a severity budget.
+    - get_mode_strain_lists: per-mode xi lists of equal severity (or one shared window).
     - check_symmetry: validate / auto-detect 'cubic' or 'hex' from a cell.
     - selftest_hoec: verify cubic against Wang-Li Table I and check mode-set rank.
 
@@ -53,6 +56,12 @@ Change log:
       workflow (``hoec_core.py``).
     - Merged into mymetal by J. P. on 2026-07-10; the deformation gradient, the
       strain list and the symmetry detection moved in from the generator script.
+    - Revised by J. P. on 2026-07-14 with the per-mode severity budget
+      (``get_mode_severity`` / ``get_mode_window`` / ``get_mode_strain_lists``). One shared
+      xi window over-strains the multi-component modes badly enough to destroy the
+      constants they alone determine -- for Au at xi=0.12, mode H reached -27.9% volume
+      (4.1 eV/atom, above the cohesive energy) and returned C1266 = 1891 GPa against a
+      literature 9402.
 """
 
 import numpy as np
@@ -512,6 +521,126 @@ def get_deformation_gradient(d_dir: tuple = None, xi: float = None) -> np.ndarra
         raise ValueError("non-physical deformation (F^T F not positive definite) "
                          "at xi=%.4f, d=%s" % (xi, d_dir))
     return (V * np.sqrt(w)) @ V.T                   # F = C^(1/2), symmetric
+
+
+def get_mode_severity(d_dir: tuple = None, xi: float = None) -> float:
+    """How far a mode has actually deformed the crystal at amplitude ``xi``.
+
+    xi is a mode *amplitude*, not a strain: the Voigt directions carry shear entries of 2
+    and up to three nonzero components, so one xi is a wildly different deformation from
+    mode to mode. At xi=0.12 the cubic modes range from -12.8% volume (A) to -33.7% (K),
+    and mode J reaches a 35% principal strain -- far outside the radius where a 4th-order
+    Taylor expansion of the energy means anything.
+
+    Severity is the worse of the two ways a cell can be pushed too far::
+
+        max( max_i |lambda_i(F) - 1| ,  |det F - 1| )
+
+    i.e. the largest principal stretch deviation and the volume change. Both are needed:
+    the principal stretch alone misses the hydrostatic mode K (12.8% principal strain but
+    -33.7% volume), and the volume change alone misses the pure shears (F, G).
+
+    For the uniaxial reference mode A the two coincide, so ``get_mode_severity(A, xi)``
+    is just A's own strain and can be used directly as the target for every other mode
+    (see :func:`get_mode_window`).
+
+    Args:
+        d_dir (tuple): Length-6 engineering-Voigt mode direction.
+        xi (float): Strain amplitude; both signs are tested and the worse one returned,
+            since compression is always the stiffer, more nonlinear side.
+
+    Returns:
+        float: The severity, as a dimensionless strain-like number.
+    """
+    sev = 0.0
+    for s in (abs(xi), -abs(xi)):
+        F = get_deformation_gradient(d_dir, s)
+        w = np.linalg.eigvalsh(F)
+        sev = max(sev, np.max(np.abs(w - 1.0)), abs(np.linalg.det(F) - 1.0))
+    return float(sev)
+
+
+def get_mode_window(d_dir: tuple = None, target: float = None,
+                    hi: float = 0.5, tol: float = 1e-6) -> float:
+    """Largest |xi| at which a mode's severity still stays within ``target``.
+
+    Severity increases monotonically with |xi|, so a bisection is exact.
+
+    Args:
+        d_dir (tuple): Length-6 engineering-Voigt mode direction.
+        target (float): Severity budget, normally ``get_mode_severity(d_A, emax)``.
+        hi (float): Upper bracket for the bisection.
+        tol (float): Bracket width at which to stop.
+
+    Returns:
+        float: The mode's own maximum |xi|.
+
+    Raises:
+        ValueError: If ``target`` is not positive.
+    """
+    if not target > 0:
+        raise ValueError("target severity must be positive, got %r" % target)
+    lo = 0.0
+    while hi - lo > tol:
+        mid = 0.5 * (lo + hi)
+        try:
+            ok = get_mode_severity(d_dir, mid) <= target
+        except ValueError:                  # F^T F not positive definite this far out
+            ok = False
+        if ok:
+            lo = mid
+        else:
+            hi = mid
+    return lo
+
+
+def get_mode_strain_lists(symmetry: str = None, emax: float = 0.12, de: float = 0.01,
+                          scale_window: bool = True) -> dict:
+    """Per-mode xi lists, each mode confined to an equally severe deformation.
+
+    The uniaxial mode A sets the budget: it keeps ``emax`` and ``de`` exactly as given, and
+    every other mode is shrunk to the |xi| at which it deforms the crystal as hard as A does
+    at ``emax`` (:func:`get_mode_severity`). The step is shrunk by the same factor, so every
+    mode keeps the *same number of points* -- the fits stay equally conditioned, and the
+    heavily-scaled modes automatically get the fine xi increment Wang-Li call for.
+
+    With ``scale_window=False`` every mode gets the same ``[-emax, emax]``, which is the
+    literal reading of Wang-Li and the original behaviour of this workflow.
+
+    Args:
+        symmetry (str): 'cubic' or 'hex'.
+        emax (float): Maximum |xi| for the reference mode.
+        de (float): xi step for the reference mode.
+        scale_window (bool): Scale each mode's window by its severity.
+
+    Returns:
+        dict: Mode name -> dict with ``xi`` (list), ``emax``, ``de`` and ``scale``
+        (the mode's window divided by ``emax``; 1.0 for every mode when not scaling).
+
+    Raises:
+        ValueError: If ``symmetry`` is not a supported point group.
+    """
+    if symmetry not in MODES:
+        raise ValueError("symmetry must be 'cubic' or 'hex', got %r" % symmetry)
+    lxi_ref = get_strain_list(emax, de)
+    dict_out = {}
+    if not scale_window:
+        for name, d in MODES[symmetry].items():
+            dict_out[name] = dict(xi=lxi_ref, emax=emax, de=de, scale=1.0)
+        return dict_out
+
+    # mode A is uniaxial, so its principal stretch and its volume change coincide: its own
+    # severity at emax is the natural budget to hold every other mode to
+    d_ref = MODES[symmetry]['A' if symmetry == 'cubic' else 'M01']
+    target = get_mode_severity(d_ref, emax)
+    npt = (len(lxi_ref) - 1) // 2                 # points on each side of xi=0
+    for name, d in MODES[symmetry].items():
+        scale = get_mode_window(d, target) / emax
+        scale = min(scale, 1.0)                   # never widen past the requested emax
+        de_m = de * scale
+        dict_out[name] = dict(xi=[round(k * de_m, 10) for k in range(-npt, npt + 1)],
+                              emax=emax * scale, de=de_m, scale=scale)
+    return dict_out
 
 
 def check_symmetry(symmetry: str = 'auto', cell: np.ndarray = None) -> str:

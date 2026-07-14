@@ -40,10 +40,14 @@ Functions:
     - collect_mode_data: Per-mode (xi, u) arrays within the fit window.
     - fit_P: Polynomial fit of u(xi) -> P0..P4 and the rms residual.
     - solve_constants: Least-squares solve for SOEC/TOEC/FOEC.
+    - check_fit_quality: Is the fit window inside the Taylor regime? (the fit rms cannot say)
+    - scan_fit_windows: Refit and re-solve across the whole window scan (Wang-Li Fig. 6).
+    - select_plateau_P: Optional per-mode/per-order plateau selection (off by default).
     - load_ref_constants: Literature constants for the cubic sanity check.
     - write_hoec_energy: Write the txt report and the json constants.
     - read_hoec_energy: Read back the json constants.
     - plot_hoec_energy: Per-mode energy-strain curves with fits.
+    - plot_hoec_convergence: Coefficients and constants vs the fit window.
 
 Change log:
     - Written by J. P., 2026, as the standalone ``pei_vasp_post_hoec_energy.py`` script.
@@ -52,6 +56,16 @@ Change log:
     - Revised by J. P. on 2026-07-10 to read energies through ``pei_vasp_univ_post`` +
       ``vf.vasp_read_post_data`` and to plot through ``general_set_all_rcParams``, so the
       workflow matches ``mymetal.post.stretch`` and ``mymetal.post.Cij_energy``.
+    - Revised by J. P. on 2026-07-14: the default fit degree is now 4, as in Wang-Li Sec. IV
+      (it was 6, with a docstring that wrongly claimed the paper did the same);
+      ``plot_hoec_energy`` now draws the polynomial that was actually fitted (it rebuilt the
+      curve from P1..P4 only, dropping P0 and every term above xi^4, which made a good fit
+      look broken); and ``check_fit_quality`` was added, because the fit rms cannot tell you
+      whether the window is inside the Taylor regime.
+    - Revised by J. P. on 2026-07-14: added the window scan (``scan_fit_windows``) and the
+      convergence plot ``y_post_hoec_conv.pdf`` (``plot_hoec_convergence``) -- Wang-Li Fig. 6
+      generalized to every mode and every order -- plus the optional, off-by-default
+      per-mode/per-order plateau selection (``select_plateau_P``).
 """
 
 import json
@@ -141,10 +155,17 @@ def collect_mode_data(path_out: Path = None, dict_manifest: dict = None,
                       fitmax: float = None, run_post: bool = True) -> tuple:
     """Read the energies per mode and convert them to strain-energy densities.
 
+    ``fitmax`` is always given in the units of the *uniaxial reference* mode. When the tree
+    was generated with per-mode windows, each mode's cut is ``fitmax * scale``, the same
+    factor its window was built with -- so shrinking ``fitmax`` shrinks every mode's window
+    proportionally and a Wang-Li Fig. 6 scan stays self-consistent. For a tree generated
+    with one shared window (or by an older version), ``scale`` is 1.0 everywhere and this is
+    the plain ``|xi| <= fitmax`` cut it always was.
+
     Args:
         path_out (Path): The ``y_hoec_energy`` directory.
         dict_manifest (dict): The manifest.
-        fitmax (float): Only keep points with |xi| <= fitmax.
+        fitmax (float): Max |xi| in reference-mode units; scaled per mode (see above).
         run_post (bool): Re-run ``pei_vasp_univ_post`` before reading. Set False to
             re-fit an already-scraped tree (e.g. when scanning ``fitmax``).
 
@@ -179,10 +200,18 @@ def collect_mode_data(path_out: Path = None, dict_manifest: dict = None,
             warn("mode %s: no xi=0 reference energy; skipped" % name)
             continue
 
+        # a scaled step does not land on a round grid (mode J: d_xi = 0.00414), and the
+        # 4-decimal directory label rounds it. Fit against the exact xi from the manifest;
+        # only fall back to the label for trees written before the manifest carried them.
+        dict_xi = dict(zip(info["strain_dirs"], info["xi"])) if "xi" in info else {}
+        cut = fitmax * info.get("scale", 1.0)
+
         lxi, lu = [], []
         for lbl, e in dict_e.items():
-            xi = float(lbl.split("_")[1])
-            if abs(xi) <= fitmax + 1e-9:
+            xi = dict_xi.get(lbl)
+            if xi is None:
+                xi = float(lbl.split("_")[1])
+            if abs(xi) <= cut + 1e-9:
                 lxi.append(xi)
                 lu.append((e - u0) * conv / v0)
         dict_data[name] = (np.array(lxi), np.array(lu))
@@ -192,11 +221,15 @@ def collect_mode_data(path_out: Path = None, dict_manifest: dict = None,
 # ---------------------------------------------------------------------------
 # fit and solve
 # ---------------------------------------------------------------------------
-def fit_P(xi: np.ndarray = None, u: np.ndarray = None, fitdeg: int = 6) -> tuple:
+def fit_P(xi: np.ndarray = None, u: np.ndarray = None, fitdeg: int = 4) -> tuple:
     """Fit u(xi) to a polynomial and return its low-order coefficients.
 
-    The fit degree is raised above 4 so that the neglected xi^5, xi^6 terms do not leak
-    into P4 (Wang-Li fit the same way).
+    Wang-Li fit a *fourth*-order polynomial (Sec. IV: "The relations between E and xi are
+    fitted with a fourth-order polynomial"), which is the default here. A higher degree can
+    be requested, but note that it does not make the constants more trustworthy: over a
+    window where the xi^5, xi^6 response is large the extra terms simply absorb it, so u(xi)
+    is reproduced beautifully while P2..P4 are no longer the Taylor coefficients. Judge the
+    window with :func:`check_fit_quality`, not with the fit rms.
 
     Args:
         xi (np.ndarray): Strain amplitudes.
@@ -204,7 +237,8 @@ def fit_P(xi: np.ndarray = None, u: np.ndarray = None, fitdeg: int = 6) -> tuple
         fitdeg (int): Polynomial degree; clipped to len(xi)-1 when there are few points.
 
     Returns:
-        tuple: ``(P0, P1, P2, P3, P4, rms)``.
+        tuple: ``(P0, P1, P2, P3, P4, rms, coeffs)``, with ``coeffs`` the full polynomial
+        (highest power first) so the plot can draw the model that was actually fitted.
     """
     if len(xi) < fitdeg + 1:
         fitdeg = len(xi) - 1
@@ -212,7 +246,7 @@ def fit_P(xi: np.ndarray = None, u: np.ndarray = None, fitdeg: int = 6) -> tuple
     lp = coeffs[::-1]                               # now index = power
     P = [lp[k] if k < len(lp) else 0.0 for k in range(5)]
     rms = float(np.sqrt(np.mean((u_fit - u) ** 2)))
-    return P[0], P[1], P[2], P[3], P[4], rms
+    return P[0], P[1], P[2], P[3], P[4], rms, coeffs
 
 
 def solve_constants(model=None, dict_P: dict = None) -> dict:
@@ -243,6 +277,279 @@ def solve_constants(model=None, dict_P: dict = None) -> dict:
     return dict_result
 
 
+def check_fit_quality(model=None, dict_P: dict = None, dict_result: dict = None,
+                      tol_p1: float = 0.5, tol_p2: float = 2.0) -> list:
+    """Check whether the fit window is small enough for the Taylor expansion to hold.
+
+    The fit rms cannot answer this: a high-degree polynomial reproduces u(xi) to <0.1 GPa
+    even when the window reaches deep into the nonlinear regime, because the high-order
+    terms absorb the response -- and P2..P4 are then no longer the Taylor coefficients.
+    These three checks look at the constants instead, and all are independent of the fit rms:
+
+    1. ``P1 == 0`` exactly at a stress-free reference. A nonzero P1 means the low-order
+       coefficients have picked up the large-strain end of the curve.
+    2. Modes sharing the same order-2 coefficient row are symmetry-equivalent at that order,
+       so their P2 *must* agree (cubic: D/E and H/I). Their spread is a direct, calibrated
+       measure of the truncation error leaking into P2.
+    3. When nmode == nconst the order-n system is square and its residual is identically
+       zero -- it certifies nothing, and one contaminated mode goes straight into the
+       constants it alone determines (cubic order 4: 11 modes, 11 constants).
+
+    Args:
+        model (HOECModel): The reduced model for this symmetry.
+        dict_P (dict): Mode name -> dict with keys ``P1``, ``P2``, ``P3``, ``P4``.
+        dict_result (dict): Output of :func:`solve_constants`.
+        tol_p1 (float): Warn above this |P1| (GPa).
+        tol_p2 (float): Warn above this P2 spread within a symmetry-equivalent group (GPa).
+
+    Returns:
+        list: The report lines (also emitted as warnings).
+    """
+    lline = ["\n--- fit-window diagnostics"]
+
+    ### 1. P1 must vanish at a stress-free reference ----------------------------
+    lbad = [(n, dict_P[n]['P1']) for n in dict_P if abs(dict_P[n]['P1']) > tol_p1]
+    if lbad:
+        warn("P1 != 0 for %d mode(s) — the reference is stressed, or (far more likely) the "
+             "fit window reaches outside the Taylor regime: %s"
+             % (len(lbad), ", ".join("%s=%.2f GPa" % (n, v) for n, v in lbad)))
+        lline.append("  [!] |P1| > %.2f GPa (must be 0 at a relaxed reference): %s"
+                     % (tol_p1, ", ".join("%s=%.2f" % (n, v) for n, v in lbad)))
+    else:
+        lline.append("  [ok] all |P1| <= %.2f GPa" % tol_p1)
+
+    ### 2. symmetry-equivalent modes must give the same P2 ----------------------
+    dict_group = {}
+    for n in dict_P:
+        key = tuple(np.round(model.P_coeffs(2, MODES[model.symmetry][n]), 9))
+        dict_group.setdefault(key, []).append(n)
+    lworst = []
+    for lgrp in dict_group.values():
+        if len(lgrp) < 2:
+            continue
+        lp2 = [dict_P[n]['P2'] for n in lgrp]
+        spread = max(lp2) - min(lp2)
+        lworst.append((spread, lgrp, lp2))
+    for spread, lgrp, lp2 in sorted(lworst, reverse=True):
+        txt = "  %s P2 spread %.2f GPa (%s)" % (
+            "[!]" if spread > tol_p2 else "[ok]", spread,
+            ", ".join("%s=%.1f" % (n, v) for n, v in zip(lgrp, lp2)))
+        lline.append(txt)
+        if spread > tol_p2:
+            warn("symmetry-equivalent modes %s must share P2 but differ by %.2f GPa — "
+                 "shrink --fitmax until this closes" % ("/".join(lgrp), spread))
+
+    ### 3. a square system has no redundancy left to check itself ----------------
+    for order in (2, 3, 4):
+        r = dict_result[order]
+        if len(dict_P) <= r['nconst']:
+            warn("order %d: %d modes for %d constants — the system is square, so its "
+                 "resid=%.3f GPa is identically zero and certifies nothing"
+                 % (order, len(dict_P), r['nconst'], r['resid']))
+            lline.append("  [!] order %d: square system (%d modes / %d constants), "
+                         "resid is meaningless" % (order, len(dict_P), r['nconst']))
+    return lline
+
+
+def scan_fit_windows(dict_data: dict = None, dict_manifest: dict = None, model=None,
+                     lw: list = None, fitdeg: int = 4, minpts: int = None) -> dict:
+    """Refit and re-solve at a series of base windows -- the Wang-Li Fig. 6 scan.
+
+    ``lw`` are base windows in reference-mode units; each mode is cut at ``w * scale``, the
+    same factor its own window was generated with, so one knob moves every mode by the same
+    relative amount.
+
+    Args:
+        dict_data (dict): Mode name -> (xi, u) over the FULL range.
+        dict_manifest (dict): The manifest (for each mode's ``scale``).
+        model (HOECModel): The reduced model for this symmetry.
+        lw (list): Base windows to scan.
+        fitdeg (int): Polynomial degree.
+        minpts (int): Skip a window with fewer points than this. Defaults to
+            ``fitdeg + 5``: at ``fitdeg + 1`` points the fit is an exact interpolation and
+            P4 is pure noise (mode A returned 283 GPa against a converged ~690).
+
+    Returns:
+        dict: Base window -> dict with ``P`` (per-mode coefficients) and ``result``
+        (:func:`solve_constants` output). Windows with an incomplete mode set are dropped.
+    """
+    minpts = minpts if minpts is not None else fitdeg + 5
+    dict_scan = {}
+    dict_block = {}                              # mode -> how often it killed a window
+    for w in lw:
+        dict_P = {}
+        lshort = []
+        for n, (xi, u) in dict_data.items():
+            cut = w * dict_manifest["modes"][n].get("scale", 1.0)
+            k = np.abs(xi) <= cut + 1e-9
+            if int(k.sum()) < minpts:
+                lshort.append(n)
+                continue
+            P0, P1, P2, P3, P4, rms, coeffs = fit_P(xi[k], u[k], fitdeg)
+            dict_P[n] = dict(P0=P0, P1=P1, P2=P2, P3=P3, P4=P4, rms=rms, coeffs=coeffs)
+        if lshort:                               # keep the solved systems comparable
+            for n in lshort:
+                dict_block[n] = dict_block.get(n, 0) + 1
+            continue
+        dict_scan[w] = dict(P=dict_P, result=solve_constants(model, dict_P))
+
+    print("🔍 window scan: %d/%d windows usable (fitdeg=%d, minpts=%d)"
+          % (len(dict_scan), len(lw), fitdeg, minpts))
+    if dict_block:
+        lworst = sorted(dict_block.items(), key=lambda kv: -kv[1])[:3]
+        warn("%d window(s) dropped for too few points; the binding modes are %s. Their step "
+             "is de * scale, so a heavily-scaled mode runs out of points first — this is the "
+             "symptom of too coarse a de (Wang-Li use 0.0025)."
+             % (len(lw) - len(dict_scan),
+                ", ".join("%s (%dx)" % (n, c) for n, c in lworst)))
+    return dict_scan
+
+
+def select_plateau_P(dict_scan: dict = None, nseg: int = 3) -> dict:
+    """Per-mode, per-order plateau selection: take each P_n where it varies least.
+
+    P2 and P4 want *opposite* windows -- P2 is clean at small strain and gets contaminated
+    by truncation, while P4 is buried under noise at small strain (its xi^4 term is tiny)
+    and only emerges at larger strain, which is exactly Wang-Li's Fig. 6 argument for a
+    large xi_max. So the window is chosen per order, not per mode.
+
+    This is OFF by default. On the 25-point/de=0.01 Au data it was measurably *worse* than a
+    single scaled window (cross-mode residual 2.2 vs 0.66 GPa at order 2, 80 vs 12 GPa at
+    order 3), because 11 window values are too few to tell a plateau from noise, and because
+    letting each mode sit at a different point on its own nonlinearity curve decorrelates
+    the truncation biases that otherwise partly cancel in the global least-squares. It needs
+    a much finer de (Wang-Li: 0.0025) to pay off -- re-evaluate it there.
+
+    Args:
+        dict_scan (dict): Output of :func:`scan_fit_windows`.
+        nseg (int): Width, in window values, of the sliding segment scored for flatness.
+
+    Returns:
+        dict: Mode name -> dict with ``P1``..``P4`` and ``coeffs``, each order taken from
+        its own flattest window.
+
+    Raises:
+        ValueError: If the scan has fewer than ``nseg`` windows.
+    """
+    lw = sorted(dict_scan)
+    if len(lw) < nseg:
+        raise ValueError("plateau selection needs >= %d scanned windows, got %d; "
+                         "lower --fitmax-min or use a finer de" % (nseg, len(lw)))
+    lname = list(dict_scan[lw[0]]['P'])
+    dict_P = {}
+    for n in lname:
+        dict_P[n] = dict(P0=0.0, P1=0.0, coeffs=dict_scan[lw[-1]]['P'][n]['coeffs'],
+                         rms=dict_scan[lw[-1]]['P'][n]['rms'])
+        for key in ('P2', 'P3', 'P4'):
+            v = np.array([dict_scan[w]['P'][n][key] for w in lw])
+            best, ibest = np.inf, len(lw) // 2
+            for i in range(len(lw) - nseg + 1):
+                seg = v[i:i + nseg]
+                score = np.std(seg) / max(abs(np.mean(seg)), 1e-9)
+                if score < best:
+                    best, ibest = score, i + nseg // 2
+            dict_P[n][key] = float(v[ibest])
+            dict_P[n]['w_' + key] = lw[ibest]
+        # P1 is a diagnostic, not a constant: report it at the widest order-2 window used
+        dict_P[n]['P1'] = dict_scan[dict_P[n]['w_P2']]['P'][n]['P1']
+    return dict_P
+
+
+def plot_hoec_convergence(path_out: Path = None, dict_scan: dict = None,
+                          fitmax: float = None, save_fig_path: str = None) -> None:
+    """Convergence of the fitted coefficients and constants against the fit window.
+
+    Wang-Li Fig. 6 (C1111 vs xi_max) generalized to every mode and every order. This is the
+    only honest way to see whether a constant has a plateau: the fit rms cannot tell you,
+    because a polynomial reproduces u(xi) to <0.1 GPa well past the point where P2..P4 have
+    stopped being Taylor coefficients.
+
+    Top row: each mode's P2, P3, P4 normalized to its value at ``fitmax`` -- a flat run near
+    1.0 is a plateau. Bottom row: the solved SOEC and FOEC, and the three diagnostics that
+    actually validate the window.
+
+    Args:
+        path_out (Path): The ``y_hoec_energy`` directory.
+        dict_scan (dict): Output of :func:`scan_fit_windows`.
+        fitmax (float): The window that was used for the reported constants (marked).
+        save_fig_path (str): Output pdf; defaults to ``path_out/y_post_hoec_conv.pdf``.
+
+    Returns:
+        None
+    """
+    path_fig = (Path(save_fig_path) if save_fig_path
+                else Path(path_out) / "y_post_hoec_conv.pdf")
+    lw = sorted(dict_scan)
+    if len(lw) < 2:
+        warn("only %d fit window(s) survived the scan; no convergence plot" % len(lw))
+        return
+    # the reported constants come from a direct fit at fitmax, which is not gated by minpts,
+    # so fitmax can fall outside the scan. Normalize at the nearest scanned window, but keep
+    # the marker on the window that was actually reported.
+    wref = min(lw, key=lambda w: abs(w - fitmax))
+    if abs(wref - fitmax) > 1e-9:
+        warn("fitmax=%.4f is not among the scanned windows (nearest %.4f); the convergence "
+             "curves are normalized at %.4f while the dashed line marks the reported %.4f"
+             % (fitmax, wref, wref, fitmax))
+    lname = list(dict_scan[lw[0]]['P'])
+
+    general_set_all_rcParams(figure_subp=[2, 3], legend_framealpha=0.4,
+                             font_family=['Arial'])
+    fig, axes = plt.subplots(2, 3)
+
+    ### top row: per-mode P2 / P3 / P4, normalized to the reported window ----------
+    for ax, key, lab in zip(axes[0], ('P2', 'P3', 'P4'), ('$P_2$', '$P_3$', '$P_4$')):
+        vmax = max(abs(dict_scan[wref]['P'][n][key]) for n in lname)
+        for n in lname:
+            ref = dict_scan[wref]['P'][n][key]
+            if abs(ref) < 1e-3 * vmax:      # zero by symmetry (cubic: P3 of C and G)
+                continue
+            ax.plot(lw, [dict_scan[w]['P'][n][key] / ref for w in lw], '-o', ms=2, label=n)
+        ax.axhline(1.0, color='0.6', lw=0.8, ls=':')
+        ax.axvline(fitmax, color='0.3', lw=0.8, ls='--')
+        ax.set_ylim(0.5, 1.5)
+        ax.set_title(lab + ' / ' + lab + '($\\xi_{max}$=%.3f)' % wref)
+        ax.set_xlabel('Fit window $\\xi_{max}$ (mode-A units)')
+    axes[0][0].set_ylabel('Normalized coefficient')
+    axes[0][2].legend(ncol=2, fontsize='xx-small')
+
+    ### bottom row: solved constants and the diagnostics ---------------------------
+    def _const(order, nm):
+        r = dict_scan[lw[0]]['result'][order]
+        return [dict_scan[w]['result'][order]['values'][list(r['names']).index(nm)]
+                for w in lw]
+
+    lsoec = [nm for nm in ('11', '12', '44') if nm in dict_scan[lw[0]]['result'][2]['names']]
+    for nm in lsoec:
+        axes[1][0].plot(lw, _const(2, nm), '-o', ms=2, label='C' + nm)
+    axes[1][0].set_ylabel('SOEC (GPa)')
+    axes[1][0].set_title('2nd order')
+
+    lfoec = [nm for nm in ('1111', '1266', '4444')
+             if nm in dict_scan[lw[0]]['result'][4]['names']]
+    for nm in lfoec:
+        axes[1][1].plot(lw, _const(4, nm), '-o', ms=2, label='C' + nm)
+    axes[1][1].set_ylabel('FOEC (GPa)')
+    axes[1][1].set_title('4th order (Wang-Li Fig. 6)')
+
+    axes[1][2].semilogy(lw, [max(abs(dict_scan[w]['P'][n]['P1']) for n in lname) for w in lw],
+                        '-o', ms=2, label='max$|P_1|$')
+    for order, lab in ((2, 'resid order 2'), (3, 'resid order 3')):
+        axes[1][2].semilogy(lw, [dict_scan[w]['result'][order]['resid'] for w in lw],
+                            '-o', ms=2, label=lab)
+    axes[1][2].set_ylabel('Diagnostic (GPa)')
+    axes[1][2].set_title('lower is better')
+
+    for ax in axes[1]:
+        ax.axvline(fitmax, color='0.3', lw=0.8, ls='--')
+        ax.set_xlabel('Fit window $\\xi_{max}$ (mode-A units)')
+        ax.legend(fontsize='xx-small')
+
+    plt.savefig(path_fig)
+    plt.close(fig)
+    print("📈 wrote %s" % path_fig)
+
+
 def load_ref_constants(element: str = None, path_ref: str = None) -> dict:
     """Literature constants for one element, used only for the cubic sanity check.
 
@@ -265,7 +572,7 @@ def load_ref_constants(element: str = None, path_ref: str = None) -> dict:
 def write_hoec_energy(path_out: Path = None, dict_manifest: dict = None,
                       dict_P: dict = None, dict_result: dict = None,
                       element: str = None, dict_ref: dict = None,
-                      fitdeg: int = 6, fitmax: float = None,
+                      fitdeg: int = 4, fitmax: float = None, ldiag: list = None,
                       save_txt_path: str = None, save_json_path: str = None) -> None:
     """Write ``y_post_hoec.txt`` (report) and ``y_post_hoec.json`` (constants).
 
@@ -278,6 +585,7 @@ def write_hoec_energy(path_out: Path = None, dict_manifest: dict = None,
         dict_ref (dict): Literature constants, or None.
         fitdeg (int): Polynomial degree used.
         fitmax (float): Fit window used.
+        ldiag (list): Report lines from :func:`check_fit_quality`, appended to the txt.
         save_txt_path (str): Output txt; defaults to ``path_out/y_post_hoec.txt``.
         save_json_path (str): Output json; defaults to ``path_out/y_post_hoec.json``.
 
@@ -293,7 +601,13 @@ def write_hoec_energy(path_out: Path = None, dict_manifest: dict = None,
     lline.append("symmetry=%s  element=%s  V0=%.4f A^3  natoms=%d"
                  % (dict_manifest["symmetry"], element,
                     dict_manifest["v0_ang3"], dict_manifest["natoms"]))
-    lline.append("fit: polynomial degree %d over |xi|<=%.4f" % (fitdeg, fitmax))
+    lscale = [dict_manifest["modes"][n].get("scale", 1.0) for n in dict_P]
+    if any(abs(s - 1.0) > 1e-9 for s in lscale):
+        lline.append("fit: polynomial degree %d over |xi|<=%.4f * (per-mode scale)"
+                     % (fitdeg, fitmax))
+    else:
+        lline.append("fit: polynomial degree %d over |xi|<=%.4f (one shared window)"
+                     % (fitdeg, fitmax))
     lline.append("=" * 64)
     for order in (2, 3, 4):
         r = dict_result[order]
@@ -311,11 +625,17 @@ def write_hoec_energy(path_out: Path = None, dict_manifest: dict = None,
                 row += " %12.2f %10.2f" % (rv, val - rv)
             lline.append(row)
     lline.append("\n--- per-mode fit (P1 should be ~0 at the relaxed reference)")
-    lline.append("  %-5s %10s %10s %10s %10s %8s" % ("mode", "P1", "P2", "P3", "P4", "rms"))
+    lline.append("  NOTE: 'rms' is how well the polynomial reproduces u(xi); it does NOT")
+    lline.append("        validate P2..P4 as Taylor coefficients. See the diagnostics below.")
+    lline.append("  %-5s %7s %8s %10s %10s %10s %10s %8s"
+                 % ("mode", "scale", "xi_max", "P1", "P2", "P3", "P4", "rms"))
     for n in dict_P:
         p = dict_P[n]
-        lline.append("  %-5s %10.2f %10.1f %10.1f %10.1f %8.3f"
-                     % (n, p['P1'], p['P2'], p['P3'], p['P4'], p['rms']))
+        sc = dict_manifest["modes"][n].get("scale", 1.0)
+        lline.append("  %-5s %7.3f %8.4f %10.2f %10.1f %10.1f %10.1f %8.3f"
+                     % (n, sc, fitmax * sc, p['P1'], p['P2'], p['P3'], p['P4'], p['rms']))
+    if ldiag:
+        lline += ldiag
     text = "\n".join(lline) + "\n"
     path_txt.write_text(text, encoding='utf-8')
     print(text)
@@ -386,9 +706,10 @@ def plot_hoec_energy(path_out: Path = None, dict_data: dict = None,
         idx = np.argsort(xi)
         ax.plot(xi[idx], u[idx], 'o')
         xs = np.linspace(xi.min(), xi.max(), 200)
-        p = dict_P[n]
-        ys = p['P1'] * xs + p['P2'] * xs**2 + p['P3'] * xs**3 + p['P4'] * xs**4
-        ax.plot(xs, ys, '-C1')
+        # the model that was actually fitted -- rebuilding it from P1..P4 alone drops P0 and
+        # every term above xi^4, which drew a curve that missed the data by up to 100x the
+        # true fit rms and made a good fit look broken
+        ax.plot(xs, np.polyval(dict_P[n]['coeffs'], xs), '-C1')
         ax.set_title(n)
     for ax in axes[len(lname):]:
         ax.axis('off')
@@ -406,19 +727,30 @@ def plot_hoec_energy(path_out: Path = None, dict_data: dict = None,
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
-def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 6,
+def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
                      fitmax: float = None, refjson: str = None,
-                     run_post: bool = True) -> dict:
+                     run_post: bool = True, select: str = 'fixed',
+                     minpts: int = None) -> dict:
     """Solve the higher-order elastic constants from a finished ``y_hoec_energy`` tree.
+
+    A single ``fitmax`` is applied to every mode, as Wang-Li do. Note that xi is a mode
+    amplitude, not a strain: |d| runs from 1 (mode A) to 3.6 (mode J), so one xi is a very
+    different deformation from mode to mode, and the largest modes leave the Taylor regime
+    first. Pick ``fitmax`` by scanning it (Wang-Li Fig. 6) and watching
+    :func:`check_fit_quality`, not the fit rms.
 
     Args:
         dir (str): The ``y_hoec_energy`` directory.
-        fitdeg (int): Polynomial fit degree (>=4).
+        fitdeg (int): Polynomial fit degree (>=4). Wang-Li use 4.
         fitmax (float): Max |xi| used in the fit; defaults to the manifest's ``emax``.
-            Scan it (0.08-0.15) to check the 4th-order plateau (Wang-Li Fig. 6).
         refjson (str): Literature json for the cubic sanity check; defaults to
             :data:`REF_JSON_DEFAULT`.
         run_post (bool): Re-run ``pei_vasp_univ_post`` before reading the energies.
+        select (str): ``'fixed'`` (default) takes every coefficient at ``fitmax``.
+            ``'plateau'`` takes each mode's P2/P3/P4 where it varies least across the window
+            scan -- see :func:`select_plateau_P` for why that is not the default.
+        minpts (int): Minimum points a mode needs before a scanned window is used; see
+            :func:`scan_fit_windows`. Defaults to ``fitdeg + 5``.
 
     Returns:
         dict: Output of :func:`solve_constants`, keyed by order.
@@ -429,34 +761,64 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 6,
         fail("directory not found: %s" % path_out)
     if fitdeg < 4:
         fail("fitdeg must be >= 4 to resolve P4, got %d" % fitdeg)
+    if select not in ('fixed', 'plateau'):
+        fail("select must be 'fixed' or 'plateau', got %r" % select)
     dict_manifest = load_hoec_manifest(path_out)
-    fitmax = fitmax if fitmax is not None else dict_manifest["emax"]
+    emax = dict_manifest["emax"]
+    fitmax = fitmax if fitmax is not None else emax
     model = get_model(dict_manifest["symmetry"])
 
-    ### prepare: scrape the OUTCARs, read energies, fit each mode ---------------
-    print("🟢 post-processing %s (symmetry=%s)" % (path_out, dict_manifest["symmetry"]))
-    dict_data, lmissing = collect_mode_data(path_out, dict_manifest, fitmax, run_post)
+    ### prepare: scrape the OUTCARs, read energies ------------------------------
+    print("🟢 post-processing %s (symmetry=%s, select=%s)"
+          % (path_out, dict_manifest["symmetry"], select))
+    # read the FULL range once: the window scan below needs every point, and the reported
+    # fit is just one cut of it
+    dict_data, lmissing = collect_mode_data(path_out, dict_manifest, emax, run_post)
     if lmissing:
         warn("%d strain points missing energy (unconverged/not run):" % len(lmissing))
         print("    " + ", ".join(lmissing[:12]) + (" ..." if len(lmissing) > 12 else ""))
     if not dict_data:
         fail("no usable energies found — are the jobs finished?")
 
-    dict_P = {}
+    ### scan the window: this is what tells you whether the constants have converged
+    de = dict_manifest.get("de", emax / 12.0)
+    lw = [round(k * de, 10) for k in range(1, int(round(emax / de)) + 1)]
+    dict_scan = scan_fit_windows(dict_data, dict_manifest, model, lw, fitdeg, minpts)
+    if not dict_scan:
+        fail("no fit window has enough points; lower --minpts, lower fitdeg, or use a finer de")
+
+    ### fit at the reported window ----------------------------------------------
+    dict_cut = {}
     for n, (xi, u) in dict_data.items():
-        P0, P1, P2, P3, P4, rms = fit_P(xi, u, fitdeg)
-        dict_P[n] = dict(P0=P0, P1=P1, P2=P2, P3=P3, P4=P4, rms=rms)
+        k = np.abs(xi) <= fitmax * dict_manifest["modes"][n].get("scale", 1.0) + 1e-9
+        dict_cut[n] = (xi[k], u[k])
+
+    if select == 'plateau':
+        try:
+            dict_P = select_plateau_P(dict_scan)
+        except ValueError as e:
+            fail(str(e))
+    else:
+        dict_P = {}
+        for n, (xi, u) in dict_cut.items():
+            P0, P1, P2, P3, P4, rms, coeffs = fit_P(xi, u, fitdeg)
+            dict_P[n] = dict(P0=P0, P1=P1, P2=P2, P3=P3, P4=P4, rms=rms, coeffs=coeffs)
 
     ### main: solve, report, plot ----------------------------------------------
     dict_result = solve_constants(model, dict_P)
+    ldiag = check_fit_quality(model, dict_P, dict_result)
     element = read_element(path_out, dict_manifest)
     dict_ref = None
     if dict_manifest["symmetry"] == "cubic":
         dict_ref = load_ref_constants(element, refjson or str(REF_JSON_DEFAULT))
 
     write_hoec_energy(path_out, dict_manifest, dict_P, dict_result, element, dict_ref,
-                      fitdeg, fitmax)
-    plot_hoec_energy(path_out, dict_data, dict_P)
+                      fitdeg, fitmax, ldiag)
+    # plateau mode takes each order from a different window, so there is no single fitted
+    # curve to draw; select_plateau_P carries the widest-window polynomial, which matches
+    # the full data
+    plot_hoec_energy(path_out, dict_data if select == 'plateau' else dict_cut, dict_P)
+    plot_hoec_convergence(path_out, dict_scan, fitmax)
 
     print("📊 SUMMARY: %s | %d/%d modes used | %d strain points missing"
           % (dict_manifest["symmetry"], len(dict_data),

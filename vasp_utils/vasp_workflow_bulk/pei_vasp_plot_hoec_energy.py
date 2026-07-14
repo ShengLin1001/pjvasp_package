@@ -8,9 +8,12 @@
 #  with vf.vasp_read_post_data, like every other workflow here.
 #
 #  Writes into y_hoec_energy/:
-#      y_post_hoec.txt    constants + per-mode fit diagnostics (cubic: vs Wang-Li)
-#      y_post_hoec.json   machine-readable constants
-#      y_post_hoec.pdf    per-mode energy-strain curves with fits
+#      y_post_hoec.txt       constants + per-mode fit diagnostics (cubic: vs Wang-Li)
+#      y_post_hoec.json      machine-readable constants
+#      y_post_hoec.pdf       per-mode energy-strain curves with fits
+#      y_post_hoec_conv.pdf  coefficients and constants vs the fit window -- Wang-Li Fig. 6
+#                            generalized. THIS is where you check convergence; a plateau
+#                            here is the only evidence a constant is converged.
 #
 #  All arguments are optional -- with none it behaves exactly like its siblings, so
 #      pei_vasp_plot_all  -hoec_energy
@@ -22,8 +25,12 @@
 #      pei_vasp_plot_hoec_energy.py --fitmax 0.10 --skip-univ-post
 #
 #  --fitdeg/--fitmax are kept because the 4th-order constants must be checked for a
-#  plateau in the fit window (Wang-Li Fig. 6): re-fit with --fitmax 0.08 .. 0.15 and
+#  plateau in the fit window (Wang-Li Fig. 6): re-fit with --fitmax 0.04 .. 0.15 and
 #  --skip-univ-post to avoid re-scraping ~475 OUTCARs each time.
+#
+#  Read the "fit-window diagnostics" block of y_post_hoec.txt when scanning --fitmax, NOT
+#  the per-mode fit rms: a polynomial reproduces u(xi) to <0.1 GPa well past the point where
+#  P2..P4 have stopped being Taylor coefficients, so a small rms proves nothing.
 
 import argparse
 from pathlib import Path
@@ -33,13 +40,23 @@ from mymetal.post.hoec_energy import post_hoec_energy, REF_JSON_DEFAULT
 parser = argparse.ArgumentParser(
     description="Solve higher-order elastic constants from a finished y_hoec_energy tree.")
 parser.add_argument("--dir", default="y_hoec_energy", help="The y_hoec_energy directory.")
-parser.add_argument("--fitdeg", type=int, default=6, help="Polynomial fit degree (>=4).")
+parser.add_argument("--fitdeg", type=int, default=4,
+                    help="Polynomial fit degree (>=4). Wang-Li use 4.")
 parser.add_argument("--fitmax", type=float, default=None,
                     help="Max |xi| used in the fit (default: the manifest's emax).")
 parser.add_argument("--refjson", default=str(REF_JSON_DEFAULT),
                     help="Literature elastic_constants.txt for the cubic sanity check.")
 parser.add_argument("--skip-univ-post", action="store_true",
                     help="Do not re-run pei_vasp_univ_post; re-fit the scraped y_post_data.txt.")
+parser.add_argument("--select", default="fixed", choices=["fixed", "plateau"],
+                    help="'fixed' (default): every coefficient at --fitmax. 'plateau': take "
+                         "each mode's P2/P3/P4 where it varies least across the window scan. "
+                         "Plateau was WORSE than fixed on the 25-point/de=0.01 Au data "
+                         "(cross-mode resid 2.2 vs 0.66 GPa); it needs a fine de to pay off.")
+parser.add_argument("--minpts", type=int, default=None,
+                    help="Points a mode needs before a scanned window is used "
+                         "(default fitdeg+5). At fitdeg+1 the fit is an exact interpolation "
+                         "and P4 is pure noise.")
 args = parser.parse_args()
 
 # pei_vasp_plot_all cd's into y_hoec_energy before calling us, so ./y_hoec_energy is gone;
@@ -51,8 +68,10 @@ if not path_dir.is_dir() and Path.cwd().name == args.dir:
 print("Directory      :", path_dir)
 print("Fit degree     :", args.fitdeg)
 print("Fit max|xi|    :", args.fitmax)
+print("Selection      :", args.select)
 print("Ref json       :", args.refjson)
 print("Skip univ_post :", args.skip_univ_post)
 
 post_hoec_energy(dir=str(path_dir), fitdeg=args.fitdeg, fitmax=args.fitmax,
-                 refjson=args.refjson, run_post=not args.skip_univ_post)
+                 refjson=args.refjson, run_post=not args.skip_univ_post,
+                 select=args.select, minpts=args.minpts)

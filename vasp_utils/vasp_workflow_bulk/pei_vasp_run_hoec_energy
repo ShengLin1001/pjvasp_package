@@ -15,10 +15,31 @@
 #  y_hoec_energy/*/y_dir/* with your usual flow, then post-process with
 #  pei_vasp_plot_hoec_energy.py.
 #
+#  --emax/--de apply to the UNIAXIAL reference mode (cubic A, hex M01). xi is a mode
+#  amplitude, not a strain -- the Voigt directions carry shear entries of 2 and up to three
+#  nonzero components -- so by default every other mode is given its own, narrower window,
+#  shrunk until it deforms the cell as hard as the uniaxial mode does at --emax (largest
+#  principal stretch and volume change, whichever binds). The step shrinks by the same
+#  factor, so all modes keep the same number of points.
+#
+#  Without this, one shared window over-strains the mixed modes: for Au at xi=0.12 mode H
+#  reached -27.9% volume (4.1 eV/atom, above the cohesive energy) and returned
+#  C1266 = 1891 GPa where the literature says 9402. --no-scale-window restores that
+#  (the literal Wang-Li reading) if you want to reproduce it.
+#
+#  --static (NSW=0, IBRION=-1) runs each strain as a single ionic step. Use it ONLY for a
+#  structure with no internal degree of freedom -- an FCC conventional cell, where every atom
+#  is a lattice translation of every other, so a homogeneous strain leaves all forces zero and
+#  the relaxation is a no-op (measured max displacement: 1.13e-15 A). Wang-Li picked FCC for
+#  exactly this reason. HCP has a real internal degree of freedom under a general strain, so
+#  --static there returns FROZEN-ION constants, not the relaxed ones. Do not use it for HCP.
+#
 #  >>> Example usage:
 #      pei_vasp_run_hoec_energy                        # auto-detect symmetry
 #      pei_vasp_run_hoec_energy --symmetry hex
 #      pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025
+#      pei_vasp_run_hoec_energy --static --de 0.0025   # FCC: single ionic step, Wang-Li step
+#      pei_vasp_run_hoec_energy --no-scale-window      # one shared window (old behaviour)
 #
 #  Prerequisite: y_full_relax must be a CONVERGED conventional cell (dense k-points,
 #  high ENCUT, tight EDIFF ~1e-8). Fourth-order constants are very sensitive to these
@@ -33,8 +54,17 @@ parser = argparse.ArgumentParser(
     description="Generate higher-order elastic-constant VASP input directories from y_full_relax.")
 parser.add_argument("--symmetry", default="auto", choices=["auto", "cubic", "hex"],
                     help="Crystal symmetry; 'auto' detects it from the reference cell.")
-parser.add_argument("--emax", type=float, default=0.12, help="Max |xi| (default 0.12).")
-parser.add_argument("--de", type=float, default=0.01, help="xi step (default 0.01).")
+parser.add_argument("--emax", type=float, default=0.12,
+                    help="Max |xi| for the uniaxial reference mode (default 0.12).")
+parser.add_argument("--de", type=float, default=0.01,
+                    help="xi step for the uniaxial reference mode (default 0.01).")
+parser.add_argument("--no-scale-window", dest="scale_window", action="store_false",
+                    help="Give every mode the same [-emax, emax] instead of an equally "
+                         "severe window of its own (the old behaviour).")
+parser.add_argument("--static", "--no-relax-ions", dest="relax_ions", action="store_false",
+                    help="Single ionic step (NSW=0, IBRION=-1) instead of relaxing the ions "
+                         "at fixed cell shape. Valid ONLY where the cell has no internal "
+                         "degree of freedom (FCC); NOT for HCP.")
 parser.add_argument("--srcdir", default="y_full_relax", help="Relaxed reference directory.")
 parser.add_argument("--outdir", default="y_hoec_energy", help="Output directory.")
 args = parser.parse_args()
@@ -42,11 +72,14 @@ args = parser.parse_args()
 print("Symmetry   :", args.symmetry)
 print("Max |xi|   :", args.emax)
 print("xi step    :", args.de)
+print("Per-mode   :", "equal-severity windows" if args.scale_window else "one shared window")
+print("Ions       :", "relaxed (ISIF=2)" if args.relax_ions else "static (NSW=0, IBRION=-1)")
 print("Source dir :", args.srcdir)
 print("Output dir :", args.outdir)
 
 path_root = Path.cwd().resolve()
 print("🟢 ===== pei_vasp_run_hoec_energy in %s" % path_root)
 generate_hoec_dirs(path_root=path_root, symmetry=args.symmetry,
-                   emax=args.emax, de=args.de,
+                   emax=args.emax, de=args.de, scale_window=args.scale_window,
+                   relax_ions=args.relax_ions,
                    srcdir=args.srcdir, outdir=args.outdir)
