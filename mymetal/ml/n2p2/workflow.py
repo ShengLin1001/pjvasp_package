@@ -463,26 +463,44 @@ class PeiN2p2:
         return lblock
 
 
-    def select_sf_by_cur(self, n_select: int = 48, max_zero_frac: float = 0.05, zero_atol: float = 0.0, if_copy_to_train: bool = True, n_select_by_type: dict = None) -> list:
-        """用零值过滤和 CUR 从候选对称函数中选择最终集合。
+    def select_sf_by_cur(self, n_select: int = 48, max_zero_frac: float = 1.0, zero_atol: float = 0.0,
+                         min_std: float = 1e-4, standardize: bool = True,
+                         if_copy_to_train: bool = True, n_select_by_type: dict = None) -> list:
+        """用零值/方差过滤和 CUR 从候选对称函数中选择最终集合。
 
-        从每个 scaling 子目录的 function.data 收集每条候选 SF 的特征，先剔除零值比例
-        超过 ``max_zero_frac`` 的 SF，再用 CUR 从剩余 SF 中选出最重要的 ``n_select`` 条，
-        追加到干净的 input.nn.nosf 后生成最终 input.nn——不含占位 SF，因为占位 SF 只写进
-        各 scaling 子目录、从不写进 file/ 的 nosf。
+        从每个 scaling 子目录的 function.data 收集每条候选 SF 的逐原子特征，先做一道宽松
+        过滤——默认**关掉零值过滤**（``max_zero_frac=1.0``），只用标准差 <= ``min_std``
+        （默认 1e-4）剔除近常数（对数据集不敏感）的死特征——再用 CUR 从剩余 SF 中选出最重要
+        的 ``n_select`` 条，追加到干净的 input.nn.nosf 后生成最终 input.nn——不含占位 SF，
+        因为占位 SF 只写进各 scaling 子目录、从不写进 file/ 的 nosf。
+
+        CUR 直接在逐原子特征矩阵 ``feat_atom``（本例约 8.5 万原子 × 220 SF，单次 ~80s）上
+        做，保留帧内原子间的区分度。分工是：过滤只负责剔除真正退化（近常数）的列，避免
+        标准化把它们的数值噪声放大到与真信号同量级；真正"选出有用 SF"由 CUR + 列标准化完成。
 
         Note:
+            零值比例只衡量"这条 SF 对多少原子为 0"（稀疏性），而标准差衡量"它在数据集上变不变"
+            （敏感度）。"对数据集不敏感"的本意是**不变**，故以 ``min_std`` 为主判据；零值过滤
+            默认关闭，因为在本例中它会误杀稀疏但有区分力的角度型 SF（如仅 5.2% 为 0、但满量程
+            的 G2/G9）。需要时可通过 ``max_zero_frac<1`` 重新开启。
             ``zero_atol=0.0`` 与参考模板一致（只算精确零）；取 ~1e-9 会把截断球边缘的
-            "准零"也算上，从而改变剔除和选择结果（n2p2 的 function.data 为 10 位小数）。
+            "准零"也算上（n2p2 的 function.data 为 10 位小数）。
 
         Args:
             n_select: CUR 选择的对称函数数量（仅在 n_select_by_type 为 None 时生效）。
-            max_zero_frac: 允许的最大零值比例。
-            zero_atol: 判定近零值的绝对容差。
+            max_zero_frac: 允许的最大零值比例。默认 1.0 = 关闭零值过滤；设 <1 可重新开启。
+            zero_atol: 判定近零值的绝对容差（仅在零值过滤开启时有意义）。
+            min_std: 保留 SF 所需的最小逐原子标准差，剔除近常数（对数据集不敏感）的 SF。
+                默认 1e-4，作为主过滤判据；这是"误杀稀疏有用角度型"与"放进噪声放大的近平
+                SF"之间的折中，需要更激进/更保守可在 1e-3 ~ 1e-6 间调。
+            standardize: CUR 前是否对各列做 z-score 标准化，去除未中心化 CUR 偏爱高幅值
+                常数列的偏差，使选择跟随变化量而非绝对水平。
             if_copy_to_train: 是否将最终 input.nn 复制到训练目录。
             n_select_by_type: 若给定（{symfunction_type: 数量}，如 {2: 15, 9: 5}），对每个
                 对称函数类型单独 CUR、各选够指定数量，忽略 n_select。用于保证类型配额
-                （纯体积拉伸下角度型 G9 方差低，全局 CUR 会把它们全部忽略）。
+                （纯体积拉伸下角度型 G9 方差低，全局 CUR 会把它们全部忽略）。若某类型过滤后
+                的候选数不足配额，则取二者较小值并打印告警，而不是报错——数量不足恰说明该
+                数据集对此类型不敏感。
 
         Returns:
             被选中的对称函数行列表。
@@ -514,21 +532,23 @@ class PeiN2p2:
         np.save(dir_sf_file / 'feat_atom.npy', feat_atom)
         np.save(dir_sf_file / 'feat_av.npy', feat_av)
 
-        # 剔除零值比例过高的 sf
-        kept_idx, dropped_idx = filter_zero_columns(feat_atom, max_zero_frac=max_zero_frac, zero_atol=zero_atol)
+        # 剔除零值比例过高或近常数（对数据集不敏感）的 sf
+        kept_idx, dropped_idx = filter_zero_columns(feat_atom, max_zero_frac=max_zero_frac,
+                                                    zero_atol=zero_atol, min_std=min_std)
         with open(dir_sf_file / 'SFs_dropped.dat', 'w', encoding='utf-8') as f:
             for i in dropped_idx:
                 f.write(lsf_all[i])
-        print(f"Dropped {len(dropped_idx)} sfs (zero fraction > {max_zero_frac}), {len(kept_idx)} sfs left for CUR.")
+        print(f"Dropped {len(dropped_idx)} sfs (zero fraction > {max_zero_frac} or std <= {min_std}), "
+              f"{len(kept_idx)} sfs left for CUR.")
 
-        # CUR 选择（基于逐帧平均特征，与参考模板一致）
+        # CUR 选择（基于逐原子特征 feat_atom + 列标准化）
         if n_select_by_type is None:
-            lidx_selected = cur_select(feat_av[:, kept_idx], n_select=n_select)
+            lidx_selected = cur_select(feat_atom[:, kept_idx], n_select=n_select, standardize=standardize)
             # 返回的lidx_selected是去0后的索引，需要映射回原始索引
             # sort 仅为了美观
             lsf_selected = sorted([lsf_all[kept_idx[i]] for i in lidx_selected])
         else:
-            # 分类型配额：对每个 symfunction type 单独 CUR，保证各类型恰好选够 n_select_by_type[type]。
+            # 分类型配额：对每个 symfunction type 单独 CUR，各选够 n_select_by_type[type]。
             # type 取每行第 3 个字段（symfunction_short <center> <type> ...）。
             def _sf_type(line):
                 fields = line.split()
@@ -536,11 +556,17 @@ class PeiN2p2:
             lsf_selected = []
             for sftype, n_sel_t in n_select_by_type.items():
                 kept_t = [gi for gi in kept_idx if _sf_type(lsf_all[gi]) == int(sftype)]
-                if len(kept_t) < n_sel_t:
-                    raise ValueError(f"❌ type {sftype}: only {len(kept_t)} candidate sfs left after "
-                                     f"zero-filter, need {n_sel_t}. Loosen max_zero_frac or generate "
-                                     f"more type-{sftype} candidates.")
-                sel_local = cur_select(feat_av[:, kept_t], n_select=n_sel_t)
+                # 过滤后候选不足配额：取较小值并告警，而不是报错。数量不足恰恰说明
+                # 该数据集对此类型不敏感，强行凑数只会引入近常数死特征。
+                n_take = min(n_sel_t, len(kept_t))
+                if n_take == 0:
+                    print(f"⚠️  type {sftype}: 0 candidate sfs left after zero/std filter, skipped "
+                          f"(数据集对该类型完全不敏感).")
+                    continue
+                if n_take < n_sel_t:
+                    print(f"⚠️  type {sftype}: only {len(kept_t)} candidate sfs left after zero/std "
+                          f"filter, selecting {n_take}/{n_sel_t} (数据集对该类型敏感的 SF 不足).")
+                sel_local = cur_select(feat_atom[:, kept_t], n_select=n_take, standardize=standardize)
                 lsf_selected += [lsf_all[kept_t[i]] for i in sel_local]
             lsf_selected = sorted(lsf_selected)
         with open(dir_sf_file / 'SFs_selected.dat', 'w', encoding='utf-8') as f:

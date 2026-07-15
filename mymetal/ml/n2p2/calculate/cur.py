@@ -116,12 +116,20 @@ def collect_sf_features(ldir: list = None, fname: str = 'function.data') -> tupl
     return feat_atom, feat_av
 
 
-def filter_zero_columns(feat_atom: np.ndarray = None, max_zero_frac: float = 0.05, zero_atol: float = 0.0) -> tuple:
-    """Find SF columns whose fraction of (near-)zero values is too large.
+def filter_zero_columns(feat_atom: np.ndarray = None, max_zero_frac: float = 0.05,
+                        zero_atol: float = 0.0, min_std: float = 0.0) -> tuple:
+    """Drop SF columns that carry no information for this dataset.
 
-    A SF that is zero for most atoms carries no information (e.g. its cutoff
-    sphere is empty for the structures in the dataset) and would only add noise
-    to the CUR selection.
+    Two failure modes are removed here:
+
+    1. **Too many zeros** — a SF that is zero for most atoms has an (almost)
+       empty cutoff sphere on the dataset (``n_zero / n_valid > max_zero_frac``).
+    2. **Near-constant / low variance** — a SF whose per-atom value barely
+       changes across the whole dataset (``std <= min_std``) is *insensitive to
+       the dataset*: it carries no discriminative information regardless of
+       whether its constant value is zero or not. The zero-fraction test alone
+       cannot catch a SF that is constant at a non-zero value, so this is the
+       criterion that actually screens "对数据集不敏感" SFs.
 
     Args:
         feat_atom: Per-atom feature matrix ``(n_atoms_total, n_sf)``, -1 marks
@@ -132,6 +140,9 @@ def filter_zero_columns(feat_atom: np.ndarray = None, max_zero_frac: float = 0.0
             i.e. printed as 0.0000000000 in function.data); ~1e-9 additionally
             counts cutoff-tail values that are informationally zero. Must be
             < 1 so the -1 markers are never matched.
+        min_std: Minimum per-column standard deviation (over valid, non -1
+            entries) to keep a SF. 0.0 disables the variance screen (backward
+            compatible); a small value such as 1e-4 removes near-constant SFs.
 
     Returns:
         A tuple ``(kept_idx, dropped_idx)`` of integer index arrays.
@@ -140,23 +151,35 @@ def filter_zero_columns(feat_atom: np.ndarray = None, max_zero_frac: float = 0.0
     dropped_idx = []
     for i in range(feat_atom.shape[1]):
         col = feat_atom[:, i]
+        valid = col[col != -1]
         # 所有的SF数量
-        n_valid = np.count_nonzero(col != -1)
+        n_valid = valid.size
         # 为 0 的SF数量
-        n_zero = np.count_nonzero(np.abs(col) <= zero_atol)
-        if n_valid == 0 or n_zero / n_valid > max_zero_frac:
+        n_zero = np.count_nonzero(np.abs(valid) <= zero_atol)
+        std = float(valid.std()) if n_valid > 0 else 0.0
+        if n_valid == 0 or n_zero / n_valid > max_zero_frac or std <= min_std:
             dropped_idx.append(i)
         else:
             kept_idx.append(i)
     return np.array(kept_idx, dtype=int), np.array(dropped_idx, dtype=int)
 
 
-def cur_select(feat: np.ndarray = None, n_select: int = 48) -> np.ndarray:
+def cur_select(feat: np.ndarray = None, n_select: int = 48, standardize: bool = True) -> np.ndarray:
     """Select the most informative feature columns by CUR decomposition.
 
     Args:
-        feat: Feature matrix ``(n_samples, n_sf)``, e.g. per-frame averages.
+        feat: Feature matrix ``(n_samples, n_sf)``, e.g. per-atom SF values.
+            Rows that are entirely -1 (atoms of other elements) are dropped
+            before the decomposition.
         n_select: Number of columns to select.
+        standardize: If True (default) each column is z-scored (centered and
+            scaled to unit std) before CUR. CUR ranks columns by their weight in
+            the dominant singular subspace of the *uncentered* matrix, so on raw
+            data a high-magnitude but low-variance (dataset-insensitive) SF can
+            be favoured through its mean offset. Centering removes that bias so
+            selection follows variation, not absolute level; scaling makes SFs
+            of different magnitude comparable. Columns with zero std are left at
+            zero (they should already be removed by ``filter_zero_columns``).
 
     Returns:
         Integer array with the indices of the selected columns.
@@ -165,6 +188,18 @@ def cur_select(feat: np.ndarray = None, n_select: int = 48) -> np.ndarray:
     from skcosmo.feature_selection import CUR
 
     X = np.asarray(feat, dtype=float)
+    # 丢掉整行都是 -1 的原子（非中心元素），避免 -1 标记污染分解
+    row_valid = ~np.all(X == -1, axis=1)
+    X = X[row_valid]
+
+    if standardize:
+        mu = X.mean(axis=0)
+        sd = X.std(axis=0)
+        nz = sd > 0
+        Xs = np.zeros_like(X)
+        Xs[:, nz] = (X[:, nz] - mu[nz]) / sd[nz]
+        X = Xs
+
     y = np.random.rand(X.shape[0])  # required by the fit API, not used by CUR
     selected_idx = np.asarray(CUR(n_to_select=int(n_select)).fit(X, y).selected_idx_, dtype=int)
 
