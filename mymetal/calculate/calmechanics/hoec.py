@@ -62,6 +62,9 @@ Change log:
       constants they alone determine -- for Au at xi=0.12, mode H reached -27.9% volume
       (4.1 eV/atom, above the cohesive energy) and returned C1266 = 1891 GPa against a
       literature 9402.
+    - Fixed by Codex on 2026-07-14: project elastic coefficients with the dual monomial
+      representation, add hex mode M20 so the fourth-order system has rank 19/19, and
+      validate hex rotational invariance plus the analytic M04/M06 SOEC identity.
 """
 
 import numpy as np
@@ -288,7 +291,10 @@ def reduce_symmetry(symmetry: str = None, order: int = None,
         M = voigt_strain_M(R3)
         Vg = np.array([mono_eval_vec(M @ S[i], lmono) for i in range(n)])
         Tg = (V0inv @ Vg).T                        # mono_m(M s) = sum_m' T[m,m'] mono_m'(s)
-        Pr += Tg
+        # Energy is q(s)^T c, so q(Ms)=Tq(s) requires T^T c=c. The monomials and
+        # their coefficients belong to dual representations; projecting with T itself
+        # happens to work for cubic here but violates hex invariance at every order.
+        Pr += Tg.T
     Pr /= len(lgroup)
     # to here: Pr projects the monomial-coefficient space onto invariant vectors
 
@@ -358,9 +364,10 @@ MODES_CUBIC = {
     'J': (1, 0, 0, 2, 2, 2),
     'K': (1, 1, 1, 0, 0, 0),
 }
-# hexagonal: 19 curated single-parameter modes, chosen so that the mode set keeps
-# full column rank at every order (SOEC 5, TOEC 10, FOEC 19). Dropping or reordering
-# them can make the 4th-order system singular -- selftest_hoec() checks the rank.
+# hexagonal: 20 curated single-parameter modes. M01--M19 span only 18 of the 19
+# fourth-order constants after the physically correct dual projection; M20 supplies the
+# missing direction and leaves one out-of-sample equation for an overdetermined check.
+# Dropping modes can make the 4th-order system singular -- selftest_hoec() checks the rank.
 MODES_HEX = {
     'M01': (1, 0, 0, 0, 0, 0),    # a-axis uniaxial
     'M02': (0, 0, 1, 0, 0, 0),    # c-axis uniaxial
@@ -381,6 +388,7 @@ MODES_HEX = {
     'M17': (1, 1, 1, 0, 0, 2),
     'M18': (1, 0, 1, 0, 0, 2),
     'M19': (0, 1, -1, 0, 0, 0),
+    'M20': (0, 1, 0, 0, 0, 0),    # second basal uniaxial direction; closes FOEC rank
 }
 MODES = {'cubic': MODES_CUBIC, 'hex': MODES_HEX}
 
@@ -686,11 +694,12 @@ def _fmt(lcoeff: np.ndarray = None, lname: list = None) -> str:
 
 
 def selftest_hoec() -> bool:
-    """Verify the reduced model: cubic vs Wang-Li Table I, and mode-set rank.
+    """Verify cubic formulas plus hex invariance, identities and mode-set rank.
 
     Returns:
-        bool: True when the cubic P coefficients reproduce Table I and every
-        mode-set/order combination has full column rank.
+        bool: True when the cubic P coefficients reproduce Table I, the hex
+        coefficients are rotationally invariant, analytic SOEC identities hold,
+        and every mode-set/order combination has full column rank.
     """
     ### cubic: compare against Wang-Li Table I for unambiguous modes ---------------
     dict_ref = {
@@ -721,18 +730,58 @@ def selftest_hoec() -> bool:
         ok = ok and full
         print('  order %d rank %d/%d %s' % (o, r, len(mc.names(o)), '✅' if full else '❌'))
 
-    ### hexagonal: only a rank check, no published table to compare against --------
-    print('\n================ ✅ hexagonal (HCP) — reduced model & rank check')
+    ### hexagonal: invariance, analytic SOEC identities and rank -------------------
+    print('\n================ ✅ hexagonal (HCP) — invariance, identities & rank')
     mh = get_model('hex')
     for o in (2, 3, 4):
         print('  order %d (%d): %s' % (o, len(mh.names(o)), ['C' + n for n in mh.names(o)]))
+
+    rng = np.random.default_rng(20260714)
+    lprobe = rng.standard_normal((30, 6))
+    lgroup = close_group(GENERATORS['hex'])
+    for o in (2, 3, 4):
+        err = max(np.max(np.abs(mh.P_coeffs(o, voigt_strain_M(R3) @ d)
+                                - mh.P_coeffs(o, d)))
+                  for d in lprobe for R3 in lgroup)
+        invariant = err < 1e-10
+        ok = ok and invariant
+        print('  order %d rotational-invariance max error %.3e %s'
+              % (o, err, '✅' if invariant else '❌'))
+
+    expected_m04_m06 = np.array([1.0, -1.0, 0.0, 0.0, 0.0])
+    row_m04 = mh.P_coeffs(2, MODES_HEX['M04'])
+    row_m06 = mh.P_coeffs(2, MODES_HEX['M06'])
+    identity = (np.allclose(row_m04, expected_m04_m06, atol=1e-12)
+                and np.allclose(row_m06, expected_m04_m06, atol=1e-12))
+    ok = ok and identity
+    print('  M04/M06 P2 = C11-C12: %s / %s %s'
+          % (_fmt(row_m04, mh.names(2)), _fmt(row_m06, mh.names(2)),
+             '✅' if identity else '❌'))
+
     for o in (2, 3, 4):
         A = mh.system(o, list(MODES_HEX.values()))
         r = np.linalg.matrix_rank(A, tol=1e-7)
         full = (r == len(mh.names(o)))
         ok = ok and full
-        print('  order %d rank %d/%d cond=%.0f %s' %
-              (o, r, len(mh.names(o)), np.linalg.cond(A), '✅' if full else '❌'))
+        over = A.shape[0] - r
+        print('  order %d system %dx%d rank %d/%d cond=%.1f row-redundancy=%d %s'
+              % (o, A.shape[0], A.shape[1], r, len(mh.names(o)), np.linalg.cond(A),
+                 over, '✅' if full else '❌'))
+
+    A4 = mh.system(4, list(MODES_HEX.values()))
+    lname = list(MODES_HEX)
+    lremovable = []
+    for int_drop, name in enumerate(lname):
+        array_drop = np.delete(A4, int_drop, axis=0)
+        if np.linalg.matrix_rank(array_drop, tol=1e-7) == A4.shape[1]:
+            lremovable.append(name)
+    redundant_pair = (lremovable == ['M04', 'M06']
+                      and np.allclose(mh.P_coeffs(4, MODES_HEX['M04']),
+                                      mh.P_coeffs(4, MODES_HEX['M06']), atol=1e-12))
+    ok = ok and redundant_pair
+    print('  order 4 individually removable modes: %s %s'
+          % (', '.join(lremovable) if lremovable else 'none',
+             '✅' if redundant_pair else '❌ EXPECTED M04, M06'))
     print('\n%s' % ('🎉 self-test PASSED' if ok else '❌ self-test FAILED'))
     return ok
 

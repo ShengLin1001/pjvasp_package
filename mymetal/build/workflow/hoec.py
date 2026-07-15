@@ -40,8 +40,7 @@ Change log:
       (``scale_window=True``, the default; ``--no-scale-window`` restores the single shared
       window). The manifest carries each mode's exact xi list, scale and step.
     - Revised by J. P. on 2026-07-14: ``relax_ions=False`` (CLI ``--static``) runs every strain
-      as a single ionic step (NSW=0, IBRION=-1). Only valid for structures with no internal
-      degrees of freedom -- see :func:`generate_hoec_dirs`.
+      as a single ionic step (NSW=0, IBRION=-1), returning clamped-ion constants.
 """
 
 import json
@@ -71,9 +70,9 @@ INCAR_TAGS = {
     'nbands': 'comment',
 }
 
-# added on top of INCAR_TAGS only when relax_ions=False: one ionic step, no relaxation.
-# NOT unconditional -- it would silently freeze the internal degrees of freedom that HCP
-# (and any multi-sublattice cell) really has. See generate_hoec_dirs.
+# Added on top of INCAR_TAGS only when relax_ions=False: one ionic step, no relaxation.
+# This deliberately follows a clamped-ion branch; it must not be confused with relaxed-ion
+# constants in a multi-sublattice structure. See generate_hoec_dirs.
 INCAR_TAGS_STATIC = {
     'nsw': '0',
     'ibrion': '-1',
@@ -106,8 +105,7 @@ def prepare_hoec_reference(path_full_relax: Path = None, path_tmp: Path = None,
         path_full_relax (Path): The relaxed reference directory.
         path_tmp (Path): Temp directory to create (removed first if present).
         relax_ions (bool): Relax the ions at fixed cell shape. ``False`` adds NSW=0 /
-            IBRION=-1, which is only correct for a cell with no internal degrees of
-            freedom (see :func:`generate_hoec_dirs`).
+            IBRION=-1 and returns the clamped-ion response.
 
     Returns:
         Path: Path to the reference CONTCAR inside ``path_tmp``.
@@ -178,16 +176,13 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     the same factor, so every mode keeps the same number of points. Pass
     ``scale_window=False`` for one shared ``[-emax, emax]``, the original behaviour.
 
-    ``relax_ions=False`` runs every strain as a single ionic step (NSW=0, IBRION=-1).
-    **This is only valid for a structure with no internal degrees of freedom**, i.e. one
-    where every atom is related to every other by a lattice translation, so that a
-    homogeneous strain leaves all forces zero by symmetry and the relaxation is a no-op.
-    The 4-atom FCC conventional cell is such a structure (Wang & Li chose FCC for exactly
-    this reason: "they do not possess internal deformation"), and it is confirmed here --
-    the largest POSCAR->CONTCAR displacement over a full relaxed FCC run was 1.13e-15 A.
-    **HCP is not**: its two-atom basis has an internal degree of freedom under a general
-    strain, and NSW=0 would silently return unrelaxed (frozen-ion) constants, which are a
-    different quantity from the relaxed ones. Keep the default there.
+    ``relax_ions=False`` runs every strain as a single ionic step (NSW=0, IBRION=-1) and
+    returns clamped-ion constants. For FCC this equals the relaxed-ion response because
+    homogeneous strain does not activate an internal displacement. For a multi-sublattice
+    structure such as HCP, clamped-ion and relaxed-ion constants are different physical
+    quantities. The static option is intentional when a metastable HCP branch must be kept
+    from following an internal shuffle into another stacking sequence; all imported lower-
+    order constants must then use the same clamped-ion definition.
 
     Args:
         path_root (str): Directory containing ``srcdir``. Defaults to the cwd.
@@ -196,7 +191,7 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         de (float): Step in xi for the uniaxial reference mode.
         scale_window (bool): Give each mode an equally severe window of its own.
         relax_ions (bool): Relax the ions at fixed cell shape (ISIF=2). ``False`` forces a
-            single ionic step; see above for when that is legitimate.
+            single ionic step and returns clamped-ion constants.
         srcdir (str): Reference directory name.
         outdir (str): Output directory name (removed first if present).
 
@@ -255,9 +250,8 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     print("🧊 ions         : %s" % ("relaxed at fixed cell shape (ISIF=2)" if relax_ions
                                    else "frozen, single ionic step (NSW=0, IBRION=-1)"))
     if not relax_ions and symmetry != 'cubic':
-        warn("relax_ions=False on a '%s' cell. A single ionic step only gives the relaxed "
-             "constants when the structure has no internal degree of freedom (FCC). Here it "
-             "returns FROZEN-ION constants, which are a different quantity." % symmetry)
+        warn("relax_ions=False on a '%s' cell: generating CLAMPED-ION constants. Keep SOEC "
+             "and every higher order on this same response definition." % symmetry)
     print("📊 total calcs  : %d modes × %d strains = %d %s"
           % (len(dict_modes), len(lxi), len(dict_modes) * len(lxi),
              "ionic relaxations" if relax_ions else "single-point energies"))

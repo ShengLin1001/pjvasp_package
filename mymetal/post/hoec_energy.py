@@ -917,7 +917,7 @@ def plot_hoec_energy(path_out: Path = None, dict_data: dict = None,
         axes[i * ncol].set_ylabel('Elastic energy density (GPa)')
 
     plt.savefig(path_fig)
-    plt.close(fig)                     # free the figure: 19 hex modes per phase adds up
+    plt.close(fig)                     # free the figure: 20 hex modes per phase adds up
     print("📈 wrote %s" % path_fig)
 
 

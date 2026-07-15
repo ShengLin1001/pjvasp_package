@@ -8,7 +8,7 @@
 #  Run it at the level of `y_full_relax`, exactly like pei_vasp_run_cij_energy. It is
 #  the higher-order sibling of that workflow: same entry point, same y_dir/<strain>
 #  layout. The deformation is tensorial (needs a matrix square root) and there are 11
-#  cubic / 19 hexagonal modes, so it is Python rather than bash; the real work lives in
+#  cubic / 20 hexagonal modes, so it is Python rather than bash; the real work lives in
 #  mymetal.build.workflow.hoec.
 #
 #  It ONLY prepares input directories -- no Slurm script, no sbatch. Submit
@@ -27,18 +27,16 @@
 #  C1266 = 1891 GPa where the literature says 9402. --no-scale-window restores that
 #  (the literal Wang-Li reading) if you want to reproduce it.
 #
-#  --static (NSW=0, IBRION=-1) runs each strain as a single ionic step. Use it ONLY for a
-#  structure with no internal degree of freedom -- an FCC conventional cell, where every atom
-#  is a lattice translation of every other, so a homogeneous strain leaves all forces zero and
-#  the relaxation is a no-op (measured max displacement: 1.13e-15 A). Wang-Li picked FCC for
-#  exactly this reason. HCP has a real internal degree of freedom under a general strain, so
-#  --static there returns FROZEN-ION constants, not the relaxed ones. Do not use it for HCP.
+#  --static (NSW=0, IBRION=-1) runs each strain as a single ionic step and returns clamped-ion
+#  constants. For HCP this is intentionally different from relaxed-ion constants and is the
+#  correct choice when the metastable HCP branch must be kept from following an internal
+#  shuffle into another stacking sequence. Use clamped-ion SOEC with it.
 #
 #  >>> Example usage:
 #      pei_vasp_run_hoec_energy                        # auto-detect symmetry
 #      pei_vasp_run_hoec_energy --symmetry hex
 #      pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025
-#      pei_vasp_run_hoec_energy --static --de 0.0025   # FCC: single ionic step, Wang-Li step
+#      pei_vasp_run_hoec_energy --symmetry hex --static # HCP clamped-ion branch
 #      pei_vasp_run_hoec_energy --no-scale-window      # one shared window (old behaviour)
 #
 #  Prerequisite: y_full_relax must be a CONVERGED conventional cell (dense k-points,
@@ -56,15 +54,15 @@ parser.add_argument("--symmetry", default="auto", choices=["auto", "cubic", "hex
                     help="Crystal symmetry; 'auto' detects it from the reference cell.")
 parser.add_argument("--emax", type=float, default=0.12,
                     help="Max |xi| for the uniaxial reference mode (default 0.12).")
-parser.add_argument("--de", type=float, default=0.01,
-                    help="xi step for the uniaxial reference mode (default 0.01).")
+parser.add_argument("--de", type=float, default=0.0025,
+                    help="xi step for the uniaxial reference mode (default 0.0025).")
 parser.add_argument("--no-scale-window", dest="scale_window", action="store_false",
                     help="Give every mode the same [-emax, emax] instead of an equally "
                          "severe window of its own (the old behaviour).")
 parser.add_argument("--static", "--no-relax-ions", dest="relax_ions", action="store_false",
                     help="Single ionic step (NSW=0, IBRION=-1) instead of relaxing the ions "
-                         "at fixed cell shape. Valid ONLY where the cell has no internal "
-                         "degree of freedom (FCC); NOT for HCP.")
+                         "at fixed cell shape; returns clamped-ion constants. Use clamped-ion "
+                         "SOEC with this option for multi-sublattice structures such as HCP.")
 parser.add_argument("--srcdir", default="y_full_relax", help="Relaxed reference directory.")
 parser.add_argument("--outdir", default="y_hoec_energy", help="Output directory.")
 args = parser.parse_args()
