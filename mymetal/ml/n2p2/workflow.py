@@ -44,6 +44,7 @@ from pathlib import Path
 import shutil
 import shlex
 import subprocess
+import re
 import time
 import getpass
 import warnings
@@ -239,9 +240,53 @@ class PeiN2p2:
         return elements
 
 
+    @staticmethod
+    def _select_symmetric_strain_dirs(ldir: list, n_side: int = 10, zero_atol: float = 1e-12) -> list:
+        """对应变扫描子目录做对称抽样：保留 0 应变 + 正/负各 n_side 个近似均匀点。
+
+        子目录名形如 ``s_+0.0000`` / ``s_-0.0025``（末尾带符号的应变值）。解析应变后按
+        零 / 负 / 正 分三组，各组按应变升序排列，再用 ``np.linspace`` 取含首尾的 n_side
+        个近似均匀索引——正负两侧各 n_side 个、中间 1 个零应变，共 ``2*n_side+1`` 个。
+        某侧点数不足 n_side 时取该侧全部（去重、不补齐）。
+
+        Note:
+            "均匀"指在该侧应变的**索引**上均匀（linspace + round），当原网格等间距时
+            即应变均匀；含首尾点，故会保留最大幅度应变（如 ±0.12）。原网格非等距时退化
+            为按序号均匀。无法从目录名解析出应变的子目录会被跳过。
+
+        Args:
+            ldir: 应变扫描的结构子目录列表（每个是一个应变点）。
+            n_side: 正负两侧各保留的点数。
+            zero_atol: 判定"零应变"的容差。
+
+        Returns:
+            抽样后的子目录列表，按应变升序（负 -> 0 -> 正）。
+        """
+        def _parse_strain(name):
+            # 末尾带符号的浮点即应变；解析不到（非应变目录）返回 None，交由调用处跳过
+            m = re.search(r'([-+]?\d+(?:\.\d+)?)\s*$', name)
+            return float(m.group(1)) if m else None
+
+        def _even_pick(lseq, n):
+            # 索引上取 n 个含首尾的近似均匀点；点数不足则全取（round 后去重防重复索引）
+            if len(lseq) <= n:
+                return list(lseq)
+            lidx = np.unique(np.linspace(0, len(lseq) - 1, n).round().astype(int))
+            return [lseq[i] for i in lidx]
+
+        lstrain = [(_parse_strain(d.name), d) for d in ldir]
+        lstrain = sorted(((s, d) for s, d in lstrain if s is not None), key=lambda x: x[0])
+        lzero = [d for s, d in lstrain if abs(s) <= zero_atol]
+        lneg  = [d for s, d in lstrain if s < -zero_atol]   # 升序：最负 -> 最接近 0
+        lpos  = [d for s, d in lstrain if s >  zero_atol]    # 升序：最接近 0 -> 最正
+
+        return _even_pick(lneg, n_side) + lzero + _even_pick(lpos, n_side)
+
+
     def generate_data(self, dir_data_source: Path = None, data_tag_dict: dict = None,
                       if_adjust_size: bool = False, size_top: int = 72,
-                      size_bottom: int = 36, size_close: int = 48):
+                      size_bottom: int = 36, size_close: int = 48,
+                      dict_subsample: dict = None):
         """从 VASP OUTCAR 生成 n2p2 训练数据。
 
         遍历 ``dir_data_source/<tag>/<subdir>/y_dir`` 下的每个子目录，用
@@ -263,6 +308,10 @@ class PeiN2p2:
             size_top: 原子数上限。原子数已超过此值的结构（如大平板）保持原样不复制。
             size_bottom: 原子数下限。
             size_close: 规整目标原子数，复制方案在区间内尽量逼近此值。
+            dict_subsample: 可选的按子目录抽样表 ``{子目录路径子串: n_side}``。某个
+                ``subdir`` 命中任一 key（子串匹配）时，只加载该子目录下 0 应变 + 正/负各
+                ``n_side`` 个近似均匀应变点（见 ``_select_symmetric_strain_dirs``），用于给
+                应变点过密的数据（如 HOEC 每模式 97 点）减重；默认 None 表示全部加载。
 
         Raises:
             FileNotFoundError: 某个数据子目录下缺少 y_dir。
@@ -291,7 +340,17 @@ class PeiN2p2:
 
                 print(f'========{tag} - {subdir}')
                 # search in sub-subdir
-                for d in sorted(path_ydir.iterdir()):
+                ldir_struct = [d for d in sorted(path_ydir.iterdir()) if d.is_dir()]
+
+                # 可选：对应变点过密的子目录（如 HOEC）对称抽样，0 应变 + 每侧 n_side 个均匀点
+                n_side = next((n for token, n in (dict_subsample or {}).items() if token in subdir), None)
+                if n_side is not None:
+                    n_before = len(ldir_struct)
+                    ldir_struct = self._select_symmetric_strain_dirs(ldir_struct, n_side=n_side)
+                    print(f"  ↘ subsample {tag}/{subdir}: {n_before} -> {len(ldir_struct)} "
+                          f"structures (0 应变 + 每侧 {n_side} 个均匀应变点)")
+
+                for d in ldir_struct:
                     if d.is_dir():
                         comment_file = '/'.join(d.parts[8:])
                         mynnpdata = nnpdata()
