@@ -5,17 +5,48 @@
 # Usage:
 #   pei_vasp_univ_sbatch <job_dir> [vasp_executable] [completion_marker] [smaller_ediff_marker]
 #
+# completion_marker defaults to whichever line the run in <job_dir> can actually print:
+# "reached required accuracy" only appears when an ionic minimisation converges, so a
+# static run (NSW=0 / IBRION=-1) would never match it and every directory would be
+# reported as failed even though VASP succeeded. The INCAR is read to tell the two apart.
+# Pass a 3rd argument to override the detection.
+#
 # Exit codes:
 #   0   calculation completed after this run
 #   10  calculation was already completed and skipped
 #   1   calculation failed or required files were missing
 
+RELAX_MARKER="reached required accuracy"              # ionic minimisation converged
+STATIC_MARKER="aborting loop because EDIFF is reached" # SCF converged (the only criterion a
+                                                       # static run has; "General timing" is
+                                                       # printed even when SCF does not converge)
+
 launcher="${MY_LAUNCHER:-srun}"
 job_dir="$(realpath "${1:-.}")"   # 转化为真实路径
 vasp_executable="${2:-vasp_std}"
-completion_marker="${3:-reached required accuracy}"
+completion_marker="${3:-}"
 smaller_ediff_marker="${4:-please rerun with smaller EDIFF}"
 ## TODO: 如果建模的时候完全是精确坐标，vasp可能会报错，需要添加微扰进去
+
+# Value of an INCAR tag (case-insensitive), comments and `;`-separated tags handled.
+# Empty when the tag is absent.
+incar_tag() {
+    [[ -f INCAR ]] || return 0
+    awk -v tag="$1" '
+        { sub(/[#!].*/, "") }
+        {
+            n = split($0, parts, ";")
+            for (i = 1; i <= n; i++) {
+                if (match(toupper(parts[i]), "(^|[ \t])" toupper(tag) "[ \t]*=")) {
+                    v = parts[i]
+                    sub(/^[^=]*=[ \t]*/, "", v)
+                    split(v, w, /[ \t]/)
+                    val = w[1]
+                }
+            }
+        }
+        END { print val }' INCAR
+}
 
 echo ""
 echo "================ 📁 $job_dir"
@@ -25,6 +56,19 @@ if ! cd "$job_dir"; then
     exit 1
 fi
 echo "📍 Current dir: $(pwd)"
+
+if [[ -z "$completion_marker" ]]; then
+    nsw="$(incar_tag NSW)"
+    ibrion="$(incar_tag IBRION)"
+    # VASP's own default is NSW=0, so an absent tag means static too.
+    if [[ "${nsw:-0}" == "0" || "$ibrion" == "-1" ]]; then
+        completion_marker="$STATIC_MARKER"
+        echo "🔍 static run (NSW=${nsw:-unset}, IBRION=${ibrion:-unset}) → marker: \"$completion_marker\""
+    else
+        completion_marker="$RELAX_MARKER"
+        echo "🔍 ionic relaxation (NSW=$nsw, IBRION=${ibrion:-unset}) → marker: \"$completion_marker\""
+    fi
+fi
 
 if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
     echo "✅ Calculation completed successfully, skipping..."
