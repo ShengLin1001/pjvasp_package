@@ -17,9 +17,8 @@
 #   1   calculation failed or required files were missing
 
 RELAX_MARKER="reached required accuracy"              # ionic minimisation converged
-STATIC_MARKER="aborting loop because EDIFF is reached" # SCF converged (the only criterion a
-                                                       # static run has; "General timing" is
-                                                       # printed even when SCF does not converge)
+STATIC_MARKER="aborting loop because EDIFF is reached" # SCF converged; is_complete also
+                                                       # requires an energy and normal exit
 
 launcher="${MY_LAUNCHER:-srun}"
 job_dir="$(realpath "${1:-.}")"   # 转化为真实路径
@@ -48,6 +47,15 @@ incar_tag() {
         END { print val }' INCAR
 }
 
+# One marker is not enough: VASP can print the EDIFF line before writing the energy block,
+# then be killed. Require the requested convergence marker, a usable energy and normal exit.
+is_complete() {
+    [[ -f OUTCAR ]] \
+        && grep -qF "$completion_marker" OUTCAR \
+        && grep -qF "energy  without entropy" OUTCAR \
+        && grep -qF "General timing and accounting" OUTCAR
+}
+
 echo ""
 echo "================ 📁 $job_dir"
 
@@ -70,7 +78,7 @@ if [[ -z "$completion_marker" ]]; then
     fi
 fi
 
-if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+if is_complete; then
     echo "✅ Calculation completed successfully, skipping..."
     exit 10
 fi
@@ -104,7 +112,7 @@ if ! $launcher "$vasp_executable"; then
     echo "❌ ERROR: VASP execution failed in $(pwd)." >&2
 fi
 
-if [[ -f OUTCAR ]] && grep -qF "$completion_marker" OUTCAR; then
+if is_complete; then
     echo "✅ Calculation completed successfully after this run."
     exit 0
 fi
