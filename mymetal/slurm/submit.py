@@ -11,6 +11,10 @@ import numpy as np
 from mymetal.universal.print.print import pr, er, warn, fail
 from mymetal.universal.check.type import check_positive_int, check_none, check_basename, check_absolute_path
 
+# 启动失败重试包装器：slurm_utils/slurm_universal/pei_slurm_univ_launch_retry，与 cmd
+# (如 pei_vasp_univ_sbatch) 一样靠 PATH 找到。集中成常量，别在生成 shell 处散写字符串。
+LAUNCH_RETRY_WRAPPER = "pei_slurm_univ_launch_retry"
+
 # generate_script
 
 def generate_script_header(partition: str, nodes: int, ncores: int, module_profile_type: str, MODULE_BLOCKS: dict[str, str]):
@@ -41,13 +45,15 @@ def generate_script_header(partition: str, nodes: int, ncores: int, module_profi
     header += module_block
     return header
 
-def generate_launcher_command(launcher: str, cmd: str, if_use_my_launcher: bool = False):
+def generate_launcher_command(launcher: str, cmd: str, if_use_my_launcher: bool = False,
+                              launch_retry_wrapper: str = LAUNCH_RETRY_WRAPPER):
     """生成用于启动目标计算命令的 shell 代码。
 
     Args:
         launcher: 启动器类型，例如 "srun"、"mpirun" 或 "none"。
         cmd: 实际需要执行的计算命令。
         if_use_my_launcher: 是否通过 MY_LAUNCHER 环境变量传递启动器命令。
+        launch_retry_wrapper: 包在真正 launcher 外面的启动失败重试包装器；置空则不包。
 
     Returns:
         生成的 shell 命令字符串。
@@ -57,12 +63,20 @@ def generate_launcher_command(launcher: str, cmd: str, if_use_my_launcher: bool 
     """
     line_launcher = ""
 
+    # 编译器 / MPI 抖动会让 srun / mpirun 偶发起不来（作业步创建被临时禁用等），程序根本没执行。
+    # 包一层 pei_slurm_univ_launch_retry：它只在命中启动失败特征时重试（默认 2 次 × 10s），
+    # 程序真跑起来了才失败的非 0（VASP 不收敛、输入错误、被杀）原样透传退出码、绝不重试，
+    # 否则必崩的算例会占着整个分配反复重跑。重试次数/间隔由 PEI_LAUNCH_RETRY_MAX /
+    # PEI_LAUNCH_RETRY_SLEEP 环境变量调，不必重新生成脚本。
+    prefix = launch_retry_wrapper + " " if launch_retry_wrapper else ""
+
     # 裸变量写法两处通用：$SLURM_NTASKS 是纯数字，无需内层引号防 word splitting。
     if launcher == "srun":
-        line_launcher_1 = 'srun -n $SLURM_NTASKS'
+        line_launcher_1 = prefix + 'srun -n $SLURM_NTASKS'
     elif launcher == "mpirun":
-        line_launcher_1 = 'mpirun -np $SLURM_NTASKS'
+        line_launcher_1 = prefix + 'mpirun -np $SLURM_NTASKS'
     elif launcher == "none":
+        # 没有 launcher 就没有「启动失败」可言，cmd 直接在本 shell 里跑，不包重试。
         line_launcher_1 = ""
     else:
         fail(f"Unknown launcher type: {launcher}")
@@ -74,8 +88,10 @@ def generate_launcher_command(launcher: str, cmd: str, if_use_my_launcher: bool 
     if if_use_my_launcher:
         # 方案A1：用双引号包裹。该脚本运行在计算节点的 Slurm 作业中，此刻 SLURM_NTASKS
         # 已由 Slurm 设好，于是在 export 这一刻就把它展开成真实核数，直接烤进 MY_LAUNCHER
-        # 的值（例如 'srun -n 16'）。消费端（如 pei_vasp_univ_sbatch）拿到的已是现成数字，
-        # 无需再做二次展开 / eval。注意不能用单引号，否则 $SLURM_NTASKS 会被原样保存。
+        # 的值（例如 'pei_slurm_univ_launch_retry srun -n 16'）。消费端（如 pei_vasp_univ_sbatch）
+        # 拿到的已是现成数字，无需再做二次展开 / eval。注意不能用单引号，否则 $SLURM_NTASKS 会被原样保存。
+        # 重试包装器在这里只是 MY_LAUNCHER 的一段前缀：消费端 `$launcher "$exe"` 不加引号，
+        # 词分割后自然展开成 `pei_slurm_univ_launch_retry srun -n 16 vasp_std`，消费端无需改动。
         line_launcher = f'export MY_LAUNCHER="{line_launcher_1}"\n{line_launcher_2}'
     else:
         # 直接写入分支：该行在作业里执行，运行时 $SLURM_NTASKS 同样会展开。
@@ -491,4 +507,3 @@ def pei_slurm_univ_submit(
 
     ################################### Main control flow to here
     return None
-
