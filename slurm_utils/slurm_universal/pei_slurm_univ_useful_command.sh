@@ -12,10 +12,13 @@
 #   pei_slurm_univ_useful_command.sh --claude         # probe Anthropic / Claude endpoints
 #   pei_slurm_univ_useful_command.sh --openai --proxy # probe OpenAI + show proxy vars
 #   pei_slurm_univ_useful_command.sh --net --ip       # probe every group + public IP
+#   pei_slurm_univ_useful_command.sh --monitor        # summarize running Slurm jobs
 #   pei_slurm_univ_useful_command.sh --all --timeout 3
 
 script_name="$(basename "$0")"
 timeout_default=8
+monitor_interval_default=5
+stale_after_default=600
 
 ################ colors ################
 
@@ -228,6 +231,368 @@ print_summary() {
 }
 # to here
 
+################ Slurm monitor ################
+
+get_job_field() {
+    local job_info="$1"
+    local field="$2"
+    local token
+
+    for token in $job_info; do
+        case "$token" in
+            "$field"=*)
+                printf '%s\n' "${token#*=}"
+                return 0
+                ;;
+        esac
+    done
+    return 1
+}
+
+resolve_job_path() {
+    local path_raw="$1"
+    local path_workdir="$2"
+
+    case "$path_raw" in
+        ''|'(null)'|'N/A'|'Unknown')
+            printf '\n'
+            ;;
+        /*)
+            printf '%s\n' "$path_raw"
+            ;;
+        *)
+            printf '%s/%s\n' "${path_workdir%/}" "$path_raw"
+            ;;
+    esac
+}
+
+is_monitorable_path() {
+    local path_file="$1"
+    [ -n "$path_file" ] && [ "$path_file" != "/dev/null" ]
+}
+
+snapshot_file() {
+    local path_file="$1"
+    local snapshot
+
+    if is_monitorable_path "$path_file" && [ -e "$path_file" ]; then
+        snapshot="$(stat -c '%s %Y' -- "$path_file" 2>/dev/null)"
+        if [ -n "$snapshot" ]; then
+            printf '1 %s\n' "$snapshot"
+            return 0
+        fi
+    fi
+    printf '0 0 0\n'
+}
+
+duration_to_seconds() {
+    local duration="$1"
+    local days=0
+    local clock="$duration"
+    local first=0
+    local second=0
+    local third=0
+    local n_seconds=0
+    local lpart=()
+
+    if [[ "$clock" == *-* ]]; then
+        days="${clock%%-*}"
+        clock="${clock#*-}"
+    fi
+    IFS=':' read -r -a lpart <<< "$clock"
+    case "${#lpart[@]}" in
+        3)
+            first="${lpart[0]}"
+            second="${lpart[1]}"
+            third="${lpart[2]}"
+            ;;
+        2)
+            second="${lpart[0]}"
+            third="${lpart[1]}"
+            ;;
+        *)
+            printf '0\n'
+            return 0
+            ;;
+    esac
+
+    case "$days:$first:$second:$third" in
+        *[!0-9:]*) printf '0\n'; return 0 ;;
+    esac
+    n_seconds=$((10#$days * 86400 + 10#$first * 3600 + 10#$second * 60 + 10#$third))
+    printf '%d\n' "$n_seconds"
+}
+
+format_seconds() {
+    local n_seconds="$1"
+    local days hours minutes seconds
+
+    [ "$n_seconds" -ge 0 ] 2>/dev/null || n_seconds=0
+    days=$((n_seconds / 86400))
+    hours=$(((n_seconds % 86400) / 3600))
+    minutes=$(((n_seconds % 3600) / 60))
+    seconds=$((n_seconds % 60))
+    if [ "$days" -gt 0 ]; then
+        printf '%dd %02d:%02d:%02d' "$days" "$hours" "$minutes" "$seconds"
+    else
+        printf '%02d:%02d:%02d' "$hours" "$minutes" "$seconds"
+    fi
+}
+
+# A short quiet sample is normal for buffered programs. Only mark it stale after the
+# configured age threshold, and keep the wording advisory rather than definitive.
+classify_file_activity() {
+    local before_exists="$1"
+    local before_size="$2"
+    local before_mtime="$3"
+    local after_exists="$4"
+    local after_size="$5"
+    local after_mtime="$6"
+    local now="$7"
+    local stale_after="$8"
+
+    file_state="MISSING"
+    file_delta=0
+    file_age=0
+    if [ "$after_exists" -eq 0 ]; then
+        return 0
+    fi
+
+    file_delta=$((after_size - before_size))
+    file_age=$((now - after_mtime))
+    [ "$file_age" -ge 0 ] || file_age=0
+    if [ "$before_exists" -eq 0 ] || [ "$after_size" -ne "$before_size" ] || \
+        [ "$after_mtime" -ne "$before_mtime" ]; then
+        file_state="ACTIVE"
+    elif [ "$file_age" -ge "$stale_after" ]; then
+        file_state="STALE"
+    else
+        file_state="QUIET"
+    fi
+}
+
+print_file_activity() {
+    local label="$1"
+    local path_file="$2"
+    local state="$3"
+    local size="$4"
+    local delta="$5"
+    local age="$6"
+
+    if ! is_monitorable_path "$path_file"; then
+        printf '      %-7s %s\n' "$label:" "not observable (${path_file:-not configured})"
+        return 0
+    fi
+
+    printf '      %-7s %s\n' "$label:" "$path_file"
+    case "$state" in
+        ACTIVE)
+            printf '               %s✅ ACTIVE%s  size=%s B  delta=%+d B  age=' \
+                "$ok_color" "$reset" "$size" "$delta"
+            format_seconds "$age"
+            printf '\n'
+            ;;
+        STALE)
+            printf '               %s⚠️  STALE%s   size=%s B  unchanged; age=' \
+                "$warn_color" "$reset" "$size"
+            format_seconds "$age"
+            printf '\n'
+            ;;
+        QUIET)
+            printf '               %sQUIET%s      size=%s B  unchanged; age=' \
+                "$desc_color" "$reset" "$size"
+            format_seconds "$age"
+            printf '\n'
+            ;;
+        MISSING)
+            printf '               %s⚠️  MISSING%s no file exists yet\n' "$warn_color" "$reset"
+            ;;
+    esac
+}
+
+slurm_monitor() {
+    local squeue_out squeue_after job_info job_id job_name elapsed start_time partition
+    local nodes cpus node_list path_workdir path_stdout_raw path_stderr_raw
+    local path_stdout path_stderr snapshot now n_jobs index elapsed_seconds
+    local out_state err_state job_state latest_mtime latest_age observable
+    local second_snapshot_ok=1
+    local n_running=0
+    local n_active_job=0
+    local n_quiet_job=0
+    local n_suspicious_job=0
+    local n_unknown_job=0
+    local n_ended_job=0
+    local ljob_id=() ljob_name=() lelapsed=() lstart_time=() lpartition=() lnodes=() lcpus=()
+    local lnode_list=() lpath_workdir=() lpath_stdout=() lpath_stderr=()
+    local lout_before_exists=() lout_before_size=() lout_before_mtime=()
+    local lerr_before_exists=() lerr_before_size=() lerr_before_mtime=()
+    local out_after_exists out_after_size out_after_mtime
+    local err_after_exists err_after_size err_after_mtime
+    local out_age out_delta err_age err_delta
+    declare -A dict_still_running=()
+
+    section "Slurm / --monitor"
+    if ! squeue_out="$(squeue -h -u "$USER" -t RUNNING \
+        -o '%i|%j|%M|%S|%P|%D|%C|%R' 2>&1)"; then
+        fail "squeue failed while reading RUNNING jobs: $squeue_out"
+    fi
+
+    if [ -z "$squeue_out" ]; then
+        printf '  %s✅ No RUNNING Slurm jobs for user %s.%s\n' "$ok_color" "$USER" "$reset"
+        return 0
+    fi
+
+    while IFS='|' read -r job_id job_name elapsed start_time partition nodes cpus node_list; do
+        [ -n "$job_id" ] || continue
+        job_info="$(scontrol show job "$job_id" -o 2>/dev/null)"
+        path_workdir="$(get_job_field "$job_info" "WorkDir" || true)"
+        path_stdout_raw="$(get_job_field "$job_info" "StdOut" || true)"
+        path_stderr_raw="$(get_job_field "$job_info" "StdErr" || true)"
+        path_stdout="$(resolve_job_path "$path_stdout_raw" "$path_workdir")"
+        path_stderr="$(resolve_job_path "$path_stderr_raw" "$path_workdir")"
+
+        ljob_id+=("$job_id")
+        ljob_name+=("$job_name")
+        lelapsed+=("$elapsed")
+        lstart_time+=("$start_time")
+        lpartition+=("$partition")
+        lnodes+=("$nodes")
+        lcpus+=("$cpus")
+        lnode_list+=("$node_list")
+        lpath_workdir+=("$path_workdir")
+        lpath_stdout+=("$path_stdout")
+        lpath_stderr+=("$path_stderr")
+
+        snapshot="$(snapshot_file "$path_stdout")"
+        read -r out_after_exists out_after_size out_after_mtime <<< "$snapshot"
+        lout_before_exists+=("$out_after_exists")
+        lout_before_size+=("$out_after_size")
+        lout_before_mtime+=("$out_after_mtime")
+
+        snapshot="$(snapshot_file "$path_stderr")"
+        read -r err_after_exists err_after_size err_after_mtime <<< "$snapshot"
+        lerr_before_exists+=("$err_after_exists")
+        lerr_before_size+=("$err_after_size")
+        lerr_before_mtime+=("$err_after_mtime")
+    done <<< "$squeue_out"
+
+    n_jobs="${#ljob_id[@]}"
+    printf '  Snapshot: %s\n' "$(date '+%F %T %Z')"
+    printf '  User: %s   RUNNING at first snapshot: %d\n' "$USER" "$n_jobs"
+    printf '  Sampling StdOut/StdErr for %ss; suspicious threshold: ' "$monitor_interval"
+    format_seconds "$stale_after"
+    printf '.\n'
+    sleep "$monitor_interval"
+
+    if ! squeue_after="$(squeue -h -u "$USER" -t RUNNING -o '%i' 2>&1)"; then
+        second_snapshot_ok=0
+        warn "second squeue snapshot failed; job end detection is unavailable: $squeue_after"
+    else
+        while IFS= read -r job_id; do
+            [ -n "$job_id" ] && dict_still_running["$job_id"]=1
+        done <<< "$squeue_after"
+    fi
+
+    now="$(date +%s)"
+    for ((index = 0; index < n_jobs; index++)); do
+        job_id="${ljob_id[$index]}"
+        snapshot="$(snapshot_file "${lpath_stdout[$index]}")"
+        read -r out_after_exists out_after_size out_after_mtime <<< "$snapshot"
+        classify_file_activity \
+            "${lout_before_exists[$index]}" "${lout_before_size[$index]}" \
+            "${lout_before_mtime[$index]}" "$out_after_exists" "$out_after_size" \
+            "$out_after_mtime" "$now" "$stale_after"
+        out_state="$file_state"
+        out_delta="$file_delta"
+        out_age="$file_age"
+
+        if [ "${lpath_stderr[$index]}" = "${lpath_stdout[$index]}" ]; then
+            err_state="SAME"
+            err_after_exists=0
+            err_after_size=0
+            err_after_mtime=0
+            err_delta=0
+            err_age=0
+        else
+            snapshot="$(snapshot_file "${lpath_stderr[$index]}")"
+            read -r err_after_exists err_after_size err_after_mtime <<< "$snapshot"
+            classify_file_activity \
+                "${lerr_before_exists[$index]}" "${lerr_before_size[$index]}" \
+                "${lerr_before_mtime[$index]}" "$err_after_exists" "$err_after_size" \
+                "$err_after_mtime" "$now" "$stale_after"
+            err_state="$file_state"
+            err_delta="$file_delta"
+            err_age="$file_age"
+        fi
+
+        observable=0
+        is_monitorable_path "${lpath_stdout[$index]}" && observable=1
+        if [ "$err_state" != "SAME" ] && is_monitorable_path "${lpath_stderr[$index]}"; then
+            observable=1
+        fi
+        latest_mtime=0
+        [ "$out_after_exists" -eq 1 ] && latest_mtime="$out_after_mtime"
+        if [ "$err_after_exists" -eq 1 ] && [ "$err_after_mtime" -gt "$latest_mtime" ]; then
+            latest_mtime="$err_after_mtime"
+        fi
+        latest_age=$((now - latest_mtime))
+        elapsed_seconds="$(duration_to_seconds "${lelapsed[$index]}")"
+
+        if [ "$second_snapshot_ok" -eq 1 ] && [ -z "${dict_still_running[$job_id]:-}" ]; then
+            job_state="ENDED"
+            n_ended_job=$((n_ended_job + 1))
+        elif [ "$out_state" = "ACTIVE" ] || [ "$err_state" = "ACTIVE" ]; then
+            job_state="ACTIVE"
+            n_active_job=$((n_active_job + 1))
+            n_running=$((n_running + 1))
+        elif [ "$observable" -eq 0 ]; then
+            job_state="UNKNOWN"
+            n_unknown_job=$((n_unknown_job + 1))
+            n_running=$((n_running + 1))
+        elif { [ "$latest_mtime" -gt 0 ] && [ "$latest_age" -ge "$stale_after" ]; } || \
+            { [ "$latest_mtime" -eq 0 ] && [ "$elapsed_seconds" -ge "$stale_after" ]; }; then
+            job_state="SUSPICIOUS"
+            n_suspicious_job=$((n_suspicious_job + 1))
+            n_running=$((n_running + 1))
+        else
+            job_state="QUIET"
+            n_quiet_job=$((n_quiet_job + 1))
+            n_running=$((n_running + 1))
+        fi
+
+        printf '\n  %sJobID=%s%s  Name=%s  Status=' "$bold" "$job_id" "$reset" "${ljob_name[$index]}"
+        case "$job_state" in
+            ACTIVE) printf '%s✅ ACTIVE%s\n' "$ok_color" "$reset" ;;
+            SUSPICIOUS) printf '%s⚠️  SUSPICIOUS%s\n' "$warn_color" "$reset" ;;
+            ENDED) printf '%sENDED during sample%s\n' "$desc_color" "$reset" ;;
+            UNKNOWN) printf '%sUNKNOWN%s\n' "$warn_color" "$reset" ;;
+            *) printf '%sQUIET%s\n' "$desc_color" "$reset" ;;
+        esac
+        printf '      Elapsed: %-12s Partition: %-12s Nodes: %s  CPUs: %s  NodeList: %s\n' \
+            "${lelapsed[$index]}" "${lpartition[$index]}" "${lnodes[$index]}" \
+            "${lcpus[$index]}" "${lnode_list[$index]}"
+        printf '      Start:   %s\n' "${lstart_time[$index]}"
+        printf '      WorkDir: %s\n' "${lpath_workdir[$index]:-unknown}"
+        print_file_activity "StdOut" "${lpath_stdout[$index]}" "$out_state" \
+            "$out_after_size" "$out_delta" "$out_age"
+        if [ "$err_state" = "SAME" ]; then
+            printf '      %-7s same as StdOut\n' "StdErr:"
+        else
+            print_file_activity "StdErr" "${lpath_stderr[$index]}" "$err_state" \
+                "$err_after_size" "$err_delta" "$err_age"
+        fi
+    done
+
+    printf '\n%s================ 📊 Slurm monitor summary%s\n' "$bold" "$reset"
+    printf '  Running now: %d   %s✅ active: %d%s   quiet: %d   %s⚠️  suspicious: %d%s' \
+        "$n_running" "$ok_color" "$n_active_job" "$reset" "$n_quiet_job" \
+        "$warn_color" "$n_suspicious_job" "$reset"
+    printf '   unknown: %d   ended: %d\n' "$n_unknown_job" "$n_ended_job"
+    printf '  %sSUSPICIOUS means no observed Slurm output within the threshold; buffering or a long compute step can be normal.%s\n' \
+        "$desc_color" "$reset"
+}
+# to here
+
 ################ cheat sheet ################
 
 print_commands() {
@@ -247,6 +612,8 @@ print_commands() {
         "Show accounting information for a finished job."
     command_item "tail -f slurm-<jobid>.out" \
         "Follow the Slurm output file."
+    command_item "$script_name --monitor" \
+        "Summarize RUNNING jobs and sample StdOut/StdErr activity."
 
     section "VASP"
     command_item "head -n 10 POTCAR" \
@@ -291,7 +658,7 @@ print_commands() {
 usage() {
     printf '%sUsage: %s [options]%s\n\n' "$bold" "$script_name" "$reset"
     printf 'Without options, print the useful-command cheat sheet.\n'
-    printf 'With options, probe the network instead (exit 1 if any endpoint is unreachable).\n\n'
+    printf 'With options, probe the network, monitor Slurm jobs, or print selected information.\n\n'
     printf 'Options:\n'
     printf '  -h, --help         Show this help and exit.\n'
     printf '      --openai       Probe OpenAI endpoints (api.openai.com, chatgpt.com).\n'
@@ -303,6 +670,11 @@ usage() {
     printf '      --net          Probe all groups above.\n'
     printf '      --ip           Show public IP information (ipinfo.io, cip.cc).\n'
     printf '      --proxy        Show the proxy environment variables.\n'
+    printf '      --monitor      Show RUNNING jobs, paths, resources and output activity.\n'
+    printf '      --monitor-interval SEC\n'
+    printf '                      Seconds between output-file samples (default: %s).\n' "$monitor_interval_default"
+    printf '      --stale-after SEC\n'
+    printf '                      Warn after this many seconds without output (default: %s).\n' "$stale_after_default"
     printf '      --commands     Print the cheat sheet (implicit when no option is given).\n'
     printf '      --all          --net --ip --proxy --commands.\n'
     printf '      --timeout SEC  Per-request timeout in seconds (default: %s).\n' "$timeout_default"
@@ -312,10 +684,13 @@ usage() {
 ################ check: parse and validate the arguments ################
 
 timeout="$timeout_default"
+monitor_interval="$monitor_interval_default"
+stale_after="$stale_after_default"
 lgroup_selected=()
 show_ip=0
 show_proxy=0
 show_commands=0
+show_monitor=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -334,6 +709,25 @@ while [ $# -gt 0 ]; do
             ;;
         --proxy)
             show_proxy=1
+            ;;
+        --monitor)
+            show_monitor=1
+            ;;
+        --monitor-interval)
+            [ $# -ge 2 ] || fail "--monitor-interval needs a value in seconds"
+            monitor_interval="$(check_positive_int "$2" "--monitor-interval")" || exit 1
+            shift
+            ;;
+        --monitor-interval=*)
+            monitor_interval="$(check_positive_int "${1#--monitor-interval=}" "--monitor-interval")" || exit 1
+            ;;
+        --stale-after)
+            [ $# -ge 2 ] || fail "--stale-after needs a value in seconds"
+            stale_after="$(check_positive_int "$2" "--stale-after")" || exit 1
+            shift
+            ;;
+        --stale-after=*)
+            stale_after="$(check_positive_int "${1#--stale-after=}" "--stale-after")" || exit 1
             ;;
         --commands)
             show_commands=1
@@ -362,18 +756,25 @@ while [ $# -gt 0 ]; do
 done
 
 # No option at all keeps the historical behaviour: just print the cheat sheet.
-if [ "${#lgroup_selected[@]}" -eq 0 ] && [ "$show_ip" -eq 0 ] && [ "$show_proxy" -eq 0 ]; then
+if [ "${#lgroup_selected[@]}" -eq 0 ] && [ "$show_ip" -eq 0 ] && \
+    [ "$show_proxy" -eq 0 ] && [ "$show_monitor" -eq 0 ]; then
     show_commands=1
 fi
 
 if [ "${#lgroup_selected[@]}" -gt 0 ] || [ "$show_ip" -eq 1 ]; then
     command -v curl >/dev/null 2>&1 || fail "curl is not available, cannot probe the network"
 fi
+if [ "$show_monitor" -eq 1 ]; then
+    command -v squeue >/dev/null 2>&1 || fail "squeue is not available, cannot monitor Slurm jobs"
+    command -v scontrol >/dev/null 2>&1 || fail "scontrol is not available, cannot inspect Slurm job paths"
+    command -v stat >/dev/null 2>&1 || fail "stat is not available, cannot inspect Slurm output files"
+fi
 # to here
 
 ################ main ################
 
 [ "$show_commands" -eq 1 ] && print_commands
+[ "$show_monitor" -eq 1 ] && slurm_monitor
 
 if [ "${#lgroup_selected[@]}" -gt 0 ]; then
     # Deduplicate while keeping the canonical order (--net --claude must not probe twice).
