@@ -440,8 +440,30 @@ def solve_constants(model=None, dict_P: dict = None, orders: tuple = (2, 3, 4),
         b = np.array([dict_P[n][key] for n in lsolve])
         sol, res, rank, sv = np.linalg.lstsq(A, b, rcond=None)
         if rank < A.shape[1]:
-            warn("order %d: rank %d < %d constants — some are undetermined; "
-                 "the solve modes do not span the system" % (order, rank, A.shape[1]))
+            # Rank-deficient: lstsq does NOT error, it silently returns the
+            # minimum-norm solution and thereby invents the null-space component
+            # instead of determining it from data. Identify the exact undetermined
+            # constant combination(s) via the right singular vectors and refuse,
+            # rather than reporting a fabricated number. rcond is left at None on
+            # purpose: A is built from exact analytic mode projections, so its rank
+            # is exact (duplicate rows give a zero singular value) and must not be
+            # masked by a truncation threshold.
+            lnames = model.names(order)
+            _, _, arr_vt = np.linalg.svd(A)
+            lterms = [
+                " + ".join(
+                    "%+.4g*%s" % (float_c, str_nm)
+                    for float_c, str_nm in zip(arr_v, lnames)
+                    if abs(float_c) > 1e-6
+                )
+                for arr_v in arr_vt[rank:]
+            ]
+            fail("order %d: rank %d < %d constants — the solve modes {%s} do NOT span "
+                 "the system, so %d constant combination(s) are undetermined and lstsq "
+                 "would only return a minimum-norm guess. Undetermined direction(s): %s. "
+                 "Add an independent mode (hex: M20) to close the rank."
+                 % (order, rank, A.shape[1], ",".join(lsolve),
+                    A.shape[1] - rank, "; ".join(lterms)))
         # out-of-sample check: predict P_n for every mode left out of the solve
         resid_check = 0.0
         if lcheck:

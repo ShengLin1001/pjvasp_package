@@ -350,6 +350,73 @@ PREFER = {
 # ---------------------------------------------------------------------------
 # deformation-mode tables (single-parameter Voigt strain directions d)
 # ---------------------------------------------------------------------------
+# The following formulas come directly from the continuum expansion
+#
+#   u(xi) - u(0) = P2*xi^2 + P3*xi^3 + P4*xi^4 + O(xi^5),  eta = xi*d,
+#
+# after imposing the crystal symmetry on
+#
+#   u(eta) = C_IJ*eta_I*eta_J/2!
+#          + C_IJK*eta_I*eta_J*eta_K/3!
+#          + C_IJKL*eta_I*eta_J*eta_K*eta_L/4! + ... .
+#
+# Here d is the row vector [eta1, eta2, eta3, eta4, eta5, eta6]/xi; eta4--eta6
+# are engineering shear strains. The formulas are kept beside the mode definitions
+# so a generated strain path can be audited without reverse-engineering the
+# symmetry-reduction matrices.
+#
+# Cubic modes (independent constants follow PREFER['cubic']):
+#
+# A: d = [1, 0, 0, 0, 0, 0]
+#    P2 = 1/2*C11
+#    P3 = 1/6*C111
+#    P4 = 1/24*C1111
+# B: d = [1, 1, 0, 0, 0, 0]
+#    P2 = C11 + C12
+#    P3 = 1/3*C111 + C112
+#    P4 = 1/12*C1111 + 1/3*C1112 + 1/4*C1122
+# C: d = [1, -1, 0, 0, 0, 0]
+#    P2 = C11 - C12
+#    P3 = 0
+#    P4 = 1/12*C1111 - 1/3*C1112 + 1/4*C1122
+# D: d = [1, 0, 0, 2, 0, 0]
+#    P2 = 1/2*C11 + 2*C44
+#    P3 = 1/6*C111 + 2*C144
+#    P4 = 1/24*C1111 + C1144 + 2/3*C4444
+# E: d = [1, 0, 0, 0, 0, 2]
+#    P2 = 1/2*C11 + 2*C44
+#    P3 = 1/6*C111 + 2*C155
+#    P4 = 1/24*C1111 + C1155 + 2/3*C4444
+# F: d = [0, 0, 0, 2, 2, 2]
+#    P2 = 6*C44
+#    P3 = 8*C456
+#    P4 = 2*C4444 + 12*C4455
+# G: d = [0, 0, 0, 2, 0, 0]
+#    P2 = 2*C44
+#    P3 = 0
+#    P4 = 2/3*C4444
+# H: d = [1, 1, 0, 0, 0, 2]
+#    P2 = C11 + C12 + 2*C44
+#    P3 = 1/3*C111 + C112 + 4*C155
+#    P4 = 1/12*C1111 + 1/3*C1112 + 1/4*C1122 + 2*C1155
+#         + 2*C1266 + 2/3*C4444
+# I: d = [1, 1, 0, 2, 0, 0]
+#    P2 = C11 + C12 + 2*C44
+#    P3 = 1/3*C111 + C112 + 2*C144 + 2*C155
+#    P4 = 1/12*C1111 + 1/3*C1112 + 1/4*C1122 + C1144 + C1155
+#         + 2*C1255 + 2/3*C4444
+# J: d = [1, 0, 0, 2, 2, 2]
+#    P2 = 1/2*C11 + 6*C44
+#    P3 = 1/6*C111 + 2*C144 + 4*C155 + 8*C456
+#    P4 = 1/24*C1111 + C1144 + 2*C1155 + 8*C1456 + 2*C4444
+#         + 12*C4455
+# K: d = [1, 1, 1, 0, 0, 0]
+#    P2 = 3/2*C11 + 3*C12
+#    P3 = 1/2*C111 + 3*C112 + C123
+#    P4 = 1/8*C1111 + C1112 + 3/4*C1122 + 3/2*C1123
+#
+# All 11 cubic modes are required by the 11-dimensional fourth-order system:
+# removing any one of A--K lowers its rank.
 # cubic: the 11 modes A..K of Wang-Li Table I.
 MODES_CUBIC = {
     'A': (1, 0, 0, 0, 0, 0),
@@ -364,6 +431,113 @@ MODES_CUBIC = {
     'J': (1, 0, 0, 2, 2, 2),
     'K': (1, 1, 1, 0, 0, 0),
 }
+# Hexagonal modes (independent constants follow PREFER['hex']; the fourth-order
+# names are the lexicographic independent set reported by HOECModel.names(4)):
+#
+# M01: d = [1, 0, 0, 0, 0, 0]
+#      P2 = 1/2*C11
+#      P3 = 1/6*C111
+#      P4 = 1/24*C1111
+# M02: d = [0, 0, 1, 0, 0, 0]
+#      P2 = 1/2*C33
+#      P3 = 1/6*C333
+#      P4 = 1/24*C3333
+# M03: d = [1, 1, 0, 0, 0, 0]
+#      P2 = C11 + C12
+#      P3 = 2/3*C111 + C112 - 1/3*C222
+#      P4 = 11/108*C1111 + 17/54*C1112 + 1/4*C1122 - 1/9*C1166
+# M04: d = [1, -1, 0, 0, 0, 0]
+#      P2 = C11 - C12
+#      P3 = 2/3*C111 - 2/3*C222
+#      P4 = 1/36*C1111 - 5/18*C1112 + 1/4*C1122 + 1/3*C1166
+# M05: d = [0, 0, 0, 2, 0, 0]
+#      P2 = 2*C44
+#      P3 = 0
+#      P4 = 2/3*C4444
+# M06: d = [0, 0, 0, 0, 0, 2]
+#      P2 = C11 - C12
+#      P3 = 0
+#      P4 = 1/36*C1111 - 5/18*C1112 + 1/4*C1122 + 1/3*C1166
+# M07: d = [1, 0, 1, 0, 0, 0]
+#      P2 = 1/2*C11 + C13 + 1/2*C33
+#      P3 = 1/6*C111 + 1/2*C113 + 1/2*C133 + 1/6*C333
+#      P4 = 1/24*C1111 + 1/6*C1113 + 1/4*C1133 + 1/6*C1333
+#           + 1/24*C3333
+# M08: d = [1, 1, 1, 0, 0, 0]
+#      P2 = C11 + C12 + 2*C13 + 1/2*C33
+#      P3 = 2/3*C111 + C112 + C113 + C123 + C133 - 1/3*C222
+#           + 1/6*C333
+#      P4 = 11/108*C1111 + 17/54*C1112 + 1/3*C1113 + 1/4*C1122
+#           + 2/3*C1123 + 1/2*C1133 - 1/9*C1166 + 1/3*C1223
+#           + 1/2*C1233 + 1/3*C1333 + 1/24*C3333
+# M09: d = [1, 0, 0, 2, 0, 0]
+#      P2 = 1/2*C11 + 2*C44
+#      P3 = 1/6*C111 + 2*C144
+#      P4 = 1/24*C1111 + C1144 + 2/3*C4444
+# M10: d = [0, 0, 1, 2, 0, 0]
+#      P2 = 1/2*C33 + 2*C44
+#      P3 = 1/6*C333 + 2*C344
+#      P4 = 1/24*C3333 + C3344 + 2/3*C4444
+# M11: d = [0, 0, 1, 0, 0, 2]
+#      P2 = C11 - C12 + 1/2*C33
+#      P3 = C113 - C123 + 1/6*C333
+#      P4 = 1/36*C1111 - 5/18*C1112 + 1/4*C1122 + 1/2*C1133
+#           + 1/3*C1166 - 1/2*C1233 + 1/24*C3333
+# M12: d = [0, 0, 0, 2, 0, 2]
+#      P2 = C11 - C12 + 2*C44
+#      P3 = 0
+#      P4 = 1/36*C1111 - 5/18*C1112 + 1/4*C1122 + C1144 + C1155
+#           + 1/3*C1166 + C1244 - 3*C1255 + 2/3*C4444
+# M13: d = [0, 0, 0, 2, 2, 2]
+#      P2 = C11 - C12 + 4*C44
+#      P3 = -4*C144 + 4*C155
+#      P4 = 1/36*C1111 - 5/18*C1112 + 1/4*C1122 + 2*C1144
+#           + 2*C1155 + 1/3*C1166 - 2*C1244 - 2*C1255 + 8/3*C4444
+# M14: d = [1, 0, 0, 2, 2, 0]
+#      P2 = 1/2*C11 + 4*C44
+#      P3 = 1/6*C111 + 2*C144 + 2*C155
+#      P4 = 1/24*C1111 + C1144 + C1155 + 8/3*C4444
+# M15: d = [1, 0, 1, 2, 0, 0]
+#      P2 = 1/2*C11 + C13 + 1/2*C33 + 2*C44
+#      P3 = 1/6*C111 + 1/2*C113 + 1/2*C133 + 2*C144 + 1/6*C333
+#           + 2*C344
+#      P4 = 1/24*C1111 + 1/6*C1113 + 1/4*C1133 + C1144 + 1/6*C1333
+#           + 2*C1344 + 1/24*C3333 + C3344 + 2/3*C4444
+# M16: d = [1, 1, 1, 2, 0, 0]
+#      P2 = C11 + C12 + 2*C13 + 1/2*C33 + 2*C44
+#      P3 = 2/3*C111 + C112 + C113 + C123 + C133 + 2*C144 + 2*C155
+#           - 1/3*C222 + 1/6*C333 + 2*C344
+#      P4 = 11/108*C1111 + 17/54*C1112 + 1/3*C1113 + 1/4*C1122
+#           + 2/3*C1123 + 1/2*C1133 + C1144 + C1155 - 1/9*C1166
+#           + 1/3*C1223 + 1/2*C1233 + C1244 + C1255 + 1/3*C1333
+#           + 2*C1344 + 2*C1355 + 1/24*C3333 + C3344 + 2/3*C4444
+# M17: d = [1, 1, 1, 0, 0, 2]
+#      P2 = 2*C11 + 2*C13 + 1/2*C33
+#      P3 = 2/3*C111 + 2*C113 + C133 + 2/3*C222 + 1/6*C333
+#      P4 = 14/27*C1111 + 4/27*C1112 + 4/3*C1113 + 2/3*C1123
+#           + C1133 + 8/9*C1166 - 2/3*C1223 + 1/3*C1333 + 1/24*C3333
+# M18: d = [1, 0, 1, 0, 0, 2]
+#      P2 = 3/2*C11 - C12 + C13 + 1/2*C33
+#      P3 = -5/6*C111 - 1/2*C112 + 3/2*C113 - C123 + 1/2*C133
+#           + 3/2*C222 + 1/6*C333
+#      P4 = 5/72*C1111 - 5/18*C1112 + 2/3*C1113 + 1/4*C1122
+#           + C1123 + 3/4*C1133 + 4/3*C1166 - 3/2*C1223
+#           - 1/2*C1233 + 1/6*C1333 + 1/24*C3333
+# M19: d = [0, 1, -1, 0, 0, 0]
+#      P2 = 1/2*C11 - C13 + 1/2*C33
+#      P3 = -1/2*C113 + 1/2*C133 + 1/6*C222 - 1/6*C333
+#      P4 = 5/216*C1111 + 1/54*C1112 - 1/6*C1113 - 1/6*C1123
+#           + 1/4*C1133 + 1/9*C1166 + 1/6*C1223 - 1/6*C1333
+#           + 1/24*C3333
+# M20: d = [0, 1, 0, 0, 0, 0]
+#      P2 = 1/2*C11
+#      P3 = 1/6*C222
+#      P4 = 5/216*C1111 + 1/54*C1112 + 1/9*C1166
+#
+# The 20x19 fourth-order matrix has one redundant row. M04 and M06 have the
+# same P2 and P4 but different P3, and either one can be removed while all
+# three orders remain full rank. Keeping both provides one fourth-order
+# out-of-sample equation and a useful check on finite-strain contamination.
 # hexagonal: 20 curated single-parameter modes. M01--M19 span only 18 of the 19
 # fourth-order constants after the physically correct dual projection; M20 supplies the
 # missing direction and leaves one out-of-sample equation for an overdetermined check.
@@ -693,6 +867,20 @@ def _fmt(lcoeff: np.ndarray = None, lname: list = None) -> str:
     return ' + '.join(lterm) if lterm else '0'
 
 
+def _get_individually_removable_modes(model: HOECModel = None,
+                                      dict_modes: dict = None,
+                                      orders: tuple = (2, 3, 4)) -> list:
+    """Find modes whose individual removal preserves full rank at every order."""
+    lremovable = []
+    for name_drop in dict_modes:
+        ldirections = [direction for name, direction in dict_modes.items()
+                       if name != name_drop]
+        if all(np.linalg.matrix_rank(model.system(order, ldirections), tol=1e-7)
+               == len(model.names(order)) for order in orders):
+            lremovable.append(name_drop)
+    return lremovable
+
+
 def selftest_hoec() -> bool:
     """Verify cubic formulas plus hex invariance, identities and mode-set rank.
 
@@ -729,6 +917,12 @@ def selftest_hoec() -> bool:
         full = (r == len(mc.names(o)))
         ok = ok and full
         print('  order %d rank %d/%d %s' % (o, r, len(mc.names(o)), '✅' if full else '❌'))
+    lcubic_removable = _get_individually_removable_modes(mc, MODES_CUBIC)
+    cubic_minimal = not lcubic_removable
+    ok = ok and cubic_minimal
+    print('  orders 2--4 jointly removable modes: %s %s'
+          % (', '.join(lcubic_removable) if lcubic_removable else 'none',
+             '✅' if cubic_minimal else '❌ EXPECTED none'))
 
     ### hexagonal: invariance, analytic SOEC identities and rank -------------------
     print('\n================ ✅ hexagonal (HCP) — invariance, identities & rank')
@@ -768,18 +962,16 @@ def selftest_hoec() -> bool:
               % (o, A.shape[0], A.shape[1], r, len(mh.names(o)), np.linalg.cond(A),
                  over, '✅' if full else '❌'))
 
-    A4 = mh.system(4, list(MODES_HEX.values()))
-    lname = list(MODES_HEX)
-    lremovable = []
-    for int_drop, name in enumerate(lname):
-        array_drop = np.delete(A4, int_drop, axis=0)
-        if np.linalg.matrix_rank(array_drop, tol=1e-7) == A4.shape[1]:
-            lremovable.append(name)
+    lremovable = _get_individually_removable_modes(mh, MODES_HEX)
     redundant_pair = (lremovable == ['M04', 'M06']
+                      and np.allclose(mh.P_coeffs(2, MODES_HEX['M04']),
+                                      mh.P_coeffs(2, MODES_HEX['M06']), atol=1e-12)
+                      and not np.allclose(mh.P_coeffs(3, MODES_HEX['M04']),
+                                          mh.P_coeffs(3, MODES_HEX['M06']), atol=1e-12)
                       and np.allclose(mh.P_coeffs(4, MODES_HEX['M04']),
                                       mh.P_coeffs(4, MODES_HEX['M06']), atol=1e-12))
     ok = ok and redundant_pair
-    print('  order 4 individually removable modes: %s %s'
+    print('  orders 2--4 jointly removable modes: %s %s'
           % (', '.join(lremovable) if lremovable else 'none',
              '✅' if redundant_pair else '❌ EXPECTED M04, M06'))
     print('\n%s' % ('🎉 self-test PASSED' if ok else '❌ self-test FAILED'))
