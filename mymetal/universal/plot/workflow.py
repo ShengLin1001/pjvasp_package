@@ -7,7 +7,13 @@ and stretch energy curves.
 
 Functions:
     - my_plot_convergence: Plot convergence test results for energy cutoff or k-point grids.
-    - my_plot_kpar_ncore: Plot KPAR/NCORE elapsed-time benchmark curves.
+    - my_plot_cij_energy: Plot Cij energy-density fits and stress responses.
+    - my_plot_kpar_ncore: Plot KPAR/NCORE timing and relative-energy curves.
+    - my_plot_relax_convergence: Plot ionic-relaxation energy and force convergence.
+    - my_plot_gsfe: Plot GSFE, normal displacement, and shear stress.
+    - my_plot_gsfe_displacement: Plot atom-resolved normal displacements along a GSFE path.
+    - my_plot_hoec_energy: Plot HOEC energy-strain fits by deformation mode.
+    - my_plot_hoec_convergence: Plot HOEC constants against the fit window.
     - my_plot_neb: Plot NEB (Nudged Elastic Band) energy and force profiles.
     - my_plot_neb_full: Plot NEB full energy profiles with optional frame slicing.
     - my_plot_neb_xy: Plot atomic trajectories in 2D with customizable visualization options.
@@ -166,19 +172,141 @@ def my_plot_convergence(x: list = None,
     return fig, ax
 
 
-# For KPAR/NCORE workflow timing
-def my_plot_kpar_ncore(
-        dict_time: dict = None,
-        lkpar: list = [128, 64, 32, 16, 8, 4],
-        lncore: list = [1, 2, 4, 8, 16, 32],
+# For Cij energy workflow
+def my_plot_cij_energy(
+        ldata: list = None,
+        dict_fit: dict = None,
         if_save: bool = False,
-        savefile: str = 'p_post_kpar_ncore.pdf') -> tuple:
-    """Plot all KPAR/NCORE elapsed-time curves on one standard axis.
+        savefile: str = 'y_post_cij_energy.pdf') -> tuple:
+    """Plot fitted Cij energy-density curves and stress responses.
 
     Args:
-        dict_time (dict): ``(KPAR, NCORE) -> elapsed time`` in display units.
-        lkpar (list): KPAR values in plotting and legend order.
-        lncore (list): NCORE values shown on the x-axis.
+        ldata (list): Per-deformation dictionaries containing strain ``e``,
+            energy density ``ed``, stress ``s``, and reference index ``iref``.
+        dict_fit (dict): Prepared fit data from
+            :func:`mymetal.post.Cij_energy.fit_cij_energy`.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    fig, axes = my_plot(fig_subp=[5, 2], fig_sharex=True)
+    xi = dict_fit['xi']
+    ly_fit = dict_fit['ly_fit']
+    le0 = dict_fit['le0']
+    cij = dict_fit['cij']
+    lslope = dict_fit['lslope']
+    lcolor = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5']
+    llegend = [
+        '$\\sigma_{xx}$', '$\\sigma_{yy}$', '$\\sigma_{zz}$',
+        '$\\sigma_{yz}$', '$\\sigma_{xz}$', '$\\sigma_{xy}$',
+    ]
+
+    for i, data in enumerate(ldata):
+        ax = axes[i, 0]
+        ax.plot(data['e'], data['ed'], 'o')
+        ax.plot(xi, ly_fit[i], '-C1')
+        _, ymax = ax.get_ylim()
+        ax.text(0, ymax * 0.85, '$\\epsilon_0$ = %.6f' % le0[i])
+
+        ax = axes[i, 1]
+        for j in range(6):
+            # Six stress components overlap in each panel, so compact markers
+            # keep the individual series readable without changing line style.
+            ax.plot(
+                data['e'], data['s'][:, j], 'o', color=lcolor[j],
+                label=llegend[j], markersize=6, alpha=0.4,
+            )
+            ax.plot(
+                xi,
+                xi * lslope[i, j] + data['s'][data['iref'], j],
+                '-',
+                color=lcolor[j],
+                alpha=0.4,
+            )
+        axes[i, 0].set_ylabel('Elastic energy density (GPa)')
+        axes[i, 1].set_ylabel('Stress (GPa)')
+
+    general_modify_legend(axes[0, 1].legend(loc='upper left', ncol=2))
+    axes[-1, 0].set_xlabel('Strain')
+    axes[-1, 1].set_xlabel('Strain')
+    axes[0, 0].text(
+        -0.003,
+        axes[0, 0].get_ylim()[1] * 1.05,
+        ('$C_{11}$, $C_{12}$, $C_{13}$, $C_{33}$, $C_{44}$ (GPa):\n'
+         '%.2f,   %.2f,   %.2f,   %.2f,   %.2f') % tuple(cij),
+    )
+
+    # Only the x axis is shared; removing its repeated labels permits a compact
+    # vertical stack while the two independent columns keep their normal gap.
+    fig.subplots_adjust(hspace=0.05)
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    return fig, axes
+
+
+# For GSFE workflow
+def my_plot_gsfe(
+        jobn: list = None,
+        gamma: np.ndarray = None,
+        da3: np.ndarray = None,
+        str_all: str = '',
+        if_save: bool = False,
+        savefile: str = 'y_post_gsfe.pdf') -> tuple:
+    """Plot GSFE, inelastic normal displacement, and shear stress.
+
+    Args:
+        jobn (list): Normalized displacement steps or job identifiers.
+        gamma (np.ndarray): GSFE values in mJ/m2.
+        da3 (np.ndarray): Lattice-vector changes along the slip path.
+        str_all (str): Chemical-formula and slip-area annotation.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    xi = np.asarray([float(job) for job in jobn], dtype=float)
+    ldisp = [np.linalg.norm(delta[0:2]) for delta in da3]
+    disp = np.asarray(ldisp, dtype=float)
+    xi = xi / np.around(max(xi.max(), 10), -1)
+    tau = np.diff(gamma) / np.diff(disp) * 1e-2
+    x_tau = xi[:-1] + np.diff(xi) / 2
+
+    fig, axes = my_plot(fig_subp=[3, 1], fig_sharex=True)
+    axes[0].plot(xi, gamma, '-o')
+    axes[1].plot(xi, da3[:, 2], '-o')
+    axes[2].plot(x_tau, tau, '-o')
+    axes[2].plot([xi.min(), xi.max()], [0, 0], '--k')
+
+    axes[0].set_ylabel('GSFE (mJ/m$^2$)')
+    axes[1].set_ylabel('Inelastic normal displacement ($\\mathrm{\\AA}$)')
+    axes[2].set_xlabel('Normalized slip vector')
+    axes[2].set_ylabel('Shear stress $\\tau$ (GPa)')
+    dxi = np.around(xi.max() / 6, 1)
+    axes[2].set_xticks(np.arange(0, xi.max() + dxi, dxi))
+    axes[2].text(0, tau.min() / 2, '$\\tau_\\mathrm{max} =$ %.1f GPa' % tau.max())
+    axes[0].text(0.3, gamma.max() * 0.2, str_all)
+
+    fig.subplots_adjust(hspace=0.05)
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    return fig, axes
+
+
+def my_plot_gsfe_displacement(
+        jobn: list = None,
+        dpos3: np.ndarray = None,
+        latoms: list = None,
+        if_save: bool = False,
+        savefile: str = 'y_post_gsfe.u3.pdf') -> tuple:
+    """Plot atom-resolved normal displacement for every GSFE image.
+
+    Args:
+        jobn (list): Normalized displacement steps or job identifiers.
+        dpos3 (np.ndarray): Atom-resolved normal displacements per image.
+        latoms (list): Structures along the GSFE path.
         if_save (bool): Whether to save the figure.
         savefile (str): Figure output path.
 
@@ -186,29 +314,282 @@ def my_plot_kpar_ncore(
         tuple: Matplotlib ``(fig, ax)`` objects.
     """
     fig, ax = my_plot()
+    zposition = latoms[0].positions[:, 2]
+    for i, job in enumerate(jobn):
+        data = np.array([zposition, dpos3[i, :]])
+        data = data[:, np.argsort(data[0, :])]
+        ax.plot(data[0, :], data[1, :], '-o', label='%.2f' % float(job))
 
-    for kpar in lkpar:
-        lpairs = sorted(
-            [pair for pair in dict_time if pair[0] == kpar],
-            key=lambda pair: pair[1],
-        )
-        if lpairs:
-            lx = [pair[1] for pair in lpairs]
-            ly = [dict_time[pair] for pair in lpairs]
-            ax.plot(lx, ly, marker='o', label='KPAR=%d' % kpar)
-
-    # The tested values double successively; a base-2 numeric axis keeps every
-    # NCORE readable while preserving its physical spacing.
-    ax.set_xscale('log', base=2)
-    ax.set_xticks(lncore)
-    ax.set_xticklabels([str(ncore) for ncore in lncore])
-    ax.set_xlabel('NCORE')
-    ax.set_ylabel('Time (min)')
-    general_modify_legend(ax.legend(ncol=2))
+    # A GSFE path commonly contains many images; a compact legend is needed
+    # to keep all displacement labels inside the single standard panel.
+    legend = ax.legend(
+        loc='lower center',
+        ncol=5,
+        fontsize=10,
+        bbox_to_anchor=(0.5, 0.0),
+    )
+    general_modify_legend(legend)
+    ax.set_xlabel('Atom positions in $x_3$ ($\\mathrm{\\AA}$)')
+    ax.set_ylabel('Displacement $u_3$ ($\\mathrm{\\AA}$)')
 
     if if_save:
         fig.savefig(savefile, bbox_inches='tight')
     return fig, ax
+
+
+# For ionic-relaxation convergence workflow
+def _apply_relax_yscale(ax, values: list, yscale: str) -> None:
+    """Apply log scaling when the absolute convergence data permits it."""
+    values = np.asarray(values, dtype=float)
+    if yscale == 'log' and np.any(np.isfinite(values) & (values > 0)):
+        ax.set_yscale('log')
+        return
+    ax.ticklabel_format(axis='y', style='sci', scilimits=(0, 0))
+
+
+def my_plot_relax_convergence(
+        lframe: list = None,
+        lenergy: list = None,
+        lforce: list = None,
+        natoms: int = None,
+        ediffg: float = None,
+        isif: int = None,
+        yscale: str = 'log',
+        if_save: bool = False,
+        savefile: str = 'y_post_convergence.pdf',
+        if_close: bool = False) -> tuple:
+    """Plot ionic-relaxation energy and force convergence.
+
+    Args:
+        lframe (list): Ionic-step indices.
+        lenergy (list): ``energy(sigma->0)`` values in eV.
+        lforce (list): Maximum force norms in eV/Ang.
+        natoms (int): Atom count used for per-atom energy differences.
+        ediffg (float): VASP EDIFFG value.
+        isif (int): VASP ISIF value shown as an annotation.
+        yscale (str): ``'log'`` or ``'linear'``.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+        if_close (bool): Close the pyplot figure after saving, useful for
+            batch post-processing.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    fig, axes = my_plot(fig_subp=[2, 1], fig_sharex=True)
+    scale = 1000.0 / natoms if natoms else 1000.0
+    lenergy_rel = [abs(energy - lenergy[-1]) * scale for energy in lenergy]
+    lforce_abs = [abs(force) for force in lforce]
+
+    axes[0].set_ylabel(r'$|\Delta E|$ (meV/atom)')
+    axes[0].plot(lframe, lenergy_rel, '-o')
+    _apply_relax_yscale(axes[0], lenergy_rel, yscale)
+
+    axes[1].set_xlabel('Frame (-)')
+    axes[1].set_ylabel('Max Force (eV/Å)')
+    axes[1].plot(lframe, lforce_abs, '-o')
+    _apply_relax_yscale(axes[1], lforce_abs, yscale)
+    if ediffg is not None and ediffg < 0:
+        axes[1].axhline(
+            y=-ediffg,
+            color='C1',
+            linestyle='--',
+            label='|EDIFFG| = %g eV/Å' % -ediffg,
+        )
+        general_modify_legend(
+            axes[1].legend(loc='upper right', bbox_to_anchor=(0.95, 0.95)),
+            alpha=0.5,
+        )
+    if isif is not None:
+        axes[1].text(
+            0.02,
+            0.98,
+            'ISIF=%d' % isif,
+            transform=axes[1].transAxes,
+            ha='left',
+            va='top',
+            zorder=10,
+            color='black',
+        )
+
+    fig.subplots_adjust(hspace=0.05)
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    if if_close:
+        plt.close(fig)
+    return fig, axes
+
+
+# For HOEC energy workflow
+def my_plot_hoec_energy(
+        dict_data: dict = None,
+        dict_P: dict = None,
+        if_save: bool = False,
+        savefile: str = 'y_post_hoec.pdf',
+        if_close: bool = False) -> tuple:
+    """Plot per-mode HOEC energy-strain data and fitted polynomials.
+
+    Args:
+        dict_data (dict): Mode name to ``(xi, energy_density)`` arrays.
+        dict_P (dict): Per-mode fit coefficients.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+        if_close (bool): Close the pyplot figure after saving.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    lname = list(dict_data)
+    ncol = 4
+    nrow = int(np.ceil(len(lname) / ncol))
+    fig, axes = my_plot(fig_subp=[nrow, ncol], fig_sharex=False)
+    lax = np.asarray(axes).reshape(-1)
+
+    for ax, name in zip(lax, lname):
+        xi, energy_density = dict_data[name]
+        idx = np.argsort(xi)
+        ax.plot(xi[idx], energy_density[idx], 'o')
+        x_fit = np.linspace(xi.min(), xi.max(), 200)
+        # Draw the complete fitted polynomial. Rebuilding only P1..P4 would
+        # discard P0 and any deliberately fitted higher-order response.
+        ax.plot(x_fit, np.polyval(dict_P[name]['coeffs'], x_fit), '-C1')
+        ax.set_title(name)
+        ax.set_xlabel('Strain $\\xi$')
+        ax.set_ylabel('Elastic energy density (GPa)')
+    for ax in lax[len(lname):]:
+        ax.axis('off')
+
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    if if_close:
+        plt.close(fig)
+    return fig, axes
+
+
+def my_plot_hoec_convergence(
+        dict_scan: dict = None,
+        fitmax: float = None,
+        orders: tuple = (2, 3, 4),
+        if_save: bool = False,
+        savefile: str = 'y_post_hoec_conv.pdf',
+        if_close: bool = False) -> tuple:
+    """Plot each solved HOEC component against the fit window.
+
+    Args:
+        dict_scan (dict): Fit-window scan results.
+        fitmax (float): Window used for the reported constants.
+        orders (tuple): Elastic-constant orders available in the scan.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+        if_close (bool): Close the pyplot figure after saving.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    lw = sorted(dict_scan)
+    dict_names = {
+        order: list(dict_scan[lw[0]]['result'][order]['names'])
+        for order in orders
+    }
+    nrow = max([len(lname) for lname in dict_names.values()] + [1])
+    lorder = (2, 3, 4)
+    dict_order_label = {2: 'SOEC', 3: 'TOEC', 4: 'FOEC'}
+    fig, axes = my_plot(fig_subp=[nrow, 3], fig_sharex=False)
+    axes = np.asarray(axes).reshape(nrow, 3)
+
+    for icol, order in enumerate(lorder):
+        lname = dict_names.get(order, [])
+        for irow, ax in enumerate(axes[:, icol]):
+            if irow >= len(lname):
+                ax.axis('off')
+                continue
+            name = lname[irow]
+            lname_scan = list(dict_scan[lw[0]]['result'][order]['names'])
+            iname = lname_scan.index(name)
+            lvalue = [
+                dict_scan[window]['result'][order]['values'][iname]
+                for window in lw
+            ]
+            # Window scans can contain many points in every panel; compact
+            # markers keep the plateau shape visible in the dense grid.
+            ax.plot(lw, lvalue, '-o', markersize=6)
+            ax.axvline(fitmax, color='0.3', linestyle='--')
+            ax.set_title('%s: C%s' % (dict_order_label[order], name))
+            ax.set_xlabel('Fit window $\\xi_{max}$ (mode-A units)')
+            ax.set_ylabel('GPa')
+
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    if if_close:
+        plt.close(fig)
+    return fig, axes
+
+
+# For KPAR/NCORE workflow timing and energy
+def my_plot_kpar_ncore(
+        dict_time: dict = None,
+        dict_delta_energy: dict = None,
+        lkpar: list = [128, 64, 32, 16, 8, 4],
+        lncore: list = [1, 2, 4, 8, 16, 32],
+        if_save: bool = False,
+        savefile: str = 'p_post_kpar_ncore.pdf',
+        if_close: bool = False) -> tuple:
+    """Plot KPAR/NCORE elapsed-time and relative-energy curves.
+
+    Args:
+        dict_time (dict): ``(KPAR, NCORE) -> elapsed time`` in display units.
+        dict_delta_energy (dict): ``(KPAR, NCORE) -> E - E0`` in meV/atom.
+        lkpar (list): KPAR values in plotting and legend order.
+        lncore (list): NCORE values shown on the x-axis.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+        if_close (bool): Close the pyplot figure after saving.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    fig, axes = my_plot(fig_subp=[2, 1], fig_sharex=True)
+
+    for index, kpar in enumerate(lkpar):
+        lpairs_time = sorted(
+            [pair for pair in dict_time if pair[0] == kpar],
+            key=lambda pair: pair[1],
+        )
+        lpairs_energy = sorted(
+            [pair for pair in dict_delta_energy if pair[0] == kpar],
+            key=lambda pair: pair[1],
+        )
+        color = 'C%d' % (index % 10)
+        if lpairs_time:
+            lx = [pair[1] for pair in lpairs_time]
+            ly = [dict_time[pair] for pair in lpairs_time]
+            axes[0].plot(
+                lx, ly, marker='o', color=color, label='KPAR=%d' % kpar)
+        if lpairs_energy:
+            lx = [pair[1] for pair in lpairs_energy]
+            ly = [dict_delta_energy[pair] for pair in lpairs_energy]
+            axes[1].plot(lx, ly, marker='o', color=color)
+
+    # The tested values double successively; a base-2 numeric axis keeps every
+    # NCORE readable while preserving its physical spacing.
+    axes[1].set_xscale('log', base=2)
+    axes[1].set_xticks(lncore)
+    axes[1].set_xticklabels([str(ncore) for ncore in lncore])
+    axes[0].set_xlabel('')
+    axes[1].set_xlabel('NCORE')
+    axes[0].set_ylabel('Time (min)')
+    axes[1].set_ylabel('$\\Delta E$ (meV/atom)')
+    general_modify_legend(axes[0].legend(ncol=2))
+
+    # Both panels share NCORE, so removing the repeated x labels allows the two
+    # quantities to read as one compact benchmark figure.
+    fig.subplots_adjust(hspace=0.05)
+
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    if if_close:
+        plt.close(fig)
+    return fig, axes
 
 
 # for workflow NEB trajectory
@@ -839,4 +1220,3 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     plt.savefig(save_fig_path2)
 
     return (eq_a1, eq_a2, eq_energy)
-

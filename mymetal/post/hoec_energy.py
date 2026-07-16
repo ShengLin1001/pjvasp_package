@@ -50,8 +50,6 @@ Functions:
     - load_ref_constants: Literature constants for the cubic sanity check.
     - write_hoec_energy: Write the txt report and the json constants.
     - read_hoec_energy: Read back the json constants.
-    - plot_hoec_energy: Per-mode energy-strain curves with fits.
-    - plot_hoec_convergence: One elastic-constant component per panel vs the fit window.
 
 Change log:
     - Written by J. P., 2026, as the standalone ``pei_vasp_post_hoec_energy.py`` script.
@@ -62,12 +60,12 @@ Change log:
       workflow matches ``mymetal.post.stretch`` and ``mymetal.post.Cij_energy``.
     - Revised by J. P. on 2026-07-14: the default fit degree is now 4, as in Wang-Li Sec. IV
       (it was 6, with a docstring that wrongly claimed the paper did the same);
-      ``plot_hoec_energy`` now draws the polynomial that was actually fitted (it rebuilt the
+      ``my_plot_hoec_energy`` now draws the polynomial that was actually fitted (it rebuilt the
       curve from P1..P4 only, dropping P0 and every term above xi^4, which made a good fit
       look broken); and ``check_fit_quality`` was added, because the fit rms cannot tell you
       whether the window is inside the Taylor regime.
     - Revised by J. P. on 2026-07-14: added the window scan (``scan_fit_windows``) and the
-      convergence plot ``y_post_hoec_conv.pdf`` (``plot_hoec_convergence``) -- Wang-Li Fig. 6
+      convergence plot ``y_post_hoec_conv.pdf`` (``my_plot_hoec_convergence``) -- Wang-Li Fig. 6
       generalized to every mode and every order -- plus the optional, off-by-default
       per-mode/per-order plateau selection (``select_plateau_P``).
     - Revised by J. P. on 2026-07-14 for the multi-strategy plateau comparison:
@@ -91,13 +89,15 @@ import shutil
 import numpy as np
 from pathlib import Path
 from ase.io import read
-import matplotlib.pyplot as plt
 from myvasp import vasp_func as vf
 
 from mymetal.calculate.calmechanics.hoec import MODES, get_model
 from mymetal.post.general import my_ployfit
 from mymetal.post.Cij_energy import read_cij_energy
-from mymetal.universal.plot.general import general_set_all_rcParams
+from mymetal.universal.plot.workflow import (
+    my_plot_hoec_convergence,
+    my_plot_hoec_energy,
+)
 from mymetal.universal.print.print import fail, warn
 
 # literature FCC constants (Wang-Li 2009), for a sanity comparison of the cubic run
@@ -681,65 +681,6 @@ def select_plateau_P(dict_scan: dict = None, nseg: int = 3) -> dict:
     return dict_P
 
 
-ORDER_LABEL = {2: 'SOEC', 3: 'TOEC', 4: 'FOEC'}
-
-
-def plot_hoec_convergence(path_out: Path = None, dict_scan: dict = None,
-                          fitmax: float = None, orders: tuple = (2, 3, 4),
-                          suffix: str = '', save_fig_path: str = None) -> None:
-    """Plot each elastic constant against the fit window.
-
-    The figure has fixed SOEC, TOEC and FOEC columns. Each used row is one independent elastic
-    constant in GPa, so a plateau is read directly from the reported quantity rather than from
-    normalized P2/P3/P4 fit coefficients or aggregate diagnostic curves.
-
-    Args:
-        path_out (Path): The ``y_hoec_energy`` directory.
-        dict_scan (dict): Output of :func:`scan_fit_windows`.
-        fitmax (float): The window that was used for the reported constants (marked).
-        orders (tuple): Orders solved from the data (present in every scan result).
-        suffix (str): Appended to the default output filename.
-        save_fig_path (str): Output pdf; defaults to ``path_out/y_post_hoec_conv{suffix}.pdf``.
-
-    Returns:
-        None
-    """
-    path_fig = (Path(save_fig_path) if save_fig_path
-                else Path(path_out) / ("y_post_hoec_conv" + suffix + ".pdf"))
-    lw = sorted(dict_scan)
-    if len(lw) < 2:
-        warn("only %d fit window(s) survived the scan; no convergence plot" % len(lw))
-        return
-    dict_names = {order: list(dict_scan[lw[0]]['result'][order]['names'])
-                  for order in orders}
-    nrow = max([len(lname) for lname in dict_names.values()] + [1])
-    lorder = (2, 3, 4)
-
-    general_set_all_rcParams(figure_subp=[nrow, 3], legend_framealpha=0.4,
-                             font_family=['Arial'])
-    fig, axes = plt.subplots(nrow, 3, squeeze=False)
-
-    for icol, order in enumerate(lorder):
-        lname = dict_names.get(order, [])
-        for irow, ax in enumerate(axes[:, icol]):
-            if irow >= len(lname):
-                ax.axis('off')
-                continue
-            name = lname[irow]
-            iname = list(dict_scan[lw[0]]['result'][order]['names']).index(name)
-            lvalue = [dict_scan[w]['result'][order]['values'][iname] for w in lw]
-            ax.plot(lw, lvalue, '-o', ms=2)
-            ax.axvline(fitmax, color='0.3', lw=0.8, ls='--')
-            ax.set_title('%s: C%s' % (ORDER_LABEL[order], name))
-            ax.set_ylabel('GPa')
-            if irow == len(lname) - 1:
-                ax.set_xlabel('Fit window $\\xi_{max}$ (mode-A units)')
-
-    plt.savefig(path_fig)
-    plt.close(fig)
-    print("📈 wrote %s" % path_fig)
-
-
 def load_ref_constants(element: str = None, path_ref: str = None) -> dict:
     """Literature constants for one element, used only for the cubic sanity check.
 
@@ -757,7 +698,7 @@ def load_ref_constants(element: str = None, path_ref: str = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# report and plot
+# report
 # ---------------------------------------------------------------------------
 def write_hoec_energy(path_out: Path = None, dict_manifest: dict = None,
                       dict_P: dict = None, dict_result: dict = None,
@@ -892,55 +833,6 @@ def read_hoec_energy(save_json_path: str = './y_post_hoec.json') -> dict:
     if 'constants' not in dict_out:
         raise ValueError(f"Could not find the 'constants' block in {p}.")
     return dict_out
-
-
-def plot_hoec_energy(path_out: Path = None, dict_data: dict = None,
-                     dict_P: dict = None, suffix: str = '', save_fig_path: str = None) -> None:
-    """Plot the per-mode energy-strain curves with their fits.
-
-    Args:
-        path_out (Path): The ``y_hoec_energy`` directory.
-        dict_data (dict): Mode name -> (xi, u) arrays.
-        dict_P (dict): Per-mode fit coefficients.
-        suffix (str): Appended to the default output filename.
-        save_fig_path (str): Output pdf; defaults to ``path_out/y_post_hoec{suffix}.pdf``.
-
-    Returns:
-        None
-    """
-    path_fig = (Path(save_fig_path) if save_fig_path
-                else Path(path_out) / ("y_post_hoec" + suffix + ".pdf"))
-    lname = list(dict_data.keys())
-    ncol = 4
-    nrow = int(np.ceil(len(lname) / ncol))
-
-    fig_subp = [nrow, ncol]
-    general_set_all_rcParams(figure_subp=fig_subp, legend_framealpha=0.4,
-                             font_family=['Arial'])
-    fig, axes = plt.subplots(fig_subp[0], fig_subp[1], sharex=True)
-    axes = np.array(axes).reshape(-1)
-
-    for ax, n in zip(axes, lname):
-        xi, u = dict_data[n]
-        idx = np.argsort(xi)
-        ax.plot(xi[idx], u[idx], 'o')
-        xs = np.linspace(xi.min(), xi.max(), 200)
-        # the model that was actually fitted -- rebuilding it from P1..P4 alone drops P0 and
-        # every term above xi^4, which drew a curve that missed the data by up to 100x the
-        # true fit rms and made a good fit look broken
-        ax.plot(xs, np.polyval(dict_P[n]['coeffs'], xs), '-C1')
-        ax.set_title(n)
-    for ax in axes[len(lname):]:
-        ax.axis('off')
-
-    for i in range(ncol):
-        axes[(nrow - 1) * ncol + i].set_xlabel('Strain $\\xi$')
-    for i in range(nrow):
-        axes[i * ncol].set_ylabel('Elastic energy density (GPa)')
-
-    plt.savefig(path_fig)
-    plt.close(fig)                     # free the figure: 20 hex modes per phase adds up
-    print("📈 wrote %s" % path_fig)
 
 
 # ---------------------------------------------------------------------------
@@ -1096,9 +988,29 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
     # plateau mode takes each order from a different window, so there is no single fitted
     # curve to draw; select_plateau_P carries the widest-window polynomial, which matches
     # the full data
-    plot_hoec_energy(path_out, dict_data if select == 'plateau' else dict_cut, dict_P,
-                     suffix=suffix)
-    plot_hoec_convergence(path_out, dict_scan, fitmax, orders=orders_data, suffix=suffix)
+    path_fig = path_out / ("y_post_hoec" + suffix + ".pdf")
+    my_plot_hoec_energy(
+        dict_data=dict_data if select == 'plateau' else dict_cut,
+        dict_P=dict_P,
+        if_save=True,
+        savefile=path_fig,
+        if_close=True,
+    )
+    print("📈 wrote %s" % path_fig)
+    if len(dict_scan) < 2:
+        warn("only %d fit window(s) survived the scan; no convergence plot"
+             % len(dict_scan))
+    else:
+        path_fig_conv = path_out / ("y_post_hoec_conv" + suffix + ".pdf")
+        my_plot_hoec_convergence(
+            dict_scan=dict_scan,
+            fitmax=fitmax,
+            orders=orders_data,
+            if_save=True,
+            savefile=path_fig_conv,
+            if_close=True,
+        )
+        print("📈 wrote %s" % path_fig_conv)
 
     print("📊 SUMMARY: %s | %d/%d modes used | %d strain points missing | fitdeg=%d maxorder=%d%s"
           % (dict_manifest["symmetry"], len(dict_data), len(dict_manifest["modes"]),

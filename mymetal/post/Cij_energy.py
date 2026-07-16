@@ -7,7 +7,7 @@ This module provides functions to post-process LAMMPS deformation calculations t
 Functions:
     - post_lammps_Cij_energy: Main function to process deformation data and generate plots
     - check_ldata: Check consistency of reference states
-    - plot_cij_energy: Fit energy-strain curves and plot results
+    - fit_cij_energy: Fit energy-strain data and prepare the plotting quantities
     - write_cij_energy: Write calculated Cij values to a text file
     - read_cij_energy: Read calculated Cij values back from the text file
     - read_deform_data: Read deformation data from a specified directory
@@ -25,10 +25,10 @@ import numpy as np
 from myvasp import vasp_func as vf
 import os
 from pathlib import Path
-import matplotlib.pyplot as plt
-from mymetal.universal.plot.general import general_set_all_rcParams
 from ase import Atoms
 from ase.io import read
+
+from mymetal.universal.plot.workflow import my_plot_cij_energy
 
 def post_lammps_Cij_energy(dir: str = None,
                            refcontcar: str = None,
@@ -77,7 +77,14 @@ def post_lammps_Cij_energy(dir: str = None,
 
     check_ldata(ldata)
 
-    plot_cij_energy(ldata, save_fig_path, save_txt_path)
+    dict_fit = fit_cij_energy(ldata)
+    my_plot_cij_energy(
+        ldata=ldata,
+        dict_fit=dict_fit,
+        if_save=True,
+        savefile=save_fig_path,
+    )
+    write_cij_energy(dict_fit['cij'], save_txt_path)
 
     return None
 
@@ -100,105 +107,48 @@ def check_ldata(ldata: list = None):
         vf.confirm_0( ldata[0]['ed'][iref0] - ldata[i]['ed'][iref1] )
         vf.confirm_0( ldata[0]['s'][iref0]  - ldata[i]['s'][iref1]  )
 
-def plot_cij_energy(ldata: list = None, 
-                    save_fig_path: str = './y_post_cij_energy.pdf',
-                    save_txt_path: str = './y_post_cij_energy.txt',):
-    """
-    Fit energy-strain curves to quadratic functions and plot both energy and stress.
+def fit_cij_energy(ldata: list = None) -> dict:
+    """Fit the Cij energy-strain data and prepare quantities for plotting.
 
     Args:
         ldata (list): List of dictionaries containing deformation data.
-        save_fig_path (str): Path to save the plot figure.
-        save_txt_path (str): Path to save Cij and derived elastic properties.
 
     Returns:
-        None
+        dict: Fit grid, fitted energy-density curves, equilibrium shifts,
+            elastic constants, and stress slopes.
     """
-    fig_subp = [5, 2]
-    lg = general_set_all_rcParams(figure_subp=fig_subp, legend_framealpha=0.4,
-                                  font_family=['Arial'])
-    fig, axes = plt.subplots(fig_subp[0], fig_subp[1], sharex = True)
-
-    # plot energy-strain 
-
     xi = np.linspace(min(ldata[0]['e']), max(ldata[0]['e']), 1000)
-
-    p0_tot = np.array([])     # for Cij
-    e0_tot = np.array([])     # to check shift 
-
-    for i in np.arange(len(ldata)):
-        e  = ldata[i]['e']
-        ed = ldata[i]['ed'] 
-        s  = ldata[i]['s'] 
-
-        ax = axes[i, 0]
-        ax.plot(e, ed, 'o')
-
+    lp0 = []
+    le0 = []
+    ly_fit = []
+    for data in ldata:
+        e = data['e']
+        ed = data['ed']
         param = np.polyfit(e, ed, 2)
-        fun = np.poly1d(param)
-        yi = fun(xi)
-        p0_tot = np.append(p0_tot, param[0]) 
+        lp0.append(param[0])
+        le0.append(-param[1] / (2 * param[0]))
+        ly_fit.append(np.polyval(param, xi))
 
-        e0 = -param[1]/(2*param[0])
-        e0_tot = np.append(e0_tot, e0 ) 
-
-        ax.plot(xi, yi, '-C1')
-
-        str1 = '$\\epsilon_0$ = %.6f' %(e0)
-        ymin, ymax = ax.get_ylim()
-        ax.text(0, ymax*0.85, str1)
-
-    C11 = p0_tot[0]*2
-    C12 = p0_tot[1]-C11
-    C33 = p0_tot[3]*2
-    C13 = p0_tot[2]-(C11+C33)/2
-    C44 = p0_tot[4]*2
-
-    # plot stress-strain 
-
-    lcolor=['C0','C1','C2','C3','C4','C5']
-
-    llegend=['$\\sigma_{xx}$','$\\sigma_{yy}$','$\\sigma_{zz}$','$\\sigma_{yz}$','$\\sigma_{xz}$','$\\sigma_{xy}$']
-
+    c11 = lp0[0] * 2
+    c12 = lp0[1] - c11
+    c33 = lp0[3] * 2
+    c13 = lp0[2] - (c11 + c33) / 2
+    c44 = lp0[4] * 2
+    cij = np.array([c11, c12, c13, c33, c44])
     lslope = np.array([
-        [ C11    , C12    , C13    , 0, 0, 0 ],          # c11
-        [ C11+C12, C12+C11, C13*2  , 0, 0, 0 ],          # c12
-        [ C11+C13, C12+C13, C13+C33, 0, 0, 0 ],          # c13
-        [ C13    , C13    , C33    , 0, 0, 0 ],          # c33
-        [ 0      , 0      , 0      , C44,  0,  0 ],      # c44
+        [c11, c12, c13, 0, 0, 0],
+        [c11 + c12, c12 + c11, c13 * 2, 0, 0, 0],
+        [c11 + c13, c12 + c13, c13 + c33, 0, 0, 0],
+        [c13, c13, c33, 0, 0, 0],
+        [0, 0, 0, c44, 0, 0],
     ])
- 
-    for i in np.arange(len(ldata)):
-        e    = ldata[i]['e']
-        ed   = ldata[i]['ed'] 
-        s    = ldata[i]['s'] 
-        iref = ldata[i]['iref'] 
-
-        ax = axes[i, 1]
-        for j in np.arange(6):
-            ax.plot(e, s[:, j], 'o', color=lcolor[j], label = llegend[j], markersize=6, alpha = 0.4)
-            # \sigma = C * \epsilon
-            ax.plot(xi, xi * lslope[i,j] + s[iref,j], '-', color=lcolor[j], markersize=6, alpha = 0.4 )
-
-    lg(axes[0,1].legend(loc='upper left', ncol=2))
-
-    for i in np.arange(len(ldata)):
-        for j in np.arange(2):
-            #axes[i,j].set_xticks(np.arange(-0.002, 0.004, 0.002))
-            axes[4,j].set_xlabel('Strain')
-
-        axes[i,0].set_ylabel('Elastic energy density (GPa)')
-        axes[i,1].set_ylabel('DFT stress (GPa)')
-
-
-    str1 = '$C_{11}$, $C_{12}$, $C_{13}$, $C_{33}$, $C_{44}$ (GPa): \n%.2f,   %.2f,   %.2f,   %.2f,   %.2f ' \
-        %( C11, C12, C13, C33, C44 )
-    ymin, ymax = axes[0,0].get_ylim()
-    axes[0,0].text(-0.003, ymax*1.05, str1 )
-
-    plt.savefig(save_fig_path)
-
-    write_cij_energy( np.array([ C11, C12, C13, C33, C44]), save_txt_path )
+    return {
+        'xi': xi,
+        'ly_fit': ly_fit,
+        'le0': le0,
+        'cij': cij,
+        'lslope': lslope,
+    }
 
 def write_cij_energy( cij_hcp: np.array = None, save_txt_path: str = './y_post_cij_energy.txt',):
     """
@@ -371,4 +321,4 @@ def calc_strain(latt1, latt2):
 
     e_ss_V = vf.calc_to_Voigt(e_ss)
 
-    return e_ss_V 
+    return e_ss_V
