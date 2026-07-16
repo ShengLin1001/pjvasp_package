@@ -1,0 +1,148 @@
+#!/bin/bash
+
+# pei_slurm_univ_launch_retry —— 并行启动器(srun / mpirun / …)启动失败重试包装器。
+#
+# Usage:
+#   pei_slurm_univ_launch_retry <launcher> [launcher_args...] <cmd> [cmd_args...]
+#
+# 例：
+#   pei_slurm_univ_launch_retry srun -n 128 vasp_std
+#   pei_slurm_univ_launch_retry mpirun -np 24 nnp-train
+#   # 经 MY_LAUNCHER 传给下游时，它只是个命令前缀，下游 `$launcher "$exe"` 的词分割会吃进去：
+#   export MY_LAUNCHER="pei_slurm_univ_launch_retry srun -n 128"
+#   #   → 下游展开成 pei_slurm_univ_launch_retry srun -n 128 vasp_std
+#
+# 为什么只认「启动失败」而不是任何非 0：
+#   srun / mpirun 会把被启动程序的退出码原样透传，所以非 0 的绝大多数是程序真的跑起来了
+#   才失败的 —— VASP 不收敛、INCAR/POSCAR 输入错误、段错误或 malloc corruption(255)、
+#   被 Slurm 因超时/OOM 杀掉(137/143)。这些重试多少次都是白烧机时，且会占着整个分配的核，
+#   必须原样返回退出码。只有 launcher 自己没起来（编译器/MPI 抖动、作业步创建被临时禁用）
+#   才是重试能救的，此时程序根本没执行，特征是 stderr 上的固定错误串 —— 见下面的模式表。
+#
+# 本包装器对 launcher 无关："$@" 原样透传，srun / mpirun / 以后任何新 launcher 同一套。
+#
+# Exit codes:
+#   原样透传 <cmd> 的退出码；启动失败重试次数耗尽时返回最后一次的退出码。
+
+# ================ ⚙️  可调参数（环境变量覆盖，无需重新生成作业脚本）
+: "${PEI_LAUNCH_RETRY_MAX:=2}"      # 最多尝试次数（含第一次）
+: "${PEI_LAUNCH_RETRY_SLEEP:=10}"    # 每次重试前 sleep 的秒数
+
+# 启动失败特征表：命中任一条才重试。集中成表而非散写，新遇到的抖动往这里加一行即可；
+# 临时补充也可用 PEI_LAUNCH_RETRY_EXTRA_PATTERNS（每行一条）而不必改本文件。
+#
+# ⚠️ 往这里加串之前必读：只收「终态」串 —— 即 launcher 打完它就放弃并退出、程序根本没执行。
+# srun 自己会内部重试，同一个串有两种形式：
+#     srun: Job step creation temporarily disabled, retrying (Requested nodes are busy)
+#         ↑ 非终态：srun 稍后往往把作业步建起来、程序照常跑完
+#     srun: error: Unable to allocate resources: Job step creation temporarily disabled
+#         ↑ 终态：srun 放弃退出
+# 若收了裸的 "Job step creation temporarily disabled"，就会发生：srun 抖一下→自己恢复→
+# VASP 真跑起来→算崩 exit 1→日志里残留着那句 chatter→被误判成启动失败→把一个必崩的
+# 算例重跑 99 遍，正是本包装器要避免的事。所以 chatter 形式一律不收，只留终态串
+# （"Unable to allocate resources" 就是上面那句 chatter 的终态形式，覆盖了同一个抖动）。
+# 同理不收 "There are not enough slots available"：那是配置写错，重试 99 次也不会变好。
+# 另：串要足够特指 launcher，别收 "launch failed" 这类通用短语 —— 本表是拿被启动程序的 stderr
+# 一起 grep 的，通用短语会被应用自己打出的同名字样命中，把跑起来过的算例重跑 99 遍。
+LAUNCH_FAIL_PATTERNS=(
+    # —— Slurm srun：资源没拿到 / 作业步没建成，srun 就此退出 ——
+    "Unable to allocate resources"
+    "Unable to create step"            # 本机实测主力：srun: error: Unable to create step for job N: Unexpected message received
+    "Unable to confirm allocation"     # 本机实测：同上，slurmctld 通信抖动的另一形态
+    # —— MPI（OpenMPI / Intel MPI）：daemon / proxy 起不来，mpirun 就此 abort ——
+    "mpirun was unable to launch"
+    "unable to reliably start one or more daemons"
+    "Hydra internal error"
+)
+if [[ -n "$PEI_LAUNCH_RETRY_EXTRA_PATTERNS" ]]; then
+    while IFS= read -r extra_pattern; do
+        [[ -n "$extra_pattern" ]] && LAUNCH_FAIL_PATTERNS+=("$extra_pattern")
+    done <<< "$PEI_LAUNCH_RETRY_EXTRA_PATTERNS"
+fi
+# to here ================
+
+# ====== check ======
+if (( $# < 1 )); then
+    echo "❌ ERROR: 用法: pei_slurm_univ_launch_retry <launcher> [args...] <cmd> [args...]" >&2
+    exit 1
+fi
+for knob_name in PEI_LAUNCH_RETRY_MAX PEI_LAUNCH_RETRY_SLEEP; do
+    if ! [[ "${!knob_name}" =~ ^[0-9]+$ ]]; then
+        echo "❌ ERROR: $knob_name 必须是非负整数，收到: ${!knob_name}" >&2
+        exit 1
+    fi
+    # 强制按十进制解析：裸写 08 / 09 会被 bash 算术当八进制，(( )) 求值直接报错 → 下面
+    # `attempt >= MAX` 恒不成立 → 启动失败会无限重试烧光 walltime；010 则会悄悄变成 8。
+    printf -v "$knob_name" '%d' "$((10#${!knob_name}))"
+done
+if (( PEI_LAUNCH_RETRY_MAX < 1 )); then
+    echo "❌ ERROR: PEI_LAUNCH_RETRY_MAX 必须 >= 1，收到: $PEI_LAUNCH_RETRY_MAX" >&2
+    exit 1
+fi
+# ====== to here ======
+
+# ====== prepare ======
+# 只截 stderr，不动 stdout：
+#   1. 流分离 —— 若作业配了各自的 #SBATCH --output / --error，`2>&1 | tee` 会把 stderr 并进
+#      stdout，--error 文件空着、拿 stderr 做诊断的调用方也就瞎了。stdout 这里完全不接管、
+#      原样直通，被启动程序的输出照常实时进作业日志。
+#   2. 更准 —— srun / mpirun 的启动失败一律打在 stderr，只 grep stderr 就不会被应用 stdout
+#      里偶然出现的同名字符串误伤。
+#   3. 不用 out=$(...)：那会把 VASP 几十分钟的输出全憋在内存、日志一片空白到跑完才吐。
+# 用 FIFO + 显式后台 tee（而非 `2> >(tee ...)` 进程替换）：进程替换的 PID 拿不到、wait 不住，
+# 会跟下面的 grep 抢跑（tee 还没落盘就去读）。FIFO 方式能 wait 到 tee 退出，落盘是确定的。
+# 先 mktemp -d 开一个私有目录（原子创建、0700），FIFO 和日志都放里面。不能用 mktemp -u：
+# 它只吐路径不创建，多用户计算节点上别的进程能抢在 mkfifo 之前把该路径建成符号链接，
+# 之后的 `2> "$path_fifo"` 就会顺着链接去写/截断别的文件。mkfifo 的返回值也必须接住。
+path_tmpdir="$(mktemp -d)" || exit 1
+path_log="$path_tmpdir/stderr.log"
+path_fifo="$path_tmpdir/stderr.fifo"
+mkfifo "$path_fifo" || exit 1
+trap 'rm -f "$path_log"; rm -f "$path_fifo"; rmdir "$path_tmpdir"' EXIT
+
+# 命中则打印匹配到的特征串并返回 0；没命中返回 1。调用处接住输出用于日志。
+is_launch_failure() {
+    local pattern
+    for pattern in "${LAUNCH_FAIL_PATTERNS[@]}"; do
+        if grep -qiF -- "$pattern" "$path_log"; then
+            echo "$pattern"
+            return 0
+        fi
+    done
+    return 1
+}
+# ====== to here ======
+
+# ====== main ======
+attempt=1
+while :; do
+    # 本包装器自己的诊断一律走 stderr（和下面的 ⚠️/❌ 一致），stdout 完全留给被启动的程序，
+    # 这样连 `out=$(pei_slurm_univ_launch_retry srun -n 4 foo)` 拿到的也是干净的程序输出。
+    echo "▶️  [attempt $attempt/$PEI_LAUNCH_RETRY_MAX] $*" >&2
+    # 先起读端（tee 把 stderr 既送回 fd 2、又留一份给 grep），再让命令的 fd 2 写进 FIFO。
+    : > "$path_log"
+    tee "$path_log" < "$path_fifo" >&2 &
+    pid_tee=$!
+    "$@" 2> "$path_fifo"
+    status=$?          # stdout 没接管、stderr 走的是重定向而非管道，$? 就是命令自己的退出码
+    wait "$pid_tee"    # 等 tee 把 stderr 全落进 path_log，下面 grep 才读得全
+
+    if (( status == 0 )); then
+        exit 0
+    fi
+
+    matched="$(is_launch_failure)"
+    if [[ -z "$matched" ]]; then
+        echo "❌ 非启动失败 (exit $status)：命令已执行，按其退出码原样返回，不重试。" >&2
+        exit "$status"
+    fi
+    if (( attempt >= PEI_LAUNCH_RETRY_MAX )); then
+        echo "❌ 启动失败重试 $PEI_LAUNCH_RETRY_MAX 次仍未成功 (exit $status)，放弃: $*" >&2
+        exit "$status"
+    fi
+
+    echo "⚠️  启动失败（命中特征: $matched），${PEI_LAUNCH_RETRY_SLEEP}s 后重试…" >&2
+    attempt=$((attempt + 1))
+    sleep "$PEI_LAUNCH_RETRY_SLEEP"
+done
+# ====== to here ======
