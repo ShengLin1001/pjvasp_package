@@ -473,15 +473,21 @@ def pei_slurm_univ_submit(
             warn(f"each-subdir 编排脚本无需多资源，已将 nodes={nodes}, ncores={ncores} 修正为 1")
             nodes = 1
             ncores = 1
+        # 编排脚本(chunk)及其 slurm-<jobid>.out 单独收进 path_root/slurm/ —— 否则会和
+        # dir_root(如 y_dir) 同级、直接堆在 path_root 里，与后处理产物(y_post_*.txt 等)混在一起。
+        # 从 slurm_dir 里 sbatch，默认的 slurm-*.out 也就落在这里；子作业(base script)经
+        # sbatch --wait 在各自 subdir 内提交，其输出仍留在对应 subdir，不受影响。
+        slurm_dir = path_root / "slurm"
+        slurm_dir.mkdir(parents=True, exist_ok=True)
         # 这里你应该提前在所有subdir中生成base script, 因为 slurm script 中无法调用generate_base() 函数
         for id, group in enumerate(lgroup, start = 1):
-            path_save = path_root / f"sub_slurm_{mode.replace('-', '_')}_chunk{id:03d}.sh"
+            path_save = slurm_dir / f"sub_slurm_{mode.replace('-', '_')}_chunk{id:03d}.sh"
             generate_slurm_script_sequential(partition, nodes, ncores, module_profile_type, MODULE_BLOCKS,
                                             launcher_type, cmd, if_use_my_launcher,
                                             group=group, mode=mode,
                                             if_output=True, path_save=path_save)
             if if_sbatch:
-                os.system(f"cd {path_root} && sbatch {path_save}")
+                os.system(f"cd {slurm_dir} && sbatch {path_save}")
 
     ################################### Main control flow to here
     return None
