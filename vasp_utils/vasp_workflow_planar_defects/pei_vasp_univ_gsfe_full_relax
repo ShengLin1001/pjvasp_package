@@ -1,5 +1,45 @@
 #!/bin/bash
 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# In-place prep step: everything below rewrites the CURRENT dir's INCAR/POSCAR, so the
+# help must come first -- a bare run has already edited your files by the time you notice.
+print_help(){
+    echo -e "${GREEN}pei_vasp_univ_gsfe_full_relax${NC} - Prepare a relaxed dir for the tilt / full-relax branch"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  cd y_full_relax && $(basename "$0")     ${BLUE}# takes no options${NC}"
+    echo ""
+    echo -e "${YELLOW}What it changes, in place, in the current dir:${NC}"
+    echo -e "  ${GREEN}CONTCAR -> POSCAR${NC}              rewritten in ${BLUE}Cartesian${NC} (pei_vasp_univ_cp_contcar_cartesian_poscar)"
+    echo -e "  ${GREEN}selective -> normal${NC}            drops selective dynamics (pei_vasp_univ_transfer_selective_to_normal)"
+    echo -e "  ${GREEN}ISIF = 3${NC}                       relax cell + ions"
+    echo -e "  ${GREEN}ISYM = 0${NC}                       symmetry off for the tilted cell"
+    echo -e "  ${GREEN}ALGO = F${NC}"
+    echo -e "  ${GREEN}Y_CONSTR_LATT = 3${NC}"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it ${YELLOW}INSIDE${NC} ${BLUE}y_full_relax${NC}; it edits that dir in place and has ${YELLOW}no undo${NC}."
+    echo -e "  - Then run ${GREEN}pei_vasp_run_tilt_bulk_to_slip <slip_mode>${NC} one level ${BLUE}above${NC}."
+    echo -e "  - Sibling: ${GREEN}pei_vasp_univ_gsfe_preliminary${NC} preps the GSFE-scan branch instead"
+    echo -e "    (that one keeps selective dynamics and ISYM=1)."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  cd y_full_relax && $(basename "$0") && cd .."
+    echo -e "  pei_vasp_run_tilt_bulk_to_slip -basal"
+    echo ""
+}
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_help
+    exit 0
+fi
+
 pei_vasp_univ_cp_contcar_cartesian_poscar
 pei_vasp_univ_transfer_selective_to_normal
 yin_vasp_univ_find_and_change -isif 3

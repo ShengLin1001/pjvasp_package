@@ -1,9 +1,50 @@
 #!/bin/bash
 
 
-if [ -z "$1" ]; then      # empty is true 
-    echo "==>  Please indicate which GSFE to compute. Abort!"
-    exit 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# N1=1, so only the two end points 00 (unslipped) and 01 (fully slipped) are made: this
+# tilts the bulk cell onto the slipped state and relaxes it, it is not a GSFE scan.
+print_help(){
+    echo -e "${GREEN}pei_vasp_run_tilt_bulk_to_slip${NC} - Tilt the bulk cell onto a slipped state and relax it"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0") ${GREEN}<slip_mode>${NC}"
+    echo ""
+    echo -e "${YELLOW}Slip modes:${NC}    (output dir, shear vector in units of a1 / b2)"
+    echo -e "  ${GREEN}-basal${NC}       y_gsfe_basal_full_relax     -0.5,  1/3"
+    echo -e "  ${GREEN}-prism1w${NC}     y_gsfe_prism1w_full_relax    0.5,  0.0"
+    echo -e "  ${GREEN}-pyr1n${NC}       y_gsfe_pyr1n_full_relax      0.5, -0.11"
+    echo -e "  ${GREEN}-pyr1w${NC}       y_gsfe_pyr1w_full_relax      0.0,  0.5"
+    echo -e "  ${GREEN}-pyr2${NC}        y_gsfe_pyr2_full_relax       0.0,  0.5"
+    echo -e "  ${GREEN}-a1${NC}          y_gsfe_a1_full_relax         1.0,  0.0"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}; its POSCAR ${YELLOW}must${NC} be ${BLUE}Cartesian${NC} (aborts otherwise)."
+    echo -e "  - Prepare y_full_relax first with ${GREEN}pei_vasp_univ_gsfe_full_relax${NC}."
+    echo -e "  - Only ${GREEN}2${NC} images are made (y_dir/00 unslipped, y_dir/01 fully slipped), each with"
+    echo -e "    ISIF=3 and Y_CONSTR_LATT=356; selective-dynamics flags are stripped from POSCAR."
+    echo -e "  - It ${YELLOW}DOES sbatch${NC} each image immediately -- unlike pei_vasp_run_gsfe."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $(basename "$0") -basal        # relax the basal-slipped HCP cell"
+    echo -e "  $(basename "$0") -prism1w"
+    echo ""
+}
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_help
+    exit 0
+fi
+
+if [ -z "$1" ]; then      # empty is true
+    echo -e "==>  Please indicate which slip mode to tilt to. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
+    exit
 fi
 
 
@@ -75,9 +116,9 @@ case "$1" in
 
 
  
-    *)  echo "==>  Option $1 not recognized. Abort!" 
+    *)  echo -e "==>  Option $1 not recognized. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
         exit
-        ;;   
+        ;;
 esac
 
 echo "bp1, bp2:"  $bp1  $bp2

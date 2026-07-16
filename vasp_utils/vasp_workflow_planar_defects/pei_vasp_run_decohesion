@@ -3,8 +3,41 @@
 # Taken from https://github.com/BinglunYin/vasp_utils/blob/master/vasp_workflow_planar_defects/yin_vasp_plot_decohesion.py
 # This script is designed for the cartesian POSCAR not the direct one.
 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# The opening sweep is hard-coded: N1=38 gives 0.0-2.0 Ang in 0.1 steps, 2.0-4.0 in 0.2,
+# 4.0-8.0 in 0.5 -- dense where the traction peak is, coarse out on the tail.
+print_help(){
+    echo -e "${GREEN}pei_vasp_run_decohesion${NC} - Decohesion curve: open a vacuum gap along c"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0")                ${BLUE}# takes no options${NC}"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}; its POSCAR ${YELLOW}must${NC} be ${BLUE}Cartesian${NC}"
+    echo -e "    (this script rewrites line 5, the c vector, directly)."
+    echo -e "  - Builds ${GREEN}39${NC} dirs in y_decohesion/y_dir/<gap>, gap = 0.00 .. 8.00 Ang:"
+    echo -e "    0.1 steps to 2.0, 0.2 steps to 4.0, 0.5 steps to 8.0."
+    echo -e "  - INCAR is copied ${YELLOW}unchanged${NC} from y_full_relax -- set ISIF / NSW / ISYM there first."
+    echo -e "  - It does ${YELLOW}NOT${NC} sbatch; submit y_decohesion/y_dir/* yourself."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $(basename "$0")"
+    echo ""
+}
+
 main(){
     srcdir0=y_full_relax
+
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        print_help
+        exit 0
+    fi
 
     if [ -d "$srcdir0" ] ; then
         sub_run_decohesion

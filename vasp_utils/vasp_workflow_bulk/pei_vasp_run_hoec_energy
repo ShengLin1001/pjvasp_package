@@ -48,8 +48,29 @@ from pathlib import Path
 
 from mymetal.build.workflow.hoec import generate_hoec_dirs
 
+# Kept in sync with the ">>> Example usage" block at the top of this file; argparse only
+# shows what we hand it, so the header comment alone never reaches a --help reader.
+EPILOG = """\
+most common:
+  pei_vasp_run_hoec_energy                          # auto-detect symmetry, 11 cubic modes
+  pei_vasp_run_hoec_energy --symmetry hex           # force the 20 hexagonal modes
+  pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025  # wider window, same step count
+  pei_vasp_run_hoec_energy --symmetry hex --static  # HCP clamped-ion branch
+  pei_vasp_run_hoec_energy --no-scale-window        # one shared window (literal Wang-Li)
+
+then:
+  submit y_hoec_energy/*/y_dir/* with your usual flow, then
+  pei_vasp_plot_hoec_energy.py                      # solve C2/C3/C4 + convergence plots
+
+notes:
+  run at the level of y_full_relax, which must be a CONVERGED conventional cell
+  (dense k-points, high ENCUT, EDIFF ~1e-8) -- 4th-order constants are very sensitive.
+  it only prepares dirs -- no Slurm script, no sbatch.
+"""
+
 parser = argparse.ArgumentParser(
-    description="Generate higher-order elastic-constant VASP input directories from y_full_relax.")
+    description="Generate higher-order elastic-constant VASP input directories from y_full_relax.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--symmetry", default="auto", choices=["auto", "cubic", "hex"],
                     help="Crystal symmetry; 'auto' detects it from the reference cell.")
 parser.add_argument("--emax", type=float, default=0.12,

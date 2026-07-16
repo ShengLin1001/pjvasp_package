@@ -1,8 +1,44 @@
 #!/bin/sh
 # by B. Yin
 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# The bond-length sweep is hard-coded: N1=39 gives 1.0-5.0 Ang in 0.2 steps, then
+# 5.0-12.6 in 0.4 -- dense around the bond minimum, coarse out to the free-atom limit.
+# POSIX [ ] rather than [[ ]] here: this script is #!/bin/sh.
+print_help(){
+    echo -e "${GREEN}pei_vasp_run_dimer${NC} - Dimer binding curve: scan the bond length"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0")                ${BLUE}# takes no options${NC}"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}, whose cell must hold a ${BLUE}2-atom dimer${NC}"
+    echo -e "    in a big box: the script rewrites POSCAR ${YELLOW}line 10${NC} (2nd atom's x) directly."
+    echo -e "  - Needs a ${GREEN}sub.*.sequential.sh${NC} script in y_full_relax."
+    echo -e "  - Builds ${GREEN}40${NC} static single points in y_dimer/y_dir/<d>, d = 01.0 .. 12.6 Ang:"
+    echo -e "    0.2 steps to 5.0, then 0.4 steps to 12.6."
+    echo -e "  - Forces ISIF=2, IBRION=-1, NSW=0, LCHARG=F, ALGO=Fast and an unconstrained Y_CONSTR_LATT."
+    echo -e "  - It ${YELLOW}DOES sbatch${NC} once the dirs are made: all 40 points in ${BLUE}one${NC} sequential job."
+    echo -e "  - Use a ${YELLOW}Gamma-only${NC} KPOINTS -- an isolated dimer needs no k-mesh."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $(basename "$0")"
+    echo ""
+}
+
 main(){
     srcdir0=y_full_relax
+
+    if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+        print_help
+        exit 0
+    fi
 
     if [ -d "$srcdir0" ]
     then

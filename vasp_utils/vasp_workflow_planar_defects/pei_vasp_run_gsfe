@@ -18,9 +18,52 @@
 # atoms.set_constraint(c)
 # write("POSCAR", atoms, format="vasp")
 
-if [ -z "$1" ]; then      # empty is true 
-    echo "==>  Please indicate which GSFE to compute. Abort!"
-    exit 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# The slip mode picks the Burgers direction (bp1, bp2 in units of a1, b2) that the top
+# of the cell is sheared along; keep this list in sync with the case block below.
+print_help(){
+    echo -e "${GREEN}pei_vasp_run_gsfe${NC} - Generalized stacking fault energy (GSFE) curve"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0") ${GREEN}<slip_mode>${NC}"
+    echo ""
+    echo -e "${YELLOW}Slip modes:${NC}    (output dir, shear vector in units of a1 / b2)"
+    echo -e "  ${GREEN}-FCC_111${NC}       y_gsfe_FCC_111       -0.5,  1/3   full <112> path"
+    echo -e "  ${GREEN}-FCC_100${NC}       y_gsfe_FCC_100        0.5,  0.5"
+    echo -e "  ${GREEN}-HCP_basal${NC}     y_gsfe_HCP_basal     -0.5,  1/3"
+    echo -e "  ${GREEN}-HCP_prism1w${NC}   y_gsfe_HCP_prism1w    0.5,  0.0"
+    echo -e "  ${GREEN}-HCP_pyr1n${NC}     y_gsfe_HCP_pyr1n      0.5, -0.11"
+    echo -e "  ${GREEN}-HCP_pyr1w${NC}     y_gsfe_HCP_pyr1w      0.0,  0.5"
+    echo -e "  ${GREEN}-HCP_pyr2${NC}      y_gsfe_HCP_pyr2       0.0,  0.5"
+    echo -e "  ${GREEN}-a1${NC}            y_gsfe_a1             1.0,  0.0   full a1 period"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}; the source POSCAR must be ${BLUE}Cartesian${NC}."
+    echo -e "  - Prepare y_full_relax first with ${GREEN}pei_vasp_univ_gsfe_preliminary${NC}"
+    echo -e "    (ISYM=1, Cartesian POSCAR, selective dynamics, Y_CONSTR_LATT=3)."
+    echo -e "  - Makes ${GREEN}N1+1 = 11${NC} images in <workdir>/y_dir/00..10 and does ${YELLOW}NOT${NC} sbatch;"
+    echo -e "    submit them yourself, then post-process."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $(basename "$0") -FCC_111        # the usual FCC <112> gamma-surface line"
+    echo -e "  $(basename "$0") -HCP_basal      # HCP basal slip"
+    echo ""
+}
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_help
+    exit 0
+fi
+
+if [ -z "$1" ]; then      # empty is true
+    echo -e "==>  Please indicate which GSFE to compute. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
+    exit
 fi
 
 cat << 'EOF'
@@ -119,9 +162,9 @@ case "$1" in
 
 
  
-    *)  echo "==>  Option $1 not recognized. Abort!" 
+    *)  echo -e "==>  Option $1 not recognized. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
         exit
-        ;;   
+        ;;
 esac
 
 echo "bp1, bp2:"  $bp1  $bp2

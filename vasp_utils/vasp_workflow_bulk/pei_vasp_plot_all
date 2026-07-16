@@ -1,10 +1,53 @@
 #!/bin/bash
 # taken from https://github.com/BinglunYin/vasp_utils
 # revised by J. Pei, 2025-05-29
-# 
-if [ -z "$1" ]; then      # empty is true 
-    echo "==>  Please indicate what to plot. Abort!"
-    exit 
+#
+
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# Dispatcher: every option maps to one y_* workflow dir + its plot script. This list is
+# the only place a user can discover which workflows are plottable, so keep it in sync
+# with the case block at the bottom.
+print_help(){
+    echo -e "${GREEN}pei_vasp_plot_all${NC} - Find every y_* workflow dir under . and post-process it"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0") ${GREEN}<workflow>${NC}"
+    echo ""
+    echo -e "${YELLOW}Workflows:${NC}"
+    echo -e "  ${GREEN}-convergence${NC}      y_convergence     ENCUT / KPOINTS convergence"
+    echo -e "  ${GREEN}-stretch${NC}          y_stretch         strain-energy curve"
+    echo -e "  ${GREEN}-neb${NC}              y_neb             NEB barrier"
+    echo -e "  ${GREEN}-hoec_energy${NC}      y_hoec_energy     2nd/3rd/4th-order elastic constants"
+    echo -e "  ${GREEN}-kpar_nocre${NC}       y_kpar_ncore      KPAR/NCORE timing (alias ${GREEN}-kpar_ncore${NC})"
+    echo -e "  ${GREEN}-E_in_1_2_bulk${NC}    y_E_in_1_2_bulk   uniaxial / biaxial bulk energy"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}, i.e. one level ${BLUE}above${NC} the y_* dirs."
+    echo -e "    It recurses with find, so a single call plots every match under the tree."
+    echo -e "  - Each plot script is run ${BLUE}inside${NC} its workflow dir and re-runs pei_vasp_univ_post."
+    echo -e "  - Only run it once the jobs have ${GREEN}finished${NC}; it reads OUTCARs, it does not submit."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $(basename "$0") -convergence      # after the ENCUT/KPOINTS tests finish"
+    echo -e "  $(basename "$0") -stretch          # equilibrium lattice constant"
+    echo -e "  $(basename "$0") -hoec_energy      # solve HOEC in every y_hoec_energy found"
+    echo ""
+}
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_help
+    exit 0
+fi
+
+if [ -z "$1" ]; then      # empty is true
+    echo -e "==>  Please indicate what to plot. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
+    exit
 fi
 
 
@@ -104,10 +147,10 @@ case "$1" in
         sub_plot_all  $workdir  $mycmd 
         ;;
 
-    *) 
-        echo "==>  Option $1 not recognized. Abort!" 
+    *)
+        echo -e "==>  Option $1 not recognized. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
         exit
-        ;;   
+        ;;
 esac
 
 

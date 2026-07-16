@@ -53,8 +53,35 @@ from pathlib import Path
 
 from mymetal.post.hoec_energy import post_hoec_energy, REF_JSON_DEFAULT
 
+# Kept in sync with the ">>> Example usage" / ">>> Strategy knobs" blocks at the top of this
+# file; argparse only shows what we hand it, so the header alone never reaches a --help reader.
+EPILOG = """\
+most common:
+  pei_vasp_plot_hoec_energy.py                        # at the level of y_full_relax
+  cd y_hoec_energy && pei_vasp_plot_hoec_energy.py    # from inside (as plot_all does)
+  pei_vasp_plot_all -hoec_energy                      # every y_hoec_energy under the tree
+
+scanning the fit window (the usual real work -- check for a plateau, Wang-Li Fig. 6):
+  pei_vasp_plot_hoec_energy.py --fitmax 0.10 --skip-univ-post --suffix _f010
+  pei_vasp_plot_hoec_energy.py --fitmax 0.06 --skip-univ-post --suffix _f006
+    --skip-univ-post avoids re-scraping ~475 OUTCARs each pass; --suffix keeps the runs
+    side by side. Then compare the y_post_hoec_conv*.pdf plateaus.
+
+strategy knobs (compare their y_post_hoec_conv*.pdf side by side):
+  --fitdeg 6 --skip-univ-post --suffix _d6      # xi^5/xi^6 absorb the higher response
+  --fitdeg 3 --skip-univ-post --suffix _d3      # cubic fit, no P4 forced in
+  --fix-soec ../y_cij_energy_small/y_post_cij_energy.txt --suffix _fix
+                                                # import C2, fit only the higher orders
+
+notes:
+  read the "fit-window diagnostics" block of y_post_hoec.txt when scanning --fitmax,
+  NOT the per-mode fit rms -- a small rms proves nothing about P2..P4 staying Taylor
+  coefficients.
+"""
+
 parser = argparse.ArgumentParser(
-    description="Solve higher-order elastic constants from a finished y_hoec_energy tree.")
+    description="Solve higher-order elastic constants from a finished y_hoec_energy tree.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--dir", default="y_hoec_energy", help="The y_hoec_energy directory.")
 parser.add_argument("--fitdeg", type=int, default=4,
                     help="Polynomial fit degree (>=3). Wang-Li use 4. Set above --maxorder to "

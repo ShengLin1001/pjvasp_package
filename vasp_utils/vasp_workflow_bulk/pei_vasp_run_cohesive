@@ -24,8 +24,43 @@ confirm_prepare_dir(){
     fi
 }
 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# The scale sweep is hard-coded: i=-2..39 with n1=12 gives k = 0.60..1.30 in 0.05 steps,
+# then 1.30..4.00 in 0.10 steps -- dense near equilibrium, coarse out to dissociation.
+print_help(){
+    echo -e "${GREEN}pei_vasp_run_cohesive${NC} - Cohesive-energy curve: scale a0 from 0.60x to 4.00x"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0")                ${BLUE}# takes no options${NC}"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC} (needs INCAR, KPOINTS, POSCAR, POTCAR,"
+    echo -e "    Y_*, and a ${GREEN}sub*sequential.sh${NC} script)."
+    echo -e "  - Builds ${GREEN}42${NC} static single points in y_cohesive/y_dir/<k>, k = 0.60 .. 4.00 x a0:"
+    echo -e "    0.05 steps up to 1.30, then 0.10 steps out to 4.00."
+    echo -e "  - Forces NSW=0, IBRION=-1, ISIF=2, NELM=200, LCHARG=F and an unconstrained Y_CONSTR_LATT."
+    echo -e "  - It ${YELLOW}DOES sbatch${NC} the sequential job automatically once the dirs are made:"
+    echo -e "    all 42 points run in ${BLUE}one${NC} sequential job, not 42 separate ones."
+    echo -e "  - At k=4.00 the atoms are essentially free -- that plateau is your reference energy."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $(basename "$0")"
+    echo ""
+}
+
 main(){
     srcdir0=y_full_relax
+
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        print_help
+        exit 0
+    fi
 
     if [ -d "$srcdir0" ] ; then
         sub_run_cohesive

@@ -10,13 +10,41 @@ from mymetal.io.vasp import my_write_vasp, my_read_vasp
 from mymetal.universal.print.print import confirm_prepare_outdir
 
 # parse arguments
-parser = argparse.ArgumentParser(description="Stretch unit cells to find the equilibrium lattice constants.")
+# --type is the only required flag, so lead the examples with it; the defaults already give
+# the +-0.4% / 0.05% scan used for an equilibrium lattice constant.
+EPILOG = """\
+most common:
+  pei_vasp_run_stretch.py --type xyz              # isotropic, default +-0.4% in 0.05% steps
+  pei_vasp_run_stretch.py --type xy --keepvolume  # biaxial in-plane, volume conserved
+  pei_vasp_run_stretch.py --type z --init -0.02 --final 0.02 --interval 0.005
+                                                  # wider uniaxial scan along z
+  pei_vasp_run_stretch.py --type xyz --strains=-0.004,-0.002,0.0,0.002,0.004
+                                                  # explicit list instead of init/final/interval
+                                                  # NOTE the '=': a list starting with a
+                                                  # minus is read as a flag after a space
+
+then:
+  submit y_stretch/y_dir/* with your usual flow (pei_vasp_univ_sbatch_jobs), then
+  pei_vasp_plot_all -stretch                      # strain-energy curve
+
+notes:
+  run at the level of y_full_relax; strains are fractional (-0.004 = -0.4%), and --strains
+  overrides --init/--final/--interval. --keepvolume rescales only the UNstretched axes.
+  it only prepares dirs -- it never sbatches.
+"""
+
+parser = argparse.ArgumentParser(
+    description="Stretch unit cells to find the equilibrium lattice constants.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
 parser.add_argument("--type", type = str, choices=["xyz", "xy", "xz", "yz", "x", "y", "z"], required=True, help="Stretch direction")
 parser.add_argument("--init", type = float, default = -4/1000,      help = "Initial strain  (e.g., -4/1000 for -0.4%%)")
 parser.add_argument("--final", type = float, default = 4/1000,      help = "Final   strain  (e.g.,  4/1000 for  0.4%%)")
 parser.add_argument("--interval", type = float, default = 0.5/1000, help = "Strain interval (e.g., 0.5/1000 for 0.05%%)")
 # other methods to set up stretch list
-parser.add_argument("--strains", type = str, default = None, help = "Comma-separated strain list (e.g., -0.004,-0.002,0.0,0.002,0.004)")
+# argparse only exempts bare negative numbers from being read as flags; '-0.004,-0.002' has
+# commas, so it does not match and the space form dies with "expected one argument".
+# '--strains=...' is the only spelling that works for a list starting with a minus.
+parser.add_argument("--strains", type = str, default = None, help = "Comma-separated strain list; use '=' when it starts with a minus (e.g., --strains=-0.004,-0.002,0.0,0.002,0.004)")
 parser.add_argument("--keepvolume", action = "store_true", help = "Adjust the unstretched directions to keep the volume unchanged")
 parser.add_argument("--deleteold", action = "store_true", help="Whether to delete existing directory automatically.")
 args = parser.parse_args()

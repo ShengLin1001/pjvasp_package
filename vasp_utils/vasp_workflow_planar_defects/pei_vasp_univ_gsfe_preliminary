@@ -1,5 +1,42 @@
 #!/bin/bash
 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# In-place prep step: everything below rewrites the CURRENT dir's INCAR/POSCAR, so the
+# help must come first -- a bare run has already edited your files by the time you notice.
+print_help(){
+    echo -e "${GREEN}pei_vasp_univ_gsfe_preliminary${NC} - Prepare a relaxed dir for a GSFE scan"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  cd y_full_relax && $(basename "$0")     ${BLUE}# takes no options${NC}"
+    echo ""
+    echo -e "${YELLOW}What it changes, in place, in the current dir:${NC}"
+    echo -e "  ${GREEN}ISYM = 1${NC}                       symmetry off enough for a sheared cell"
+    echo -e "  ${GREEN}CONTCAR -> POSCAR${NC}              rewritten in ${BLUE}Cartesian${NC} (pei_vasp_univ_cp_contcar_cartesian_poscar)"
+    echo -e "  ${GREEN}normal -> selective${NC}            adds selective dynamics (pei_vasp_univ_transfer_normal_to_selective)"
+    echo -e "  ${GREEN}Y_CONSTR_LATT = 3${NC}              constrain the cell during the scan"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it ${YELLOW}INSIDE${NC} ${BLUE}y_full_relax${NC}; it edits that dir in place and has ${YELLOW}no undo${NC}."
+    echo -e "  - Then run ${GREEN}pei_vasp_run_gsfe <slip_mode>${NC} one level ${BLUE}above${NC}."
+    echo -e "  - Sibling: ${GREEN}pei_vasp_univ_gsfe_full_relax${NC} preps the tilt/full-relax branch instead."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  cd y_full_relax && $(basename "$0") && cd .."
+    echo -e "  pei_vasp_run_gsfe -FCC_111"
+    echo ""
+}
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_help
+    exit 0
+fi
+
 yin_vasp_univ_find_and_change -isym 1
 pei_vasp_univ_cp_contcar_cartesian_poscar
 pei_vasp_univ_transfer_normal_to_selective

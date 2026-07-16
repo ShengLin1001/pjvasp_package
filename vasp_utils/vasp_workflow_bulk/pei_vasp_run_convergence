@@ -47,7 +47,7 @@ main() {
         echo -e "${YELLOW}Notes:${NC}"
         echo -e "  - The source directory must be ${BLUE}y_full_relax${NC}"
         echo -e "  - Required input files: ${GREEN}{INCAR, KPOINTS, CONTCAR or POSCAR, POTCAR, sub.*, Y_*}${NC}"
-        echon -e "  - Don't copy ${GREEN}CHGCAR, WAVECAR${NC}"
+        echo -e "  - Don't copy ${GREEN}CHGCAR, WAVECAR${NC}"
         echo ""
         echo -e "${YELLOW}Example:${NC}"
         echo -e "  $0 -encuts 400 500"

@@ -6,8 +6,53 @@
 
 # 这个脚本根据 CONTCAR 的 a0 为该 cell 的基准，分别在x和y方向施加 a1/a0 和 a2/a0 的stretch
 
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- Help ----------
+# -a1/-a2 are TARGET in-plane lattice lengths in Angstrom, not strains: the script divides
+# each by the CONTCAR scale factor a0 to get strainx/strainy. Every a1 x a2 combination is
+# generated, so two 3-value lists give 9 dirs.
+print_help(){
+    echo -e "${GREEN}pei_vasp_run_E_in_1_2_bulk${NC} - Uniaxial / biaxial in-plane stretch of a bulk cell"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0") ${GREEN}-a1 <list>${NC} ${GREEN}-a2 <list>${NC}"
+    echo ""
+    echo -e "${YELLOW}Options:${NC}"
+    echo -e "  ${GREEN}-a1 <v1> <v2> ...${NC}   Target ${BLUE}x${NC} lattice lengths, in Angstrom"
+    echo -e "  ${GREEN}-a2 <v1> <v2> ...${NC}   Target ${BLUE}y${NC} lattice lengths, in Angstrom"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}; values are ${YELLOW}absolute lengths${NC} (a0-based), not strains."
+    echo -e "  - Every ${GREEN}a1 x a2${NC} pair is built -> y_E_in_1_2_bulk/y_dir/a1-<v1>-a2-<v2>."
+    echo -e "    Two 3-value lists = 9 dirs; keep the lists short."
+    echo -e "  - c is rescaled by 1/(strainx*strainy), so the ${GREEN}volume is conserved${NC}."
+    echo -e "  - It does ${YELLOW}NOT${NC} sbatch; submit y_dir/* yourself, then ${GREEN}pei_vasp_plot_all -E_in_1_2_bulk${NC}."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}    (a0 ~ 2.95 Ang here; use your own relaxed value)"
+    echo -e "  ${BLUE}# equal biaxial: same list on both axes${NC}"
+    echo -e "  $(basename "$0") -a1 2.90 2.95 3.00 -a2 2.90 2.95 3.00"
+    echo -e "  ${BLUE}# uniaxial along x: vary a1, pin a2 at the relaxed value${NC}"
+    echo -e "  $(basename "$0") -a1 2.90 2.95 3.00 -a2 2.95"
+    echo ""
+}
+
 main(){
     srcdir0=y_full_relax
+
+    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+        print_help
+        exit 0
+    fi
+
+    if [ -z "$1" ]; then      # empty is true
+        echo -e "==>  Please give -a1 / -a2 lists. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
+        exit 1
+    fi
 
     if [ -d "$srcdir0" ]
     then
@@ -51,7 +96,7 @@ while [[ $# -gt 0 ]]; do
       done
       ;;
     *)
-      echo "Unknown option: $1"
+      echo -e "Unknown option: $1  (see ${GREEN}$(basename "$0") --help${NC})"
       exit 1
       ;;
   esac
