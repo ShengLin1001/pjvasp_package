@@ -4,6 +4,26 @@
 # a_0 should be 1.0, because dirn=`printf "%1.2f" "$k"`
 # 不然会丢失精度
 
+# ---------- Existing-output guard (shared policy with the python workflows) ----------
+# Ask before deleting an existing y_* output. A blank/No answer, or no terminal to
+# ask on (piped / sbatch), aborts instead of deleting -- so unattended runs never
+# throw away old results. Mirrors confirm_prepare_outdir() in mymetal.
+confirm_prepare_dir(){
+    local dir="$1"
+    [[ -e "$dir" ]] || return 0
+    if [[ ! -t 0 ]]; then
+        echo "❌ ERROR: $dir already exists and there is no terminal to confirm its deletion." >&2
+        echo "   re-run in a terminal, or remove it manually first." >&2
+        exit 1
+    fi
+    echo "⚠️  $dir already exists."
+    rm -rI "$dir"                    # interactive recursive remove; blank/n keeps it
+    if [[ -e "$dir" ]]; then
+        echo "❌ ERROR: aborted by user; existing output kept: $dir" >&2
+        exit 1
+    fi
+}
+
 main(){
     srcdir0=y_full_relax
 
@@ -43,7 +63,7 @@ sub_run_cohesive(){
    
     #=====================
     
-    rm -rI y_cohesive
+    confirm_prepare_dir y_cohesive
     mkdir  y_cohesive
     cd     y_cohesive
     cp $srcdir/sub*sequential.sh ./

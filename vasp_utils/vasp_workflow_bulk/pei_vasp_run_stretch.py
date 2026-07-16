@@ -7,6 +7,7 @@ import shutil
 from mymetal.build.film.stretch import stretch_list_along_direction_to_cell, adjust_lattice_for_volume_conservation
 from mymetal.build.workflow.general import cp_vaspfiles, rm_i, compare_three_lattices
 from mymetal.io.vasp import my_write_vasp, my_read_vasp
+from mymetal.universal.print.print import confirm_prepare_outdir
 
 # parse arguments
 parser = argparse.ArgumentParser(description="Stretch unit cells to find the equilibrium lattice constants.")
@@ -61,13 +62,8 @@ print('Stretch list:', stretch_list)
 print(f"Total {len(films_stretch)} structures generated.")
 
 workdir = os.path.join(myroot, "y_stretch")
-# Check if the directory already exists
-#rm_i(workdir = workdir)
-if args.deleteold:
-    if os.path.exists(workdir):
-        print(f"The directory {workdir} already exists. Deleting it automatically as per --deleteold y.")
-        shutil.rmtree(workdir)
-
+# existing output: ask before deleting (blank/No/no-tty aborts, --deleteold skips)
+confirm_prepare_outdir(workdir, force=args.deleteold)
 os.makedirs(os.path.join(workdir, "y_dir"), exist_ok=True)
 
 for film, stretch in zip(films_stretch, stretch_list):

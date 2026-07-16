@@ -7,6 +7,26 @@
 #      ./pei_vasp_run_Cij_energy.sh
 #      ./pei_vasp_run_Cij_energy.sh -e -0.005 -0.002 0.000 0.002 0.005
 
+# ---------- Existing-output guard (shared policy with the python workflows) ----------
+# Ask before deleting an existing y_* output. A blank/No answer, or no terminal to
+# ask on (piped / sbatch), aborts instead of deleting -- so unattended runs never
+# throw away old results. Mirrors confirm_prepare_outdir() in mymetal.
+confirm_prepare_dir(){
+    local dir="$1"
+    [[ -e "$dir" ]] || return 0
+    if [[ ! -t 0 ]]; then
+        echo "❌ ERROR: $dir already exists and there is no terminal to confirm its deletion." >&2
+        echo "   re-run in a terminal, or remove it manually first." >&2
+        exit 1
+    fi
+    echo "⚠️  $dir already exists."
+    rm -rI "$dir"                    # interactive recursive remove; blank/n keeps it
+    if [[ -e "$dir" ]]; then
+        echo "❌ ERROR: aborted by user; existing output kept: $dir" >&2
+        exit 1
+    fi
+}
+
 main(){
     # ---------- Colors ----------
     GREEN='\033[0;32m'
@@ -150,7 +170,7 @@ sub_run_Cij_energy(){
     dirCij=y_cij_energy
     echo -e "🧹 Creating output directory: ${BLUE}$dirCij${NC}"
 
-    rm -rI  $dirCij
+    confirm_prepare_dir "$dirCij"
     mkdir   $dirCij
     cd      $dirCij
 

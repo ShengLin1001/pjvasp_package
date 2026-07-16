@@ -57,7 +57,7 @@ from myvasp import vasp_func as vf
 from mymetal.calculate.calmechanics.hoec import (
     MODES, check_symmetry, get_deformation_gradient, get_mode_severity,
     get_mode_strain_lists, get_strain_list)
-from mymetal.universal.print.print import fail, warn
+from mymetal.universal.print.print import fail, warn, confirm_prepare_outdir
 
 # INCAR tags forced on every deformed job. ISIF=2 fixes the box and relaxes the ions
 # (relaxed constants, as in the 2nd-order workflow); ISYM=0 keeps every mode on the
@@ -167,7 +167,8 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
                        emax: float = 0.12, de: float = 0.01,
                        scale_window: bool = True, relax_ions: bool = True,
                        srcdir: str = 'y_full_relax',
-                       outdir: str = 'y_hoec_energy') -> Path:
+                       outdir: str = 'y_hoec_energy',
+                       force: bool = False) -> Path:
     """Generate the deformed VASP input directories and the mode manifest.
 
     By default each mode gets its own xi window, shrunk so that it deforms the crystal as
@@ -193,7 +194,9 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         relax_ions (bool): Relax the ions at fixed cell shape (ISIF=2). ``False`` forces a
             single ionic step and returns clamped-ion constants.
         srcdir (str): Reference directory name.
-        outdir (str): Output directory name (removed first if present).
+        outdir (str): Output directory name (an existing one is confirmed before
+            deletion; ``force`` deletes it without prompting).
+        force (bool): Delete an existing output directory without prompting.
 
     Returns:
         Path: The output directory containing ``y_hoec_modes.json``.
@@ -258,8 +261,8 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     warn("higher-order constants need CONVERGED dense k-points and ENCUT in "
          "%s (see Wang-Li Fig. 1,2). This does NOT change them." % srcdir)
 
-    if path_out.exists():
-        shutil.rmtree(path_out)
+    # existing output: ask before deleting (blank/No/no-tty aborts, --force skips)
+    confirm_prepare_outdir(path_out, force=force)
     path_out.mkdir()
 
     ### main: loop over modes and strains --------------------------------------

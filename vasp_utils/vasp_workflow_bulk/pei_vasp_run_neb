@@ -4,6 +4,26 @@
 #  3.117
 #  >>> pei_run_neb 6 (3.117/0.8 is a good choice)
 
+# ---------- Existing-output guard (shared policy with the python workflows) ----------
+# Ask before deleting an existing y_* output. A blank/No answer, or no terminal to
+# ask on (piped / sbatch), aborts instead of deleting -- so unattended runs never
+# throw away old results. Mirrors confirm_prepare_outdir() in mymetal.
+confirm_prepare_dir(){
+    local dir="$1"
+    [[ -e "$dir" ]] || return 0
+    if [[ ! -t 0 ]]; then
+        echo "❌ ERROR: $dir already exists and there is no terminal to confirm its deletion." >&2
+        echo "   re-run in a terminal, or remove it manually first." >&2
+        exit 1
+    fi
+    echo "⚠️  $dir already exists."
+    rm -rI "$dir"                    # interactive recursive remove; blank/n keeps it
+    if [[ -e "$dir" ]]; then
+        echo "❌ ERROR: aborted by user; existing output kept: $dir" >&2
+        exit 1
+    fi
+}
+
 main(){
     GREEN='\033[0;32m'
     YELLOW='\033[0;33m'
@@ -82,7 +102,7 @@ sub_run_neb(){
 
     dirsurf=$myroot/y_neb
     echo -e "🧹 Preparing clean NEB workspace at: ${BLUE}$dirsurf${NC}"
-    rm -rI "$dirsurf"
+    confirm_prepare_dir "$dirsurf"
     mkdir "$dirsurf"
     cd "$dirsurf"
     mkdir y_dir

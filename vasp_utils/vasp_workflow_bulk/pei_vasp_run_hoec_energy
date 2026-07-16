@@ -65,6 +65,8 @@ parser.add_argument("--static", "--no-relax-ions", dest="relax_ions", action="st
                          "SOEC with this option for multi-sublattice structures such as HCP.")
 parser.add_argument("--srcdir", default="y_full_relax", help="Relaxed reference directory.")
 parser.add_argument("--outdir", default="y_hoec_energy", help="Output directory.")
+parser.add_argument("--force", action="store_true",
+                    help="Delete an existing output directory without prompting.")
 args = parser.parse_args()
 
 print("Symmetry   :", args.symmetry)
@@ -80,4 +82,4 @@ print("🟢 ===== pei_vasp_run_hoec_energy in %s" % path_root)
 generate_hoec_dirs(path_root=path_root, symmetry=args.symmetry,
                    emax=args.emax, de=args.de, scale_window=args.scale_window,
                    relax_ions=args.relax_ions,
-                   srcdir=args.srcdir, outdir=args.outdir)
+                   srcdir=args.srcdir, outdir=args.outdir, force=args.force)
