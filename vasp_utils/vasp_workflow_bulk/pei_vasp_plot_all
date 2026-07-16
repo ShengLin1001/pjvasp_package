@@ -90,6 +90,14 @@ case "$1" in
         sub_plot_all  $workdir  $mycmd
         ;;
 
+    # KPAR/NCORE elapsed-time benchmark. Keep -kpar_nocre as the requested public
+    # spelling; -kpar_ncore is accepted as a convenience alias.
+    -kpar_nocre|-kpar_ncore)
+        workdir=y_kpar_ncore
+        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_kpar_ncore
+        sub_plot_all  $workdir  $mycmd
+        ;;
+
     -E_in_1_2_bulk)
         workdir=y_E_in_1_2_bulk
         mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_others/pei_vasp_plot_E_in_1_2_bulk.py
@@ -101,7 +109,6 @@ case "$1" in
         exit
         ;;   
 esac
-
 
 
 

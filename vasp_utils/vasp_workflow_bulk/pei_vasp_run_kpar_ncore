@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+# J. Pei, 2026-07-15
+# pei_vasp_run_kpar_ncore
+#  >>> Generate a static KPAR/NCORE parallel-efficiency benchmark from y_full_relax.
+#
+#  Run it at the level of `y_full_relax`, like the other bulk workflows. It copies the
+#  relaxed INCAR/POTCAR/CONTCAR and the sub.* Slurm scripts into y_kpar_ncore/y_dir/*,
+#  then holds the whole VASP workload fixed (static single point, fixed KPOINTS/ENCUT,
+#  fully constrained lattice) and varies ONLY KPAR and NCORE. NPAR is kept commented so it
+#  cannot compete with the NCORE strategy. The real work lives in
+#  mymetal.build.workflow.kpar_ncore.
+#
+#  It ONLY prepares input directories -- no sbatch. Submit y_kpar_ncore/y_dir/* with your
+#  usual flow, then post-process the elapsed times with pei_vasp_plot_kpar_ncore.
+#
+#  --pairs takes KPAR:NCORE tokens; the default is the requested 21-pair matrix that spans
+#  KPAR in {128,64,32,16,8,4}. Every pair must satisfy KPAR*NCORE | ntasks.
+#
+#  >>> Example usage:
+#      pei_vasp_run_kpar_ncore                       # default 21-pair matrix, 128 ranks
+#      pei_vasp_run_kpar_ncore --pairs 32:4 16:8     # only these two pairs
+#      pei_vasp_run_kpar_ncore --ntasks 64           # benchmark a 64-rank job instead
+#
+#  Prerequisite: y_full_relax must hold a usable INCAR, POTCAR and CONTCAR/POSCAR plus at
+#  least one sub.* Slurm script; pei_vasp_univ_find_and_change must be on PATH.
+
+import argparse
+import sys
+from pathlib import Path
+
+# Guard before importing mymetal: the library annotates with 3.10 subscripted generics
+# (list[tuple[int, int]]), which fail at import on an older active env.
+if sys.version_info < (3, 10):
+    raise SystemExit("pei_vasp_run_kpar_ncore needs the active Python >= 3.10 environment")
+
+from mymetal.build.workflow.kpar_ncore import generate_kpar_ncore_dirs, DEFAULT_NTASKS
+
+
+def parse_pair(value):
+    """argparse type: parse one ``KPAR:NCORE`` token such as ``32:4`` into a tuple."""
+    try:
+        kpar_text, ncore_text = value.split(":", maxsplit=1)
+        kpar, ncore = int(kpar_text), int(ncore_text)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            "pair must use KPAR:NCORE, for example 32:4") from exc
+    if kpar <= 0 or ncore <= 0:
+        raise argparse.ArgumentTypeError("KPAR and NCORE must be positive integers")
+    return kpar, ncore
+
+
+parser = argparse.ArgumentParser(
+    description="Generate static KPAR/NCORE VASP benchmarks from y_full_relax.")
+parser.add_argument("--pairs", nargs="+", type=parse_pair, default=None,
+                    metavar="KPAR:NCORE",
+                    help="Pairs to test; default is the requested 21-pair matrix.")
+parser.add_argument("--ntasks", type=int, default=DEFAULT_NTASKS,
+                    help="Fixed MPI rank count used by every job (default 128).")
+parser.add_argument("--srcdir", default="y_full_relax",
+                    help="Source VASP directory (default y_full_relax).")
+parser.add_argument("--outdir", default="y_kpar_ncore",
+                    help="Output workflow directory (default y_kpar_ncore).")
+parser.add_argument("--force", action="store_true",
+                    help="Delete an existing output directory without prompting.")
+args = parser.parse_args()
+
+print("Test pairs :", "default 21-pair matrix" if args.pairs is None else args.pairs)
+print("Fixed ranks:", args.ntasks)
+print("Source dir :", args.srcdir)
+print("Output dir :", args.outdir)
+
+# find_and_change is a subprocess; line-buffer stdout so our messages stay ordered
+# around its output instead of arriving in one block at the end.
+sys.stdout.reconfigure(line_buffering=True)
+
+path_root = Path.cwd().resolve()
+print("🟢 ===== pei_vasp_run_kpar_ncore in %s" % path_root)
+generate_kpar_ncore_dirs(path_root=path_root, lpairs=args.pairs, ntasks=args.ntasks,
+                         srcdir=args.srcdir, outdir=args.outdir, force=args.force)

@@ -9,4 +9,5 @@ Modules:
     - general: Shared helpers for copying VASP inputs and comparing lattices.
     - hoec: Generates the deformed input directories for higher-order (2nd/3rd/4th)
       elastic constants, plus the mode manifest read by ``mymetal.post.hoec_energy``.
+    - kpar_ncore: Generates static VASP timing inputs for KPAR/NCORE selection.
 """

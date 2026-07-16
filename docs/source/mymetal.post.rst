@@ -4,6 +4,14 @@ mymetal.post package
 Submodules
 ----------
 
+mymetal.post.kpar_ncore module
+--------------------------------
+
+.. automodule:: mymetal.post.kpar_ncore
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 mymetal.post.hoec_energy module
 -------------------------------
 

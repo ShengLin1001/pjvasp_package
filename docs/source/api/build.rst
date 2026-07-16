@@ -22,6 +22,12 @@ Workflow generators
 Principal entry point: ``mymetal.build.workflow.hoec.generate_hoec_dirs``, driven from
 the shell by ``vasp_utils/vasp_workflow_bulk/pei_vasp_run_hoec_energy``.
 
+.. automodule:: mymetal.build.workflow.kpar_ncore
+   :members:
+
+Principal entry point: ``mymetal.build.workflow.kpar_ncore.generate_kpar_ncore_dirs``,
+driven from the shell by ``vasp_utils/vasp_workflow_bulk/pei_vasp_run_kpar_ncore``.
+
 Film construction
 -----------------
 

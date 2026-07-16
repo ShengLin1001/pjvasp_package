@@ -9,5 +9,6 @@ Modules:
     - Cij_energy: Second-order elastic constants from the energy-strain method.
     - hoec_energy: Second-, third- and fourth-order elastic constants from the
       energy-strain method (the higher-order sibling of Cij_energy).
+    - kpar_ncore: One-panel KPAR/NCORE elapsed-time benchmark post-processing.
 
 """

@@ -7,6 +7,7 @@ and stretch energy curves.
 
 Functions:
     - my_plot_convergence: Plot convergence test results for energy cutoff or k-point grids.
+    - my_plot_kpar_ncore: Plot KPAR/NCORE elapsed-time benchmark curves.
     - my_plot_neb: Plot NEB (Nudged Elastic Band) energy and force profiles.
     - my_plot_neb_full: Plot NEB full energy profiles with optional frame slicing.
     - my_plot_neb_xy: Plot atomic trajectories in 2D with customizable visualization options.
@@ -162,6 +163,51 @@ def my_plot_convergence(x: list = None,
     
     if if_save:
         plt.savefig(savefile, dpi=dpi)
+    return fig, ax
+
+
+# For KPAR/NCORE workflow timing
+def my_plot_kpar_ncore(
+        dict_time: dict = None,
+        lkpar: list = [128, 64, 32, 16, 8, 4],
+        lncore: list = [1, 2, 4, 8, 16, 32],
+        if_save: bool = False,
+        savefile: str = 'p_post_kpar_ncore.pdf') -> tuple:
+    """Plot all KPAR/NCORE elapsed-time curves on one standard axis.
+
+    Args:
+        dict_time (dict): ``(KPAR, NCORE) -> elapsed time`` in display units.
+        lkpar (list): KPAR values in plotting and legend order.
+        lncore (list): NCORE values shown on the x-axis.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+
+    Returns:
+        tuple: Matplotlib ``(fig, ax)`` objects.
+    """
+    fig, ax = my_plot()
+
+    for kpar in lkpar:
+        lpairs = sorted(
+            [pair for pair in dict_time if pair[0] == kpar],
+            key=lambda pair: pair[1],
+        )
+        if lpairs:
+            lx = [pair[1] for pair in lpairs]
+            ly = [dict_time[pair] for pair in lpairs]
+            ax.plot(lx, ly, marker='o', label='KPAR=%d' % kpar)
+
+    # The tested values double successively; a base-2 numeric axis keeps every
+    # NCORE readable while preserving its physical spacing.
+    ax.set_xscale('log', base=2)
+    ax.set_xticks(lncore)
+    ax.set_xticklabels([str(ncore) for ncore in lncore])
+    ax.set_xlabel('NCORE')
+    ax.set_ylabel('Time (min)')
+    general_modify_legend(ax.legend(ncol=2))
+
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
     return fig, ax
 
 
@@ -793,5 +839,4 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     plt.savefig(save_fig_path2)
 
     return (eq_a1, eq_a2, eq_energy)
-
 

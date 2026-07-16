@@ -8,6 +8,9 @@ Post-Processing
    :members:
    :show-inheritance:
 
+.. automodule:: mymetal.post.kpar_ncore
+   :members:
+
 Runtime-dependent modules
 -------------------------
 
