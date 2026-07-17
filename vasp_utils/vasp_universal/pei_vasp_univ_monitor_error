@@ -4,8 +4,21 @@
 # - check 当前运行的任务中是否已经报错：包含keyword "hermitian" 或 "sloshing"
 # - 如果报错了，打印出相关信息，并取消该任务
 # - check 是否过大的迭代步数， 通过"DAV: 100" 或 "RMM: 100" 关键词判断
+# - check 是否发生相变：对每个作业 StdOut 所在目录跑 CNA，比较 POSCAR / CONTCAR 各相原子数
 # - 添加时间间隔运行脚本
 # - 转化成任务脚本
+#
+# Usage:
+#   pei_vasp_univ_monitor_error [skip_jobid] [--cancel-on-phase-change] [--no-phase-check]
+#
+# 相变检查（CNA）说明：
+#   - 检查目录取自 scontrol 报的 StdOut 的 dirname，只有 POSCAR 和 CONTCAR 同时存在且非空
+#     才真正检查。这正好把检查限制在 pei_slurm_univ_submit --mode parallel / each-subdir
+#     的各个子目录里：那两种模式都是在 subdir 内 sbatch 子作业，StdOut 就落在算例目录。
+#     而编排(chunk)父作业是从 path_root/slurm/ 提交的，那里没有结构文件，自动跳过 ——
+#     不需要额外判断作业是不是父脚本，目录里有没有结构文件就是天然的判据。
+#   - 默认只告警不取消：相变未必是错误（可能正是想看的物理），且 CONTCAR 在弛豫早期的
+#     中间构型也可能被瞬时误判。确实要连带取消时才加 --cancel-on-phase-change。
 
 # Next
 # - 观察是否收敛, 根据 dE 变化是否减小 
@@ -63,22 +76,195 @@
 
 #        # skip this jobid
 #        srun pei_vasp_univ_monitor_error "$SLURM_JOB_ID"
+#        # 相变一并取消：
+#        # srun pei_vasp_univ_monitor_error "$SLURM_JOB_ID" --cancel-on-phase-change
 
 #################### To here
+# 上面这个作业脚本可由 pei_slurm_univ_monitor_error -vasp 自动生成并提交。
 
 
 
+
+# ================ ⚙️  可调参数（环境变量覆盖，无需改本文件）
+: "${PEI_PHASE_CHECK_CMD:=pei_vasp_univ_check_phase_transition}"  # 相变检查器
+: "${PEI_PHASE_CHECK_EVERY:=1}"   # 每 N 轮跑一次 CNA（大体系可调大以省 CPU）
+
+phase_check_enabled=1
+cancel_on_phase_change=0
+
+## Resolve the phase-transition checker once, up front.
+# 必须在进入循环前自检：检查器是个 python 脚本，若当前环境没有 ovito / mymetal，它会在
+# import 期抛 traceback 并以 exit 1 退出 —— 而 1 正是「检测到相变」的退出码。那样每个作业
+# 每轮都会被误判成相变，配上 --cancel-on-phase-change 就是把好好的作业全 scancel 掉。
+# 用 --help 试跑一次（import 成功才可能 exit 0）把这种环境问题在这里就摘干净。
+setup_phase_check(){
+    if [[ "$phase_check_enabled" -ne 1 ]]; then
+        echo "⏭️  Phase-transition check disabled (--no-phase-check)."
+        return
+    fi
+
+    if ! command -v "$PEI_PHASE_CHECK_CMD" >/dev/null 2>&1; then
+        echo "⚠️  Phase checker not found in PATH: $PEI_PHASE_CHECK_CMD — phase check disabled."
+        phase_check_enabled=0
+        return
+    fi
+
+    if ! "$PEI_PHASE_CHECK_CMD" --help >/dev/null 2>&1; then
+        echo "⚠️  Phase checker not runnable (ovito / mymetal missing in this env?) — phase check disabled."
+        echo "    Try: $PEI_PHASE_CHECK_CMD --help"
+        phase_check_enabled=0
+        return
+    fi
+
+    echo "✅ Phase checker: $(command -v "$PEI_PHASE_CHECK_CMD")  (every ${PEI_PHASE_CHECK_EVERY} round(s))"
+    if [[ "$cancel_on_phase_change" -eq 1 ]]; then
+        echo "🛑 --cancel-on-phase-change: a detected phase transition will scancel the job."
+    else
+        echo "📍 Phase transitions are reported only; pass --cancel-on-phase-change to also scancel."
+    fi
+}
+
+## Run the CNA phase check on one job's StdOut directory.
+# 返回 0 表示「本轮没有判定为相变」，1 表示判定为相变；检查过的目录经 phase_workdir_last
+# 带回给调用处 —— 记账(算进 canceled_phase_* 还是 phase_changed_*)由调用处按是否取消来定，
+# 本函数只负责判定，不碰那两个列表。
+phase_workdir_last=""
+check_phase_job(){
+    local jobid="$1"
+    local stdout="$2"
+    local loop_count="$3"
+    local workdir output rc
+
+    phase_workdir_last=""
+
+    [[ "$phase_check_enabled" -eq 1 ]] || return 0
+    (( loop_count % PEI_PHASE_CHECK_EVERY == 0 )) || return 0
+
+    workdir=$(dirname "$stdout")
+    [[ -d "$workdir" ]] || return 0
+    phase_workdir_last="$workdir"
+
+    output=$("$PEI_PHASE_CHECK_CMD" --dir "$workdir" 2>&1)
+    rc=$?
+
+    case "$rc" in
+        0)
+            echo "$output" | sed 's/^/      /'
+            ;;
+        1)
+            echo "$output" | sed 's/^/      /'
+            return 1
+            ;;
+        2)
+            # 没有 POSCAR/CONTCAR，一般就是编排父作业。属正常情况，只在第一轮说明一次，
+            # 之后每轮都打会把真正有用的信息淹掉。
+            if [[ "$loop_count" -eq 0 ]]; then
+                echo "$output" | sed 's/^/      /'
+            fi
+            ;;
+        *)
+            echo "$output" | sed 's/^/      /'
+            echo "      ⚠️  phase check failed (rc=$rc); not treated as a phase transition."
+            ;;
+    esac
+    return 0
+}
+
+## Record a report-only phase transition into the cumulative warning list.
+# 与 phase_changed_*(本轮快照)互补：作业正常跑完退出队列、或相变在后续轮次消失后，快照里
+# 就没它了，但「这个目录曾经检出过相变」这个事实得留到收尾 summary —— report-only 模式下
+# 作业会一直跑到结束，最后那份 summary 往往是你唯一会回头看的东西，快照那时多半已经空了。
+#
+# 每个作业一条，重复检出只累加次数、不再追加行：monitor 跑几小时就是几百轮，每轮追加一条
+# 同样的行会把 summary 淹掉。这不是丢信息 —— 次数和首次检出时间都记着，而「本轮有哪些」
+# 那份完整名单在上面的快照节里，一个不漏。
+record_phase_warning(){
+    local jobid="$1"
+    local workdir="$2"
+    local i
+
+    for i in "${!warned_phase_jobs[@]}"; do
+        if [[ "${warned_phase_jobs[$i]}" == "$jobid" ]]; then
+            warned_phase_count[$i]=$(( ${warned_phase_count[$i]} + 1 ))
+            warned_phase_last[$i]="$(date '+%F %T')"
+            return 0
+        fi
+    done
+
+    warned_phase_jobs+=("$jobid")
+    warned_phase_workdir+=("$workdir")
+    warned_phase_first+=("$(date '+%F %T')")
+    warned_phase_last+=("$(date '+%F %T')")
+    warned_phase_count+=(1)
+}
+
+## Check one job for a phase transition and dispose of it: cancel, or report only.
+# 判定(check_phase_job)与处置分开：这里只做「取消还是只报」的决定和记账，
+# 一个作业只会进两个列表之一 —— canceled_phase_*(累计) 或 phase_changed_*(本轮快照)。
+handle_phase_job(){
+    local jobid="$1"
+    local stdout="$2"
+    local loop_count="$3"
+
+    check_phase_job "$jobid" "$stdout" "$loop_count" && return 0
+
+    if [[ "$cancel_on_phase_change" -eq 1 ]]; then
+        echo "🛑 >>> scancel job (phase transition): $jobid"
+        scancel "$jobid"
+        canceled_phase_jobs+=("$jobid")
+        canceled_phase_workdir+=("$phase_workdir_last")
+    else
+        echo "      ⚠️  Reported only; pass --cancel-on-phase-change to scancel on this."
+        phase_changed_jobs+=("$jobid")
+        phase_changed_workdir+=("$phase_workdir_last")
+        record_phase_warning "$jobid" "$phase_workdir_last"
+    fi
+}
 
 main(){
     errorkeywords=("hermitian" "sloshing" "ERROR in subspace rotation PSSYEVX" "highest band")  # "DAV: 100" "RMM: 100" )
-    skip_jobid="$1" # Set this to a specific JobID to skip it (e.g., if you know it's already being handled), or leave empty to check all jobs
 
-    canceled_jobs=()
-    canceled_stdout=()
+    ### Parse args: 位置参数 skip_jobid 保持向后兼容（sub.monitor.sh 里就是这么调的）
+    skip_jobid=""   # Set this to a specific JobID to skip it (e.g., if you know it's already being handled), or leave empty to check all jobs
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --cancel-on-phase-change) cancel_on_phase_change=1 ;;
+            --no-phase-check)         phase_check_enabled=0 ;;
+            -h|--help)                print_help; exit 0 ;;
+            -*)                       echo "❌ ERROR: unknown option: $1"; print_help; exit 1 ;;
+            *)                        skip_jobid="$1" ;;
+        esac
+        shift
+    done
+    ### Parse args to here
+
+    # 取消原因分两类，分开记：错误关键词 vs 相变。两者的处置完全不同 —— 关键词命中是算例
+    # 真的报错了，相变则可能正是想要的物理，只是你要求连带取消。混在一个列表里事后就分不清
+    # 某个目录到底该去查 stdout 报错、还是去看 CONTCAR 的结构。
+    # 这两个列表是累计的：作业被 scancel 后就退出队列、之后各轮再也扫不到它，不累计就会丢。
+    canceled_error_jobs=()
+    canceled_error_stdout=()
+    canceled_phase_jobs=()
+    canceled_phase_workdir=()
     stdout_missing_jobs=()
     stdout_missing_stdout=()
 
+    # 与上面相反，phase_changed_* 是每轮清空重建的快照（见循环开头），只装「本轮检出相变
+    # 但没被取消」的作业 —— 默认 report-only 时作业还在跑，下一轮会重新判定。
+    phase_changed_jobs=()
+    phase_changed_workdir=()
+
+    # warned_phase_* 是上面那份快照的累计版：只要某作业检出过相变又没被取消就留一条，作业
+    # 后来跑完了、或相变判定消失了也不删。--cancel-on-phase-change 开着时它恒为空(检出即取消)。
+    warned_phase_jobs=()
+    warned_phase_workdir=()
+    warned_phase_first=()
+    warned_phase_last=()
+    warned_phase_count=()
+
     time_interval=60 # Check every 5 minutes (300 seconds)
+
+    setup_phase_check
 
     # List current user's jobs and their stdout file (sorted)
     #
@@ -139,6 +325,14 @@ main(){
         # To here
 
         # Check part
+
+        # 相变快照归零，重建本轮：下面每个作业都会重新跑一次 CNA，所以每轮 summary 都是一份
+        # 完整的当前状态，而非历史累加 —— 这 60s 内检出相变的作业一个不漏，且弛豫早期 CONTCAR
+        # 的中间构型被瞬时误判、之后又长回原相时，它会自动消失，不会一直挂着一条过期的 🚨。
+        # 归零放在退出判断之后：否则最后一轮(已无作业)会先清空再 break，收尾的 summary 就成了空的。
+        phase_changed_jobs=()
+        phase_changed_workdir=()
+
         for jobid in $(echo "$squeue_r_out" | sort -n); do
             [[ -n "$skip_jobid" && "$jobid" == "$skip_jobid" ]] && continue
 
@@ -164,6 +358,7 @@ main(){
             # Check if the stdout file exists and contains any of the error keywords
             # Only check running jobs
             if [[ -f "$stdout" ]]; then
+                job_canceled=0
                 # echo "🔎 Checking stdout keywords…"
                 for kw in "${errorkeywords[@]}"; do
                     # -i: case-insensitive search
@@ -171,10 +366,11 @@ main(){
                     if grep -qi "$kw" "$stdout"; then
                         echo "🚨 >>> FOUND keyword: $kw"
                         grep -ni "$kw" "$stdout" | head -n 10 | sed 's/^/      📌 /'
-                        echo "🛑 >>> scancel job: $jobid"
+                        echo "🛑 >>> scancel job (error keyword): $jobid"
                         scancel "$jobid"
-                        canceled_jobs+=("$jobid")
-                        canceled_stdout+=("$stdout")
+                        canceled_error_jobs+=("$jobid")
+                        canceled_error_stdout+=("$stdout")
+                        job_canceled=1
                         break
                     fi
                 done
@@ -206,6 +402,12 @@ main(){
                 [[ -z "$Nelectronicnow" ]] && Nelectronicnow="-"
                 
                 echo "🧮 Progress: last_F_line=$Nionic  prev_elstep=$Nelectronic  last_elstep=$Nelectronicnow"
+
+                # -------------------- Phase-transition check (CNA, POSCAR vs CONTCAR) --------------------
+                # 已经因关键词被取消的作业就不必再算 CNA 了：作业都没了，相变与否不影响处置。
+                if [[ "$job_canceled" -eq 0 ]]; then
+                    handle_phase_job "$jobid" "$stdout" "$loop_count"
+                fi
 
             else
                 echo "⏳ >>> stdout file not found yet."
@@ -332,13 +534,26 @@ print_summary() {
     echo "  - Memory requested     : ${used_mem_gib:-0} GiB"
     echo
 
-    echo "🛑 CANCELED jobs: ${#canceled_jobs[@]}"
-    if (( ${#canceled_jobs[@]} > 0 )); then
-        for i in "${!canceled_jobs[@]}"; do
-            echo "  - JobID=${canceled_jobs[$i]}  StdOut=${canceled_stdout[$i]}"
+    # 取消原因分两节列：命中错误关键词的去查 StdOut，因相变被取消的去看那个目录的 CONTCAR。
+    echo "🛑 CANCELED jobs: $(( ${#canceled_error_jobs[@]} + ${#canceled_phase_jobs[@]} ))"
+    echo
+    echo "  🚫 by ERROR KEYWORD: ${#canceled_error_jobs[@]}"
+    if (( ${#canceled_error_jobs[@]} > 0 )); then
+        for i in "${!canceled_error_jobs[@]}"; do
+            echo "    - JobID=${canceled_error_jobs[$i]}  StdOut=${canceled_error_stdout[$i]}"
         done
     else
-        echo "  (none)"
+        echo "    (none)"
+    fi
+
+    echo
+    echo "  🔄 by PHASE TRANSITION: ${#canceled_phase_jobs[@]}"
+    if (( ${#canceled_phase_jobs[@]} > 0 )); then
+        for i in "${!canceled_phase_jobs[@]}"; do
+            echo "    - JobID=${canceled_phase_jobs[$i]}  WorkDir=${canceled_phase_workdir[$i]}"
+        done
+    else
+        echo "    (none)"
     fi
 
     echo
@@ -351,19 +566,110 @@ print_summary() {
         echo "  (none)"
     fi
 
+    # 仍在跑、但本轮检出相变的作业。默认 report-only 时它们不会出现在 CANCELED 里，只能在这看到。
+    # 本节是「本轮快照」而非历史累加：每轮都对所有作业重新跑 CNA 并重建，所以这 60s 内检出的
+    # 全部相变作业都在，一个不漏；上一轮有、这一轮已长回原相的，也会如实地不再出现。
+    echo
+    echo "🚨 PHASE TRANSITION jobs (this round, still running): ${#phase_changed_jobs[@]}  (cancel=$( [[ "$cancel_on_phase_change" -eq 1 ]] && echo on || echo off ))"
+    if (( ${#phase_changed_jobs[@]} > 0 )); then
+        for i in "${!phase_changed_jobs[@]}"; do
+            echo "  - JobID=${phase_changed_jobs[$i]}  WorkDir=${phase_changed_workdir[$i]}"
+        done
+    else
+        echo "  (none)"
+    fi
+
+    # 上一节的累计版。上一节只说「此刻」，作业跑完退出队列后就没了；这一节留到最后，
+    # 让收尾 summary 仍然答得出「这轮监控里，哪些目录曾经相变、却被放着继续跑完了」。
+    echo
+    echo "⚠️  WARNING - phase transition seen but NOT canceled (cumulative): ${#warned_phase_jobs[@]}"
+    if (( ${#warned_phase_jobs[@]} > 0 )); then
+        for i in "${!warned_phase_jobs[@]}"; do
+            echo "  - JobID=${warned_phase_jobs[$i]}  seen=${warned_phase_count[$i]}x  first=${warned_phase_first[$i]}  last=${warned_phase_last[$i]}"
+            echo "      WorkDir=${warned_phase_workdir[$i]}"
+        done
+        echo "  ⚠️  These jobs were left RUNNING. Check their CONTCAR before trusting the result,"
+        echo "      or re-run the monitor with --cancel-on-phase-change to stop them next time."
+    else
+        echo "  (none)"
+    fi
+
     echo "=========================================================="
 }
 
-## Simple print function 
+print_help(){
+    echo "pei_vasp_univ_monitor_error - watch running VASP jobs for errors and phase transitions"
+    echo ""
+    echo "Usage:"
+    echo "  $(basename "$0") [skip_jobid] [options]"
+    echo ""
+    echo "Arguments:"
+    echo "  skip_jobid                  JobID to ignore, normally the monitor's own \$SLURM_JOB_ID"
+    echo ""
+    echo "Options:"
+    echo "  --cancel-on-phase-change    scancel a job once CONTCAR's CNA phase counts differ"
+    echo "                              from POSCAR's. Default: report only."
+    echo "  --no-phase-check            skip the CNA phase check entirely"
+    echo "  -h, --help                  show this help"
+    echo ""
+    echo "Environment:"
+    echo "  PEI_PHASE_CHECK_CMD         phase checker (default: pei_vasp_univ_check_phase_transition)"
+    echo "  PEI_PHASE_CHECK_EVERY       run the CNA check every N rounds (default: 1)"
+    echo ""
+    echo "Summary sections (cumulative = kept since monitor start;"
+    echo "                  rebuilt = cleared and refilled every round):"
+    echo "  cumulative  🚫 CANCELED by ERROR KEYWORD     scancel'd on an error keyword"
+    echo "  cumulative  🔄 CANCELED by PHASE TRANSITION  scancel'd on a phase transition"
+    echo "  rebuilt     🚨 PHASE TRANSITION (this round) transitioning now, still running"
+    echo "  cumulative  ⚠️  WARNING                       transitioned but NOT canceled"
+    echo ""
+    echo "  - Cancel lists must accumulate: a scancel'd job leaves the queue and is never"
+    echo "    scanned again, so rebuilding them would silently drop it."
+    echo "  - The 🚨 snapshot re-runs CNA on every job every round, so it is always the full"
+    echo "    current picture, never a first-seen history. A job whose CONTCAR settles back"
+    echo "    into the original phase drops off by itself instead of leaving a stale 🚨."
+    echo "  - A transitioning job lands in exactly one of 🔄 / ⚠️ , never both:"
+    echo "        every transitioned dir = 🔄 CANCELED by PHASE TRANSITION + ⚠️  WARNING"
+    echo "    Default (report-only) leaves 🔄 empty; --cancel-on-phase-change leaves ⚠️  empty."
+    echo "  - ⚠️  WARNING is the cumulative twin of the 🚨 snapshot: it answers 'which dirs"
+    echo "    transitioned yet were left to run to completion', which the snapshot alone"
+    echo "    cannot, since a finished job leaves the queue and vanishes from it. It keeps"
+    echo "    one line per JobID with seen=Nx, not one line per round."
+    echo ""
+    echo "Notes:"
+    echo "  - The phase check only runs where the job's StdOut directory holds both a"
+    echo "    non-empty POSCAR and CONTCAR, i.e. the per-job dirs of pei_slurm_univ_submit"
+    echo "    --mode parallel / each-subdir. Orchestrating parent jobs write to"
+    echo "    path_root/slurm/ and are skipped automatically."
+    echo "  - Needs ovito + mymetal on PATH; the monitor self-tests the checker at startup"
+    echo "    and disables the check with a warning if it cannot run."
+    echo ""
+    echo "Example (as a Slurm job, see also pei_slurm_univ_monitor_error -vasp):"
+    echo "  srun pei_vasp_univ_monitor_error \"\$SLURM_JOB_ID\""
+    echo "  srun pei_vasp_univ_monitor_error \"\$SLURM_JOB_ID\" --cancel-on-phase-change"
+    echo ""
+}
+
+## Simple print function
 # print_summary() {
 #     echo
 #     echo "==================== SUMMARY (so far) ===================="
 #     echo "🏃 RUNNING: $running_num   ⏳ PENDING: $pending_num   (skip_jobid=${skip_jobid:-none})"
 #     echo
-#     echo "🛑 CANCELED jobs: ${#canceled_jobs[@]}"
-#     if (( ${#canceled_jobs[@]} > 0 )); then
-#         for i in "${!canceled_jobs[@]}"; do
-#             echo "  - JobID=${canceled_jobs[$i]}  StdOut=${canceled_stdout[$i]}"
+#     echo "🛑 CANCELED by error keyword: ${#canceled_error_jobs[@]}"
+#     if (( ${#canceled_error_jobs[@]} > 0 )); then
+#         for i in "${!canceled_error_jobs[@]}"; do
+#             echo "  - JobID=${canceled_error_jobs[$i]}  StdOut=${canceled_error_stdout[$i]}"
+#         done
+#     else
+#         echo "  (none)"
+#     fi
+
+#     echo
+#     echo "🔄 CANCELED by phase transition: ${#canceled_phase_jobs[@]}"
+#     if (( ${#canceled_phase_jobs[@]} > 0 )); then
+#         for i in "${!canceled_phase_jobs[@]}"; do
+#             echo "  - JobID=${canceled_phase_jobs[$i]}  WorkDir=${canceled_phase_workdir[$i]}"
 #         done
 #     else
 #         echo "  (none)"

@@ -1,0 +1,153 @@
+#!/bin/bash
+# pei_slurm_univ_monitor_error —— 通用「作业监控器」提交入口。
+#
+# 各计算引擎的监控逻辑各写各的（VASP 的在 pei_vasp_univ_monitor_error 里），本脚本只做
+# 一件事：按 -<engine> 选出对应的监控脚本，生成一个 1 节点 1 核的看守作业并 sbatch 出去。
+# 新增引擎(lammps / n2p2 …)时，在最下面的 case 里加一行即可，不必再抄一遍提交样板。
+#
+# 参考 pei_vasp_plot_all 的 dispatcher 形式：下面的 print_help 是用户发现「有哪些引擎可监控」
+# 的唯一入口，改 case 时请同步改它。
+
+# ---------- Colors ----------
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# ---------- 可调参数（环境变量覆盖，无需改本文件） ----------
+: "${PEI_MONITOR_PARTITION:=amd_512}"                 # 看守作业所在分区
+: "${PEI_MONITOR_JOBNAME:=pei_monitor}"               # 作业名
+: "${PEI_MONITOR_DIR:=./slurm_monitor}"               # 作业脚本 + slurm-*.out 的落脚点
+
+print_help(){
+    echo -e "${GREEN}pei_slurm_univ_monitor_error${NC} - Submit a watchdog job that monitors your running jobs"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC}"
+    echo -e "  $(basename "$0") ${GREEN}<engine>${NC} [monitor options...]"
+    echo ""
+    echo -e "${YELLOW}Engines:${NC}"
+    echo -e "  ${GREEN}-vasp${NC}             pei_vasp_univ_monitor_error   VASP: error keywords, progress, CNA phase check"
+    echo ""
+    echo -e "${YELLOW}Options:${NC}"
+    echo -e "  ${GREEN}--dry-run${NC}         write the job script but do not sbatch it"
+    echo -e "  ${GREEN}-h, --help${NC}        show this help"
+    echo -e "  Anything else is passed ${BLUE}through${NC} to the engine monitor, e.g.:"
+    echo -e "  ${GREEN}--cancel-on-phase-change${NC}   scancel a job when CONTCAR's CNA phases drift from POSCAR's"
+    echo -e "  ${GREEN}--no-phase-check${NC}           skip the CNA phase check"
+    echo -e "  (see ${GREEN}pei_vasp_univ_monitor_error --help${NC} for the full list)"
+    echo ""
+    echo -e "${YELLOW}Environment:${NC}"
+    echo -e "  PEI_MONITOR_PARTITION   partition for the watchdog job (default: ${PEI_MONITOR_PARTITION})"
+    echo -e "  PEI_MONITOR_JOBNAME     job name                       (default: ${PEI_MONITOR_JOBNAME})"
+    echo -e "  PEI_MONITOR_DIR         script + slurm-*.out directory (default: ${PEI_MONITOR_DIR})"
+    echo ""
+    echo -e "${YELLOW}Notes:${NC}"
+    echo -e "  - The watchdog watches ${BLUE}all${NC} of your jobs, so submit it ${BLUE}once${NC}, after your"
+    echo -e "    calculations are queued. It passes its own \$SLURM_JOB_ID as skip_jobid and"
+    echo -e "    exits by itself once no job of yours is RUNNING or PENDING."
+    echo -e "  - It takes only 1 node / 1 core; the script and its slurm-*.out land in"
+    echo -e "    ${BLUE}\$PEI_MONITOR_DIR${NC} so they do not mix with your calculation outputs."
+    echo -e "  - The engine monitor prints a summary every round. Which of its sections"
+    echo -e "    accumulate and which are rebuilt per round is documented in"
+    echo -e "    ${GREEN}pei_vasp_univ_monitor_error --help${NC} (see 'Summary sections')."
+    echo ""
+    echo -e "${YELLOW}Example:${NC}"
+    echo -e "  $(basename "$0") -vasp                              # watch + report"
+    echo -e "  $(basename "$0") -vasp --cancel-on-phase-change     # also scancel on a phase transition"
+    echo -e "  PEI_MONITOR_PARTITION=amd_256 $(basename "$0") -vasp"
+    echo ""
+}
+
+fail(){
+    echo -e "❌ ERROR: $1"
+    exit 1
+}
+
+## Generate the watchdog job script and submit it.
+# 参数原样透传给引擎监控脚本："$@" 里可能带引号/空格，用 printf %q 逐个转义后再写进脚本，
+# 否则 --foo "a b" 到了作业脚本里会被重新词分割成两个参数。
+sub_monitor(){
+    monitor_cmd="$1"
+    shift
+
+    command -v "$monitor_cmd" >/dev/null 2>&1 || fail "monitor not found in PATH: $monitor_cmd"
+
+    mkdir -p "$PEI_MONITOR_DIR" || fail "cannot create monitor dir: $PEI_MONITOR_DIR"
+    monitor_dir=$(cd "$PEI_MONITOR_DIR" && pwd) || fail "cannot enter monitor dir: $PEI_MONITOR_DIR"
+    script_path="$monitor_dir/sub_$(basename "$monitor_cmd").sh"
+
+    monitor_args=""
+    for arg in "$@"; do
+        monitor_args="$monitor_args $(printf '%q' "$arg")"
+    done
+
+    echo -e "==> 📁 monitor dir : $monitor_dir"
+    echo -e "==> 📄 script      : $script_path"
+    echo -e "==> ▶️  monitor cmd : $monitor_cmd$monitor_args"
+    echo -e "==> 📍 partition   : $PEI_MONITOR_PARTITION"
+
+    # 自动生成，请勿手改：每次运行都会覆盖本文件。
+    cat > "$script_path" <<EOF
+#!/bin/bash
+#SBATCH -p $PEI_MONITOR_PARTITION
+#SBATCH -N 1
+#SBATCH -n 1
+#SBATCH -J $PEI_MONITOR_JOBNAME
+
+# 自动生成，请勿手改 —— 由 pei_slurm_univ_monitor_error 每次运行时覆盖。
+# 传自己的 JOB_ID 作为 skip_jobid，否则监控器会把自己算成"还有作业在跑"而永不退出。
+srun $monitor_cmd "\$SLURM_JOB_ID"$monitor_args
+EOF
+    chmod +x "$script_path"
+
+    if [[ "$dry_run" -eq 1 ]]; then
+        echo -e "==> ⏭️  --dry-run: script written, not submitted."
+        echo -e "==> 📍 submit it with: cd $monitor_dir && sbatch $script_path"
+        return 0
+    fi
+
+    # 从 monitor_dir 里 sbatch，默认的 slurm-*.out 也就落在那里，不会堆到算例目录中。
+    ( cd "$monitor_dir" && sbatch "$script_path" ) || fail "sbatch failed: $script_path"
+    echo -e "==> 🎉 Monitor submitted. Watch it with: tail -f $monitor_dir/slurm-*.out"
+}
+
+### check
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    print_help
+    exit 0
+fi
+
+if [ -z "$1" ]; then      # empty is true
+    echo -e "==>  Please indicate which engine to monitor. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
+    exit 1
+fi
+
+engine="$1"
+shift
+
+# --dry-run 是本脚本自己的开关，不能透传给下游监控器（它不认），先摘出来。
+dry_run=0
+largs=()
+for arg in "$@"; do
+    if [[ "$arg" == "--dry-run" ]]; then
+        dry_run=1
+    else
+        largs+=("$arg")
+    fi
+done
+### check to here
+
+### main
+case "$engine" in
+
+    -vasp)
+        monitor_cmd=pei_vasp_univ_monitor_error
+        sub_monitor "$monitor_cmd" "${largs[@]}"
+        ;;
+
+    *)
+        echo -e "==>  Option $engine not recognized. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
+        exit 1
+        ;;
+esac
+### main to here
