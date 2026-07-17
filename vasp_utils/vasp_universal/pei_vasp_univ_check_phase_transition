@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Check one VASP directory for a phase transition between POSCAR and CONTCAR.
+
+Thin CLI over mymetal.universal.check.atoms.check_phase_transition: it runs a CNA
+scan on both structures and reports whether every phase population (FCC/HCP/BCC/
+ICO/OTHER, plus the total atom count) is unchanged.
+
+Designed to be called per directory by pei_vasp_univ_monitor_error, so it stays
+quiet and cheap: one directory, one exit code.
+
+exit codes:
+    0  checked, no phase transition
+    1  phase transition detected
+    2  skipped (POSCAR/CONTCAR missing or empty -- e.g. an orchestrating parent job)
+    3  check failed (structure unreadable, CNA error)
+"""
+
+import argparse
+import warnings
+from pathlib import Path
+
+# ovito 3.6 的 ase 桥接内部还在调 atoms.get_calculator()，每次转换都打一条 FutureWarning。
+# 这个脚本会被 monitor 每轮对每个作业调一次，不静音的话日志里全是它，真正的 🚨 反而被淹掉。
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+from mymetal.universal.check.atoms import (
+    LPHASE,
+    STATUS_CHANGED,
+    STATUS_FAILED,
+    STATUS_SAME,
+    STATUS_SKIPPED,
+    check_phase_transition,
+)
+
+# status -> exit code. Documented in the module docstring and consumed by
+# pei_vasp_univ_monitor_error; keep the three in sync.
+DICT_EXIT_CODE = {
+    STATUS_SAME: 0,
+    STATUS_CHANGED: 1,
+    STATUS_SKIPPED: 2,
+    STATUS_FAILED: 3,
+}
+DICT_STATUS_FLAG = {
+    STATUS_SAME: "✅",
+    STATUS_CHANGED: "🚨",
+    STATUS_SKIPPED: "⏭️",
+    STATUS_FAILED: "⚠️",
+}
+
+
+def get_help_epilog() -> str:
+    """Build the --help epilog with exit codes and common usage examples.
+
+    Returns:
+        Epilog text.
+    """
+    return "\n".join(
+        [
+            "exit codes:",
+            "  0  checked, no phase transition",
+            "  1  phase transition detected",
+            "  2  skipped (POSCAR/CONTCAR missing or empty)",
+            "  3  check failed (structure unreadable, CNA error)",
+            "",
+            "why a directory is skipped:",
+            "  Only a real calculation directory holds both POSCAR and CONTCAR, so the",
+            "  check runs exactly in the per-job directories of pei_slurm_univ_submit",
+            "  --mode parallel / each-subdir. An orchestrating parent job runs from",
+            "  path_root/slurm/, which holds no structures, and is skipped.",
+            "",
+            "common usage:",
+            "  pei_vasp_univ_check_phase_transition                    # current directory",
+            "  pei_vasp_univ_check_phase_transition --dir ./y_dir/1",
+            "  pei_vasp_univ_check_phase_transition --quiet            # only the verdict line",
+            "",
+            "called automatically by:",
+            "  pei_vasp_univ_monitor_error   # once per running job, on its StdOut directory",
+        ]
+    )
+
+
+def get_count_line(str_label: str, dict_count: dict[str, int]) -> str:
+    """Format one structure's CNA counts as a single line.
+
+    Args:
+        str_label: Structure name shown at the line start.
+        dict_count: Counts keyed by phase name plus atoms_num.
+
+    Returns:
+        Formatted line.
+    """
+    lcell = [str_key + "=" + str(dict_count[str_key]) for str_key in ("atoms_num",) + LPHASE]
+    return "  " + str_label.ljust(8) + " " + "  ".join(lcell)
+
+
+### CLI
+parser = argparse.ArgumentParser(
+    prog="pei_vasp_univ_check_phase_transition",
+    description=(
+        "Check one VASP directory for a phase transition by comparing the CNA "
+        "phase populations of POSCAR and CONTCAR."
+    ),
+    epilog=get_help_epilog(),
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+)
+parser.add_argument(
+    "--dir",
+    default=".",
+    help="Directory holding the two structures. Default: .",
+)
+parser.add_argument(
+    "--initial",
+    default="POSCAR",
+    help="Reference structure file name. Default: POSCAR",
+)
+parser.add_argument(
+    "--final",
+    default="CONTCAR",
+    help="Current structure file name. Default: CONTCAR",
+)
+parser.add_argument(
+    "--quiet",
+    action="store_true",
+    help="Print only the one-line verdict, not the per-phase count table.",
+)
+args = parser.parse_args()
+
+path_dir = Path(args.dir).expanduser().resolve()
+if not path_dir.is_dir():
+    print("❌ ERROR: dir does not exist or is not a directory: " + str(path_dir))
+    raise SystemExit(3)
+### CLI to here
+
+### main
+dict_result = check_phase_transition(path_dir, str_initial=args.initial, str_final=args.final)
+str_status = dict_result["status"]
+
+print(
+    DICT_STATUS_FLAG[str_status]
+    + " phase-check ["
+    + str_status
+    + "] "
+    + str(path_dir)
+    + " -- "
+    + dict_result["reason"]
+)
+
+# The count table is what makes a 🚨 actionable (which phase moved, by how many),
+# so print it whenever both scans succeeded and the caller did not ask for quiet.
+if not args.quiet and dict_result["dict_initial"] is not None:
+    print(get_count_line(args.initial, dict_result["dict_initial"]))
+    print(get_count_line(args.final, dict_result["dict_final"]))
+### main to here
+
+raise SystemExit(DICT_EXIT_CODE[str_status])
