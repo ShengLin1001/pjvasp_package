@@ -50,8 +50,10 @@ def check_and_submit_jobs_in_subdir(path_subdir: Path = None,
                     os.system("pei_vasp_univ_find_and_change -algo Normal")
                     
                 if if_sbatch:
-                    os.system("cp CONTCAR POSCAR && pei_vasp_univ_clean_up_full && sbatch sub.*")
+                    # 提交经 pei_slurm_univ_sbatch_retry：slurmctld 暂态繁忙 / 超时时轮询重试
+                    # （默认 99 次 ×10s），不因一次提交抖动就漏掉本目录的重投。
+                    os.system("cp CONTCAR POSCAR && pei_vasp_univ_clean_up_full && pei_slurm_univ_sbatch_retry sub.*")
         else:
             print("❌OUTCAR does not exist")
             if if_sbatch:
-                os.system("sbatch sub.*")
+                os.system("pei_slurm_univ_sbatch_retry sub.*")

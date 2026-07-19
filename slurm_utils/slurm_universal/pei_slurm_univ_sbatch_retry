@@ -1,0 +1,136 @@
+#!/bin/bash
+
+# pei_slurm_univ_sbatch_retry —— sbatch「提交」失败重试包装器（轮询检测）。
+#
+# Usage:
+#   pei_slurm_univ_sbatch_retry [sbatch args...]
+#
+# 例：
+#   pei_slurm_univ_sbatch_retry --wait sub_slurm_univ.sh
+#   pei_slurm_univ_sbatch_retry sub.544.sh
+#   pei_slurm_univ_sbatch_retry sub.*
+#
+# 与 pei_slurm_univ_launch_retry 的分工（两者互不重叠，可叠加使用）：
+#   launch_retry 包 srun / mpirun，处理「作业内并行启动器起不来」；
+#   本脚本包 sbatch，处理「提交这一步没被 slurmctld 接住」。
+#
+# 为什么重试「提交」是安全的：
+#   提交失败意味着 slurmctld 没接住这次请求 —— 根本没有作业被创建，重试绝对安全：不会
+#   产生重复作业、不占任何计算分配、只花提交进程自己的时间。这与 launch_retry 截然不同
+#   （后者重试时握着整个分配空转、每次都在烧 walltime，故必须严格只在启动失败时重试）；
+#   sbatch 提交重试没有这层顾虑，所以默认倾向「除非明显是永久错误否则都重试」。
+#
+# 提交成功判据（命中其一即算成功，绝不重试）：
+#   1) sbatch 退出码为 0 —— 不带 --wait 时提交成功即 0；--parsable 成功也是 0。
+#   2) 输出含 "Submitted batch job" —— 覆盖 sbatch --wait 下「作业跑完才非 0 退出」的情形：
+#      作业已被创建，此刻的非 0 是作业本身的结果（VASP 不收敛 / 算崩 / 被杀），绝不能重投，
+#      否则会把一个必崩的算例重跑 99 遍、烧光机时。
+#   两条都不命中 → 这次提交没成：暂态错误（slurmctld 繁忙 / 超时 / 通信抖动）等待重试；
+#   永久性错误（分区名写错、脚本不存在等）立即放弃，不空转 99×10s。
+#
+# ⚠️ 不要拿本脚本单独去解析 --parsable 的作业号：成功时它会把 sbatch 的原样输出回显到
+#    stdout，但同时混入本脚本自己的 ▶️/⚠️ 诊断（走 stderr，不污染 stdout）。需要确定性捕获
+#    作业号的场景（如 n2p2 的 _sbatch_capture）请在调用方自带重试，别经本包装器。
+#
+# Exit codes:
+#   提交成功：原样透传 sbatch（含 --wait 的作业结果）退出码。
+#   永久性错误 / 重试耗尽：返回最后一次 sbatch 的退出码。
+
+# ================ ⚙️  可调参数（环境变量覆盖，无需改本文件）
+: "${PEI_SBATCH_RETRY_MAX:=99}"      # 最多尝试次数（含第一次）
+: "${PEI_SBATCH_RETRY_SLEEP:=10}"    # 每次重试前 sleep 的秒数
+
+# 永久性提交错误特征表：命中任一条即刻放弃、不再重试（避免拿写错的分区 / 不存在的脚本空转
+# 99×10s）。这里用「黑名单」而非 launch_retry 的「白名单」：sbatch 提交重试很廉价（不占分配、
+# 只花提交进程的时间），漏判一个暂态错误反而会白白跳过整个子目录，故默认偏向「都重试」，
+# 只把明确不可恢复的配置错误挡在外面。新遇到的永久错误往这里加一行即可；临时补充可用
+# PEI_SBATCH_PERMANENT_EXTRA_PATTERNS（每行一条）而不必改本文件。
+SBATCH_PERMANENT_PATTERNS=(
+    "Invalid partition"                              # 分区名写错
+    "Invalid account"                                # 账户 / 机时项写错
+    "Invalid qos"
+    "Invalid feature"
+    "Invalid generic resource"
+    "Requested node configuration is not available"  # 资源规格本集群给不了
+    "Unable to open file"                            # 提交脚本路径不存在 / 不可读
+    "Batch script is empty"
+    "Batch script contains DOS line breaks"
+)
+if [[ -n "$PEI_SBATCH_PERMANENT_EXTRA_PATTERNS" ]]; then
+    while IFS= read -r extra_pattern; do
+        [[ -n "$extra_pattern" ]] && SBATCH_PERMANENT_PATTERNS+=("$extra_pattern")
+    done <<< "$PEI_SBATCH_PERMANENT_EXTRA_PATTERNS"
+fi
+# to here ================
+
+# ====== check ======
+if (( $# < 1 )); then
+    echo "❌ ERROR: 用法: pei_slurm_univ_sbatch_retry [sbatch args...]" >&2
+    exit 1
+fi
+# sbatch 不在 PATH 就别进重试循环：否则每次都拿 127「command not found」空转 99×10s。
+command -v sbatch >/dev/null 2>&1 || {
+    echo "❌ ERROR: sbatch 不在 PATH 中，无法提交。" >&2
+    exit 1
+}
+for knob_name in PEI_SBATCH_RETRY_MAX PEI_SBATCH_RETRY_SLEEP; do
+    if ! [[ "${!knob_name}" =~ ^[0-9]+$ ]]; then
+        echo "❌ ERROR: $knob_name 必须是非负整数，收到: ${!knob_name}" >&2
+        exit 1
+    fi
+    # 强制按十进制解析：裸写 08 / 09 会被 bash 算术当八进制，(( )) 求值直接报错 → 下面
+    # `attempt >= MAX` 恒不成立 → 提交失败会无限重试；010 则会悄悄变成 8。与 launch_retry 同。
+    printf -v "$knob_name" '%d' "$((10#${!knob_name}))"
+done
+if (( PEI_SBATCH_RETRY_MAX < 1 )); then
+    echo "❌ ERROR: PEI_SBATCH_RETRY_MAX 必须 >= 1，收到: $PEI_SBATCH_RETRY_MAX" >&2
+    exit 1
+fi
+# ====== to here ======
+
+# ====== prepare ======
+# 命中永久性错误特征则打印匹配到的串并返回 0；没命中返回 1。入参是本次 sbatch 的完整输出。
+is_permanent_failure() {
+    local text="$1" pattern
+    for pattern in "${SBATCH_PERMANENT_PATTERNS[@]}"; do
+        if grep -qiF -- "$pattern" <<< "$text"; then
+            echo "$pattern"
+            return 0
+        fi
+    done
+    return 1
+}
+# ====== to here ======
+
+# ====== main ======
+attempt=1
+while :; do
+    # 诊断一律走 stderr，stdout 留给 sbatch 的原样输出（--parsable 的作业号也在其中）。
+    echo "▶️  [attempt $attempt/$PEI_SBATCH_RETRY_MAX] sbatch $*" >&2
+
+    # 合并 stderr 到一起抓：成功信息 "Submitted batch job" 走 stdout、错误串走 stderr，判据
+    # 两者都要看。这里的 $(...) 捕获不会像 launch_retry 那样「憋住几十分钟输出」：sbatch 自己
+    # 只吐一行提交信息；即便 --wait，被投作业的 stdout 是进它自己的 slurm-*.out，不经这里。
+    sbatch_out="$(sbatch "$@" 2>&1)"
+    status=$?
+    [[ -n "$sbatch_out" ]] && echo "$sbatch_out"
+
+    if (( status == 0 )) || grep -qF "Submitted batch job" <<< "$sbatch_out"; then
+        exit "$status"
+    fi
+
+    matched="$(is_permanent_failure "$sbatch_out")"
+    if [[ -n "$matched" ]]; then
+        echo "❌ 提交失败且命中永久性错误特征（$matched），不重试放弃: sbatch $*" >&2
+        exit "$status"
+    fi
+    if (( attempt >= PEI_SBATCH_RETRY_MAX )); then
+        echo "❌ sbatch 提交重试 $PEI_SBATCH_RETRY_MAX 次仍未成功 (exit $status)，放弃: sbatch $*" >&2
+        exit "$status"
+    fi
+
+    echo "⚠️  sbatch 提交未成功（暂态失败，exit $status），${PEI_SBATCH_RETRY_SLEEP}s 后重试…" >&2
+    attempt=$((attempt + 1))
+    sleep "$PEI_SBATCH_RETRY_SLEEP"
+done
+# ====== to here ======

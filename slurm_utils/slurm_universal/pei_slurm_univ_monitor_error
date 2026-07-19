@@ -107,7 +107,14 @@ EOF
     fi
 
     # 从 monitor_dir 里 sbatch，默认的 slurm-*.out 也就落在那里，不会堆到算例目录中。
-    ( cd "$monitor_dir" && sbatch "$script_path" ) || fail "sbatch failed: $script_path"
+    # 经 pei_slurm_univ_sbatch_retry 提交：slurmctld 暂态繁忙 / 超时时轮询重试（默认 99 次
+    # ×10s），不因一次提交抖动就漏掉看守作业。它不在 PATH 时退回裸 sbatch，保证老环境仍可用。
+    if command -v pei_slurm_univ_sbatch_retry >/dev/null 2>&1; then
+        submit_cmd=pei_slurm_univ_sbatch_retry
+    else
+        submit_cmd=sbatch
+    fi
+    ( cd "$monitor_dir" && "$submit_cmd" "$script_path" ) || fail "sbatch failed: $script_path"
     echo -e "==> 🎉 Monitor submitted. Watch it with: tail -f $monitor_dir/slurm-*.out"
 }
 

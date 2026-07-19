@@ -21,6 +21,10 @@ from mymetal.universal.check.type import check_positive_int, check_none, check_b
 # 启动失败重试包装器：slurm_utils/slurm_universal/pei_slurm_univ_launch_retry，与 cmd
 # (如 pei_vasp_univ_sbatch) 一样靠 PATH 找到。集中成常量，别在生成 shell 处散写字符串。
 LAUNCH_RETRY_WRAPPER = "pei_slurm_univ_launch_retry"
+# sbatch「提交」失败重试包装器：slurm_utils/slurm_universal/pei_slurm_univ_sbatch_retry，同样
+# 靠 PATH 找到。它只在「提交没被 slurmctld 接住」时轮询重试（默认 99 次 ×10s），一旦作业被
+# 创建（输出含 "Submitted batch job" 或退出码 0）就原样透传退出码，绝不因作业算崩而重投。
+SBATCH_RETRY_WRAPPER = "pei_slurm_univ_sbatch_retry"
 CHUNK_PARENT_LAYOUTS = ["auto", "shared", "per-chunk"]
 
 # generate_script
@@ -72,7 +76,7 @@ def generate_launcher_command(launcher: str, cmd: str, if_use_my_launcher: bool 
     line_launcher = ""
 
     # 编译器 / MPI 抖动会让 srun / mpirun 偶发起不来（作业步创建被临时禁用等），程序根本没执行。
-    # 包一层 pei_slurm_univ_launch_retry：它只在命中启动失败特征时重试（默认 2 次 × 10s），
+    # 包一层 pei_slurm_univ_launch_retry：它只在命中启动失败特征时重试（默认 99 次 × 10s），
     # 程序真跑起来了才失败的非 0（VASP 不收敛、输入错误、被杀）原样透传退出码、绝不重试，
     # 否则必崩的算例会占着整个分配反复重跑。重试次数/间隔由 PEI_LAUNCH_RETRY_MAX /
     # PEI_LAUNCH_RETRY_SLEEP 环境变量调，不必重新生成脚本。
@@ -343,14 +347,17 @@ def generate_loop(group: list, mode: str, line_launcher: str):
     )
 
     if mode == "each-subdir":
-        # 子作业经 sbatch --wait 提交：先看是否真的提交成功（输出含 Submitted batch job），
-        # 提交成功后用 --wait 返回的退出码判断收敛。
+        # 子作业经 sbatch --wait 提交，但外面包一层 pei_slurm_univ_sbatch_retry：提交若没被
+        # slurmctld 接住（暂态繁忙 / 超时 / 通信抖动），它会轮询重试（默认 99 次 ×10s）而不是
+        # 像以前那样直接跳过本子目录；重试耗尽（或命中永久性错误）仍未提交成功，才判失败并 skip。
+        # 作业一旦被创建（输出含 Submitted batch job），--wait 的退出码即作业本身结果，据此判收敛，
+        # 绝不因作业算崩而重投（否则会把必崩算例重跑 99 遍）。
         line_loop += (
-            '    echo "▶️  sbatch --wait sub_slurm_univ.sh"\n'
-            '    sbatch_out="$(sbatch --wait sub_slurm_univ.sh 2>&1)"; status=$?\n'
+            '    echo "▶️  ' + SBATCH_RETRY_WRAPPER + ' --wait sub_slurm_univ.sh"\n'
+            '    sbatch_out="$(' + SBATCH_RETRY_WRAPPER + ' --wait sub_slurm_univ.sh 2>&1)"; status=$?\n'
             '    echo "$sbatch_out"\n'
             '    if ! grep -q "Submitted batch job" <<< "$sbatch_out"; then\n'
-            '        echo "❌ 提交失败: $subdir" >&2\n'
+            '        echo "❌ 提交失败（已轮询重试仍未成功）: $subdir" >&2\n'
             '        submit_failed=$((submit_failed + 1)); failed_dirs+=("$subdir")\n'
             "        continue\n"
             "    fi\n"
@@ -639,9 +646,10 @@ def pei_slurm_univ_submit(
                 path_save = subdir / "sub_slurm_univ.sh"
                 print("")
                 print(f"================ 📁 {subdir}")
-                print(f"▶️  sbatch {path_save}")
-                # 这个 bash 脚本结束就会回到 path_root
-                rc = os.system(f"cd {subdir} && sbatch {path_save}")
+                print(f"▶️  {SBATCH_RETRY_WRAPPER} {path_save}")
+                # 这个 bash 脚本结束就会回到 path_root。sbatch 提交经 pei_slurm_univ_sbatch_retry
+                # 轮询重试：提交被 slurmctld 暂态拒于门外时不立刻记失败，重试耗尽才判失败。
+                rc = os.system(f"cd {subdir} && {SBATCH_RETRY_WRAPPER} {path_save}")
                 exit_code = os.waitstatus_to_exitcode(rc)
                 if exit_code == 0:
                     print("✅ 提交成功")
@@ -712,9 +720,10 @@ def pei_slurm_univ_submit(
                 print("  mode: " + mode)
                 print("  chunk_parent_layout: " + chunk_parent_layout)
                 print("  script: " + str(path_submit))
+                # 父作业提交同样经 pei_slurm_univ_sbatch_retry 轮询重试，避免提交抖动直接漏投。
                 os.system(
                     "cd " + shlex.quote(str(slurm_dir))
-                    + " && sbatch " + shlex.quote(str(path_submit))
+                    + " && " + SBATCH_RETRY_WRAPPER + " " + shlex.quote(str(path_submit))
                 )
 
     ################################### Main control flow to here

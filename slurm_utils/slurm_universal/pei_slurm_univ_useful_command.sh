@@ -75,6 +75,33 @@ check_positive_int() {
     [ "$value" -gt 0 ] || fail "$name must be a positive integer, got '$value'"
     printf '%s\n' "$value"
 }
+
+# squeue 偶发失败（slurmctld 繁忙 / 超时 / 通信抖动）时 returncode 非 0、stdout 常为空。绝不能把
+# 空输出当成「队列里没作业」——那会误判作业已结束。故失败即轮询重试，成功（returncode 0）才采信
+# 并原样回显 stdout；重试用尽仍失败才把最后一次错误串带回、返回非 0 让调用方按原逻辑处理。
+# 默认 99 次 ×10s，与仓库其余轮询检测统一，可用 PEI_SQUEUE_RETRY_MAX / _SLEEP 覆盖。
+# ⚠️ 诊断一律走 stderr：本函数总在 $(...) 里被调用，往 stdout 打一个字都会污染 squeue 数据。
+: "${PEI_SQUEUE_RETRY_MAX:=99}"
+: "${PEI_SQUEUE_RETRY_SLEEP:=10}"
+squeue_retry() {
+    local attempt=1 out status
+    while :; do
+        out="$(squeue "$@" 2>&1)"
+        status=$?
+        if [ "$status" -eq 0 ]; then
+            printf '%s' "$out"
+            return 0
+        fi
+        if [ "$attempt" -ge "$PEI_SQUEUE_RETRY_MAX" ]; then
+            printf '%s' "$out"      # 把最后一次的错误串带回调用方做诊断
+            return "$status"
+        fi
+        printf '  %s⚠️  squeue failed (attempt %s/%s): %s; retry in %ss%s\n' \
+            "$warn_color" "$attempt" "$PEI_SQUEUE_RETRY_MAX" "$out" "$PEI_SQUEUE_RETRY_SLEEP" "$reset" >&2
+        attempt=$((attempt + 1))
+        sleep "$PEI_SQUEUE_RETRY_SLEEP"
+    done
+}
 # to here
 
 ################ endpoint table ################
@@ -432,9 +459,9 @@ slurm_monitor() {
     declare -A dict_still_running=()
 
     section "Slurm / --monitor"
-    if ! squeue_out="$(squeue -h -u "$USER" -t RUNNING \
-        -o '%i|%j|%M|%S|%P|%D|%C|%R' 2>&1)"; then
-        fail "squeue failed while reading RUNNING jobs: $squeue_out"
+    if ! squeue_out="$(squeue_retry -h -u "$USER" -t RUNNING \
+        -o '%i|%j|%M|%S|%P|%D|%C|%R')"; then
+        fail "squeue failed while reading RUNNING jobs (after retries): $squeue_out"
     fi
 
     if [ -z "$squeue_out" ]; then
@@ -484,9 +511,9 @@ slurm_monitor() {
     printf '.\n'
     sleep "$monitor_interval"
 
-    if ! squeue_after="$(squeue -h -u "$USER" -t RUNNING -o '%i' 2>&1)"; then
+    if ! squeue_after="$(squeue_retry -h -u "$USER" -t RUNNING -o '%i')"; then
         second_snapshot_ok=0
-        warn "second squeue snapshot failed; job end detection is unavailable: $squeue_after"
+        warn "second squeue snapshot failed after retries; job end detection is unavailable: $squeue_after"
     else
         while IFS= read -r job_id; do
             [ -n "$job_id" ] && dict_still_running["$job_id"]=1
