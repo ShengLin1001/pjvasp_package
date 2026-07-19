@@ -47,6 +47,10 @@ Functions:
     - get_deformation_gradient: symmetric F with Green-Lagrange strain xi * d.
     - get_mode_severity: how hard a mode has actually deformed the cell at amplitude xi.
     - get_mode_window: largest |xi| a mode may take within a severity budget.
+    - get_shear_window: largest |xi| keeping a mode's tensor shear within a cap.
+    - scale_mode_shear: multiply a mode's engineering shear entries by a factor (small-shear).
+    - get_shear_modes: names of the shear-carrying core modes (small-shear default target).
+    - get_hoec_modes: core mode table, optionally shear-rescaled and/or with extra normal modes.
     - get_mode_strain_lists: per-mode xi lists of equal severity (or one shared window).
     - check_symmetry: validate / auto-detect 'cubic' or 'hex' from a cell.
     - selftest_hoec: verify cubic against Wang-Li Table I and check mode-set rank.
@@ -65,6 +69,13 @@ Change log:
     - Fixed by Codex on 2026-07-14: project elastic coefficients with the dual monomial
       representation, add hex mode M20 so the fourth-order system has rank 19/19, and
       validate hex rotational invariance plus the analytic M04/M06 SOEC identity.
+    - Revised by J. P. on 2026-07-18: added the opt-in hex small-shear option
+      (``get_hoec_modes`` / ``scale_mode_shear`` / ``get_shear_modes`` / ``get_shear_window``) so a
+      relaxed-ion HCP run can keep the shear directions without following the basal shuffle into
+      FCC. It rescales the selected core modes' engineering shear IN PLACE (default 0.5, target =
+      every shear-carrying mode), keeping their names, and caps their window at
+      ``SMALL_SHEAR_SHEAR_CAP``. No mode is added or renamed, so mymetal.post.hoec_energy must
+      read each mode's direction from the run manifest, not from the global ``MODES`` table.
 """
 
 import numpy as np
@@ -534,14 +545,13 @@ MODES_CUBIC = {
 #      P3 = 1/6*C222
 #      P4 = 5/216*C1111 + 1/54*C1112 + 1/9*C1166
 #
-# The 20x19 fourth-order matrix has one redundant row. M04 and M06 have the
-# same P2 and P4 but different P3, and either one can be removed while all
-# three orders remain full rank. Keeping both provides one fourth-order
-# out-of-sample equation and a useful check on finite-strain contamination.
-# hexagonal: 20 curated single-parameter modes. M01--M19 span only 18 of the 19
-# fourth-order constants after the physically correct dual projection; M20 supplies the
-# missing direction and leaves one out-of-sample equation for an overdetermined check.
-# Dropping modes can make the 4th-order system singular -- selftest_hoec() checks the rank.
+# M04 and M06 have the same P2 and P4 but different P3, one classic redundant pair. Within the
+# curated M01..M20 core, M01--M19 span only 18 of the 19 fourth-order constants after the
+# physically correct dual projection; M20 supplies the missing direction. M21--M23 are three
+# extra pure-normal directions, added to the default set so the pure-normal 4th-order block is
+# fully determined by shear-free modes (see their comment below). The set is therefore
+# deliberately over-determined; selftest_hoec() checks that every order stays full rank.
+# hexagonal: 23 single-parameter modes (M01..M20 curated core + M21..M23 pure-normal).
 MODES_HEX = {
     'M01': (1, 0, 0, 0, 0, 0),    # a-axis uniaxial
     'M02': (0, 0, 1, 0, 0, 0),    # c-axis uniaxial
@@ -563,8 +573,131 @@ MODES_HEX = {
     'M18': (1, 0, 1, 0, 0, 2),
     'M19': (0, 1, -1, 0, 0, 0),
     'M20': (0, 1, 0, 0, 0, 0),    # second basal uniaxial direction; closes FOEC rank
+    # Three extra pure-normal directions, now part of the default set. See
+    # hcp_static_vs_relax_mode_zh.md sec.4: M01..M20's 8 pure-normal modes pin the 10 pure-normal
+    # 4th-order constants only to rank 7/10, leaving C1113/C1333 in the underdetermined subspace,
+    # so the fit had to lean on the shear modes (M17/M18) whose clamped-ion shear pollution leaks
+    # into C1113/C1333. These raise the pure-normal C4 rank to 10/10 (verified: (1,0,2)->8,
+    # (0,1,2)->9, (2,1,1)->10), fixing C1113/C1333 from shear-free modes alone. Pure normal keeps
+    # the two atoms on their inversion centre (Dz==0.5) -- no FCC collapse, clamped-ion is exact.
+    'M21': (1, 0, 2, 0, 0, 0),    # a1 + 2c   (pure-normal C4 rank 7 -> 8)
+    'M22': (0, 1, 2, 0, 0, 0),    # a2 + 2c   (8 -> 9)
+    'M23': (2, 1, 1, 0, 0, 0),    # anisotropic 1-2-3 mix, breaks eta1=eta2 (9 -> 10)
 }
+# Small-shear HCP option (opt-in, --small-shear). NOT a separate mode table.
+#
+# A metastable HCP branch survives a *static* (clamped-ion) scan at any strain, but once the
+# ions are allowed to relax the basal shear opens an internal downhill channel and the cell
+# shuffles into an FCC stacking. hcp_critical_window_and_runtime.md measured, per mode, the
+# |xi| at which Au leaves the HCP branch: the shear-carrying modes transform first (safe
+# window as small as +-0.03 for M15/M16, vs the uniaxial modes which never transform).
+#
+# small-shear lets a *relaxed-ion* run keep the shear directions without transforming: it
+# multiplies the engineering shear entries (d4,d5,d6) of the selected core modes by
+# SMALL_SHEAR_SCALE IN PLACE (get_hoec_modes / scale_mode_shear), so e.g.
+# M09 [1 0 0 2 0 0] -> [1 0 0 1 0 0]: the tensor shear eps = xi*d/2 becomes HALF the
+# accompanying tensor normal strain and is halved at any given xi. Modes without a shear entry
+# are untouched, so the *default* target ("every shear-carrying mode") leaves the pure-normal
+# modes exactly as they were. The mode NAMES are unchanged -- there is no M##s and no extra
+# table -- so nothing is renamed and mymetal.post.hoec_energy must read each mode's direction
+# from the run's manifest (it does), not from this global table.
+#
+# Scaling the direction is not enough on its own: get_mode_strain_lists' equal-severity scaling
+# would just widen a now-milder mode's window until the shear is back where it started, and it
+# does nothing at all for a pure-shear mode (its severity IS its shear). So the generator also
+# caps each scaled mode's window at SMALL_SHEAR_SHEAR_CAP (get_shear_window). That cap also
+# bounds the mode's normal-strain range, which is intended and harmless: these modes exist to
+# carry the shear directions, while the normal constants come from the full-window pure-normal
+# modes (M01, M02, ...).
+SMALL_SHEAR_SCALE = 0.5
+
+# Default cap on a scaled mode's largest tensor shear at its window edge. 0.03 keeps every Au
+# shear mode inside the tightest safe window in hcp_critical_window_and_runtime.md
+# (M15/M16, +-0.03); raise it for a stiffer metal, lower it if a relaxed run still transforms.
+SMALL_SHEAR_SHEAR_CAP = 0.03
+
+# MODES is the resolution fallback used by the post-processing when a manifest predates the
+# per-mode ``direction`` field. small-shear adds no names (it rescales core modes in place), so
+# nothing extra is folded in here. Generation selects/scales through get_hoec_modes.
 MODES = {'cubic': MODES_CUBIC, 'hex': MODES_HEX}
+
+
+def scale_mode_shear(d_dir: tuple = None, factor: float = None) -> tuple:
+    """Multiply a mode's engineering shear entries (d4, d5, d6) by ``factor``; normals unchanged.
+
+    This is the whole small-shear transform: ``M09 (1,0,0,2,0,0) -> (1,0,0,1,0,0)`` at
+    ``factor=0.5``. A mode with no shear entry is returned unchanged.
+
+    Args:
+        d_dir (tuple): Length-6 engineering-Voigt mode direction.
+        factor (float): Multiplier for the shear entries.
+
+    Returns:
+        tuple: The rescaled direction.
+    """
+    return tuple(v * factor if i >= 3 else v for i, v in enumerate(d_dir))
+
+
+def get_shear_modes(symmetry: str = None) -> list:
+    """Names of the core modes that carry an engineering shear entry (d4/d5/d6 != 0).
+
+    This is the default target of ``--small-shear``: rescaling every shear-carrying mode leaves
+    the pure-normal modes exactly as they were.
+
+    Args:
+        symmetry (str): 'cubic' or 'hex'.
+
+    Returns:
+        list: Mode names in the core-table order.
+
+    Raises:
+        ValueError: If ``symmetry`` is not a supported point group.
+    """
+    if symmetry not in MODES:
+        raise ValueError("symmetry must be 'cubic' or 'hex', got %r" % symmetry)
+    base = MODES_CUBIC if symmetry == 'cubic' else MODES_HEX
+    return [name for name, d in base.items() if any(d[3:])]
+
+
+def get_hoec_modes(symmetry: str = None, small_shear: bool = False,
+                   shear_scale: float = SMALL_SHEAR_SCALE,
+                   lsmall_shear_modes: list = None) -> dict:
+    """Ordered mode table to generate for a symmetry, with the opt-in small-shear modifier.
+
+    The base is the curated core set (cubic A..K, hex M01..M23). ``small_shear`` (hex only)
+    rescales the engineering shear entries of the target modes by ``shear_scale`` IN PLACE,
+    keeping their names -- so a relaxed-ion run gets the reduced-shear directions without adding
+    or renaming any mode. The target defaults to every shear-carrying mode
+    (:func:`get_shear_modes`); pass ``lsmall_shear_modes`` to rescale only some (the rest keep
+    their original shear). With no modifier the returned dict is exactly the core set.
+
+    Args:
+        symmetry (str): 'cubic' or 'hex'.
+        small_shear (bool): Rescale the target modes' shear entries (hex only).
+        shear_scale (float): Shear multiplier for the small-shear target modes.
+        lsmall_shear_modes (list): Modes to rescale; defaults to every shear-carrying mode.
+
+    Returns:
+        dict: Ordered mode name -> length-6 engineering-Voigt direction.
+
+    Raises:
+        ValueError: If ``symmetry`` is unsupported, ``shear_scale`` is not finite and positive,
+            or a requested mode name is unknown.
+    """
+    if symmetry not in MODES:
+        raise ValueError("symmetry must be 'cubic' or 'hex', got %r" % symmetry)
+    dict_out = dict(MODES_CUBIC if symmetry == 'cubic' else MODES_HEX)
+    if small_shear and symmetry == 'hex':
+        if not np.isfinite(shear_scale) or shear_scale <= 0:
+            raise ValueError("shear_scale must be finite and positive, got %r" % shear_scale)
+        ltarget = (lsmall_shear_modes if lsmall_shear_modes is not None
+                   else get_shear_modes(symmetry))
+        lbad = [n for n in ltarget if n not in dict_out]
+        if lbad:
+            raise ValueError("unknown small-shear mode(s): %s" % ", ".join(lbad))
+        for name in ltarget:
+            dict_out[name] = scale_mode_shear(dict_out[name], shear_scale)
+    return dict_out
 
 
 # ---------------------------------------------------------------------------
@@ -776,8 +909,35 @@ def get_mode_window(d_dir: tuple = None, target: float = None,
     return lo
 
 
+def get_shear_window(d_dir: tuple = None, shear_cap: float = None) -> float:
+    """Largest |xi| at which a mode's tensor shear strain still stays within ``shear_cap``.
+
+    The tensor shear grows linearly with |xi| (the engineering shear entry d4/d5/d6 carries the
+    tensor value xi*d/2), so the bound is exact: ``|xi| <= shear_cap / (max|d4,d5,d6|/2)``. A mode
+    with no shear entry is unbounded and returns +inf. This is the extra cap the small-shear
+    modes take on top of the severity budget, because equal-severity scaling alone does not
+    bound a pure-shear mode's shear (its severity IS its shear, so an equal-severity window keeps
+    the shear unchanged).
+
+    Args:
+        d_dir (tuple): Length-6 engineering-Voigt mode direction.
+        shear_cap (float): Maximum allowed tensor shear strain.
+
+    Returns:
+        float: The mode's own maximum |xi|, or ``float('inf')`` when the mode carries no shear.
+
+    Raises:
+        ValueError: If ``shear_cap`` is not finite and positive.
+    """
+    if not np.isfinite(shear_cap) or shear_cap <= 0:
+        raise ValueError("shear_cap must be finite and positive, got %r" % shear_cap)
+    shear_per_xi = max(abs(d_dir[3]), abs(d_dir[4]), abs(d_dir[5])) / 2.0
+    return float('inf') if shear_per_xi == 0 else shear_cap / shear_per_xi
+
+
 def get_mode_strain_lists(symmetry: str = None, emax: float = 0.12, de: float = 0.01,
-                          scale_window: bool = True) -> dict:
+                          scale_window: bool = True, dict_modes: dict = None,
+                          shear_cap: float = None, lcap_modes: list = None) -> dict:
     """Per-mode xi lists, each mode confined to an equally severe deformation.
 
     The uniaxial mode A sets the budget: it keeps ``emax`` and ``de`` exactly as given, and
@@ -789,36 +949,47 @@ def get_mode_strain_lists(symmetry: str = None, emax: float = 0.12, de: float = 
     With ``scale_window=False`` every mode gets the same ``[-emax, emax]``, which is the
     literal reading of Wang-Li and the original behaviour of this workflow.
 
+    ``shear_cap`` adds a second bound on the modes named in ``lcap_modes`` (the small-shear
+    modes): their window is the smaller of the severity window and the :func:`get_shear_window`
+    shear cap, so a relaxed run's basal shear cannot reach the value that tips HCP into FCC.
+    Modes not in ``lcap_modes`` are never capped. Ignored when either is unset.
+
     Args:
         symmetry (str): 'cubic' or 'hex'.
         emax (float): Maximum |xi| for the reference mode.
         de (float): xi step for the reference mode.
         scale_window (bool): Scale each mode's window by its severity.
+        dict_modes (dict): Mode subset to build (name -> direction); defaults to the core set
+            for this symmetry. Pass :func:`get_hoec_modes` output to include any modifiers.
+        shear_cap (float): Max tensor shear for the ``lcap_modes``; ``None`` disables the cap.
+        lcap_modes (list): Mode names to apply ``shear_cap`` to (the small-shear modes).
 
     Returns:
         dict: Mode name -> dict with ``xi`` (list), ``emax``, ``de`` and ``scale``
         (the mode's window divided by ``emax``; 1.0 for every mode when not scaling).
 
     Raises:
-        ValueError: If ``symmetry`` is not a supported point group.
+        ValueError: If ``symmetry`` is unsupported or ``shear_cap`` is not finite and positive.
     """
     if symmetry not in MODES:
         raise ValueError("symmetry must be 'cubic' or 'hex', got %r" % symmetry)
+    if shear_cap is not None and (not np.isfinite(shear_cap) or shear_cap <= 0):
+        raise ValueError("shear_cap must be finite and positive, got %r" % shear_cap)
+    dict_modes = dict_modes if dict_modes is not None else get_hoec_modes(symmetry)
     lxi_ref = get_strain_list(emax, de)
-    dict_out = {}
-    if not scale_window:
-        for name, d in MODES[symmetry].items():
-            dict_out[name] = dict(xi=lxi_ref, emax=emax, de=de, scale=1.0)
-        return dict_out
+    npt = (len(lxi_ref) - 1) // 2                  # points on each side of xi=0
+    scap = set(lcap_modes or [])
+    # severity budget: mode A is uniaxial, so its principal stretch and its volume change
+    # coincide -- its own severity at emax is the natural target for every other mode
+    target = get_mode_severity(MODES[symmetry]['A' if symmetry == 'cubic' else 'M01'], emax)
 
-    # mode A is uniaxial, so its principal stretch and its volume change coincide: its own
-    # severity at emax is the natural budget to hold every other mode to
-    d_ref = MODES[symmetry]['A' if symmetry == 'cubic' else 'M01']
-    target = get_mode_severity(d_ref, emax)
-    npt = (len(lxi_ref) - 1) // 2                 # points on each side of xi=0
-    for name, d in MODES[symmetry].items():
-        scale = get_mode_window(d, target) / emax
-        scale = min(scale, 1.0)                   # never widen past the requested emax
+    dict_out = {}
+    for name, d in dict_modes.items():
+        # scale_window shrinks every mode to equal severity; without it all modes share emax
+        xi_max = get_mode_window(d, target) if scale_window else emax
+        if shear_cap is not None and name in scap:
+            xi_max = min(xi_max, get_shear_window(d, shear_cap))   # keep the shear sub-critical
+        scale = min(xi_max / emax, 1.0)           # never widen past the requested emax
         de_m = de * scale
         dict_out[name] = dict(xi=[round(k * de_m, 10) for k in range(-npt, npt + 1)],
                               emax=emax * scale, de=de_m, scale=scale)
@@ -962,18 +1133,51 @@ def selftest_hoec() -> bool:
               % (o, A.shape[0], A.shape[1], r, len(mh.names(o)), np.linalg.cond(A),
                  over, '✅' if full else '❌'))
 
+    # M04/M06 identity: same P2 and P4, different P3 -- a symmetry fact independent of the set.
+    m04_m06 = (np.allclose(mh.P_coeffs(2, MODES_HEX['M04']),
+                           mh.P_coeffs(2, MODES_HEX['M06']), atol=1e-12)
+               and not np.allclose(mh.P_coeffs(3, MODES_HEX['M04']),
+                                   mh.P_coeffs(3, MODES_HEX['M06']), atol=1e-12)
+               and np.allclose(mh.P_coeffs(4, MODES_HEX['M04']),
+                               mh.P_coeffs(4, MODES_HEX['M06']), atol=1e-12))
+    ok = ok and m04_m06
+    print('  M04/M06 identity (P2,P4 equal, P3 differ): %s' % ('✅' if m04_m06 else '❌'))
+    # the set is deliberately over-determined (M21..M23 add pure-normal rows), so several modes
+    # are now individually removable; the redundancy is reported, not asserted to a fixed set.
     lremovable = _get_individually_removable_modes(mh, MODES_HEX)
-    redundant_pair = (lremovable == ['M04', 'M06']
-                      and np.allclose(mh.P_coeffs(2, MODES_HEX['M04']),
-                                      mh.P_coeffs(2, MODES_HEX['M06']), atol=1e-12)
-                      and not np.allclose(mh.P_coeffs(3, MODES_HEX['M04']),
-                                          mh.P_coeffs(3, MODES_HEX['M06']), atol=1e-12)
-                      and np.allclose(mh.P_coeffs(4, MODES_HEX['M04']),
-                                      mh.P_coeffs(4, MODES_HEX['M06']), atol=1e-12))
-    ok = ok and redundant_pair
-    print('  orders 2--4 jointly removable modes: %s %s'
-          % (', '.join(lremovable) if lremovable else 'none',
-             '✅' if redundant_pair else '❌ EXPECTED M04, M06'))
+    print('  orders 2--4 individually removable (over-determined, informational): %s'
+          % (', '.join(lremovable) if lremovable else 'none'))
+
+    ### hex small-shear: in-place shear rescale, shear cap, rank preserved --------
+    print('\n================ ✅ hexagonal small-shear (--small-shear, in-place rescale)')
+    dict_small = get_hoec_modes('hex', small_shear=True)      # default: every shear mode, x0.5
+    target_hex = get_mode_severity(MODES_HEX['M01'], 0.12)
+    small_ok = True
+    lshear = get_shear_modes('hex')
+    for name in lshear:
+        d0, d = MODES_HEX[name], dict_small[name]
+        # normals untouched; each shear entry is exactly halved
+        rel_ok = (d[:3] == d0[:3]
+                  and all(abs(d[i] - d0[i] * SMALL_SHEAR_SCALE) < 1e-12 for i in range(3, 6))
+                  and any(d0[3:]))
+        xi_max = min(get_mode_window(d, target_hex), get_shear_window(d, SMALL_SHEAR_SHEAR_CAP))
+        shear_edge = xi_max * max(abs(d[3]), abs(d[4]), abs(d[5])) / 2.0
+        cap_ok = shear_edge <= SMALL_SHEAR_SHEAR_CAP + 1e-9
+        small_ok = small_ok and rel_ok and cap_ok
+        print('  %-4s %-16s -> %-18s xi_max=%.4f shear_edge=%.4f %s'
+              % (name, str(d0), str(d), xi_max, shear_edge, '✅' if rel_ok and cap_ok else '❌'))
+    # rescaling the shear in place must not lower any order's rank (the run stays solvable)
+    for o in (2, 3, 4):
+        r = np.linalg.matrix_rank(mh.system(o, list(dict_small.values())), tol=1e-7)
+        full = (r == len(mh.names(o)))
+        small_ok = small_ok and full
+        print('  order %d rescaled-set rank %d/%d %s' % (o, r, len(mh.names(o)), '✅' if full else '❌'))
+    # non-shear modes must be left exactly as they were (untouched by the default target)
+    untouched = all(dict_small[n] == MODES_HEX[n] for n in MODES_HEX if n not in lshear)
+    small_ok = small_ok and untouched
+    print('  pure-normal modes untouched by default target: %s' % ('✅' if untouched else '❌'))
+    ok = ok and small_ok
+
     print('\n%s' % ('🎉 self-test PASSED' if ok else '❌ self-test FAILED'))
     return ok
 

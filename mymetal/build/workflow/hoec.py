@@ -55,8 +55,9 @@ from ase.io import read, write
 from myvasp import vasp_func as vf
 
 from mymetal.calculate.calmechanics.hoec import (
-    MODES, check_symmetry, get_deformation_gradient, get_mode_severity,
-    get_mode_strain_lists, get_strain_list)
+    SMALL_SHEAR_SCALE, SMALL_SHEAR_SHEAR_CAP,
+    check_symmetry, get_deformation_gradient, get_hoec_modes, get_mode_severity,
+    get_mode_strain_lists, get_shear_modes, get_strain_list)
 from mymetal.universal.print.print import fail, warn, confirm_prepare_outdir
 
 # INCAR tags forced on every deformed job. ISIF=2 fixes the box and relaxes the ions
@@ -166,6 +167,9 @@ def deform_atoms(atoms_ref: Atoms = None, F: np.ndarray = None) -> Atoms:
 def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
                        emax: float = 0.12, de: float = 0.01,
                        scale_window: bool = True, relax_ions: bool = True,
+                       small_shear: bool = False, shear_scale: float = SMALL_SHEAR_SCALE,
+                       small_shear_modes: list = None,
+                       shear_cap: float = SMALL_SHEAR_SHEAR_CAP,
                        srcdir: str = 'y_full_relax',
                        outdir: str = 'y_hoec_energy',
                        force: bool = False) -> Path:
@@ -185,6 +189,15 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     from following an internal shuffle into another stacking sequence; all imported lower-
     order constants must then use the same clamped-ion definition.
 
+    ``small_shear=True`` (hex only) rescales the engineering shear entries of the target modes IN
+    PLACE by ``shear_scale`` (default 0.5), keeping their names, so a *relaxed-ion* run can keep
+    the shear directions without the basal shuffle into FCC. The target defaults to every
+    shear-carrying mode; pass ``small_shear_modes`` to rescale only some (the rest keep their
+    original shear). Those rescaled modes also get their window capped so the tensor shear never
+    exceeds ``shear_cap``; pure-normal modes are untouched. It is the relaxed-ion counterpart of
+    ``relax_ions=False``. Because the directions change per run, the post-processing reads them
+    back from the manifest, never the global mode table.
+
     Args:
         path_root (str): Directory containing ``srcdir``. Defaults to the cwd.
         symmetry (str): 'auto', 'cubic' or 'hex'.
@@ -193,6 +206,10 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         scale_window (bool): Give each mode an equally severe window of its own.
         relax_ions (bool): Relax the ions at fixed cell shape (ISIF=2). ``False`` forces a
             single ionic step and returns clamped-ion constants.
+        small_shear (bool): Rescale the target modes' shear entries in place (hex only).
+        shear_scale (float): Shear multiplier for the small-shear target modes (default 0.5).
+        small_shear_modes (list): Modes to rescale; defaults to every shear-carrying mode.
+        shear_cap (float): Max tensor shear at a rescaled mode's window edge; only bites those.
         srcdir (str): Reference directory name.
         outdir (str): Output directory name (an existing one is confirmed before
             deletion; ``force`` deletes it without prompting).
@@ -208,6 +225,18 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     path_full_relax = path_root / srcdir
     if not path_full_relax.is_dir():
         fail("%s not found under %s" % (srcdir, path_root))
+    if small_shear:
+        try:
+            shear_scale = float(shear_scale)
+            shear_cap = float(shear_cap)
+        except (TypeError, ValueError):
+            fail("small-shear controls must be finite positive numbers; got shear_scale=%r, "
+                 "shear_cap=%r" % (shear_scale, shear_cap))
+        if not np.isfinite(shear_scale) or shear_scale <= 0:
+            fail("shear_scale must be finite and positive with --small-shear, got %r"
+                 % shear_scale)
+        if not np.isfinite(shear_cap) or shear_cap <= 0:
+            fail("shear_cap must be finite and positive with --small-shear, got %r" % shear_cap)
     try:
         lxi = get_strain_list(emax, de)
     except ValueError as e:
@@ -227,15 +256,32 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         symmetry = check_symmetry(symmetry, cell_ref)
     except ValueError as e:
         fail(str(e))
-    dict_modes = MODES[symmetry]
+    if small_shear and symmetry != 'hex':
+        warn("--small-shear is a hexagonal-only option; ignored for a '%s' cell." % symmetry)
+        small_shear = False
+    # resolve which modes get the in-place shear rescale (default: every shear-carrying mode)
+    dict_core = get_hoec_modes(symmetry)                     # original directions, for the report
+    lscaled = []
+    if small_shear:
+        lscaled = (small_shear_modes if small_shear_modes is not None
+                   else get_shear_modes(symmetry))
+        lbad = [n for n in lscaled if n not in dict_core]
+        if lbad:
+            fail("--small-shear-modes lists unknown mode(s): %s" % ", ".join(lbad))
     try:
-        dict_xi = get_mode_strain_lists(symmetry, emax, de, scale_window)
+        # ``[]`` means "rescale no modes" and must not collapse to None, whose meaning is
+        # "rescale every shear mode".
+        dict_modes = get_hoec_modes(symmetry, small_shear, shear_scale, lscaled)
+        dict_xi = get_mode_strain_lists(symmetry, emax, de, scale_window, dict_modes,
+                                        shear_cap if small_shear else None, lscaled)
     except ValueError as e:
         fail(str(e))
 
     print("📐 symmetry     : %s" % symmetry)
     print("📦 reference    : %d atoms, V0 = %.4f Å³" % (natoms, v0))
-    print("🔧 modes        : %d (%s)" % (len(dict_modes), ", ".join(dict_modes)))
+    print("🔧 modes        : %d (%s)%s"
+          % (len(dict_modes), ", ".join(dict_modes),
+             " [%d shear-rescaled ×%.2f]" % (len(lscaled), shear_scale) if lscaled else ""))
     print("📏 strain xi    : %d points per mode, reference window [%.4f, %.4f] step %.4f"
           % (len(lxi), -emax, emax, de))
     if scale_window:
@@ -250,11 +296,26 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         warn("scale_window=False: every mode shares [-%.4f, %.4f]. xi is a mode amplitude, "
              "not a strain, so the multi-component modes deform the cell far harder than "
              "the uniaxial one and can leave the Taylor regime entirely." % (emax, emax))
+    if lscaled:
+        print("🪶 small-shear  : %d mode(s) shear ×%.2f in place, window capped at tensor-shear "
+              "≤ %.3f (names unchanged; post reads directions from the manifest)"
+              % (len(lscaled), shear_scale, shear_cap))
+        print("   %-5s %-16s %-18s %9s %11s"
+              % ("mode", "original", "rescaled", "xi_max", "shear_edge"))
+        for name in lscaled:
+            d = dict_modes[name]
+            xi_max = dict_xi[name]['emax']
+            shear_edge = xi_max * max(abs(d[3]), abs(d[4]), abs(d[5])) / 2.0
+            print("   %-5s %-16s %-18s %9.4f %11.4f"
+                  % (name, str(tuple(dict_core[name])), str(tuple(d)), xi_max, shear_edge))
     print("🧊 ions         : %s" % ("relaxed at fixed cell shape (ISIF=2)" if relax_ions
                                    else "frozen, single ionic step (NSW=0, IBRION=-1)"))
     if not relax_ions and symmetry != 'cubic':
         warn("relax_ions=False on a '%s' cell: generating CLAMPED-ION constants. Keep SOEC "
              "and every higher order on this same response definition." % symmetry)
+    if relax_ions and symmetry == 'hex' and not small_shear:
+        warn("relax_ions=True on an HCP cell WITHOUT --small-shear: the full-shear modes can "
+             "relax off the metastable HCP branch into FCC. Use --static, or --small-shear.")
     print("📊 total calcs  : %d modes × %d strains = %d %s"
           % (len(dict_modes), len(lxi), len(dict_modes) * len(lxi),
              "ionic relaxations" if relax_ions else "single-point energies"))
@@ -302,15 +363,21 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
                                          emax=dict_xi[name]['emax'],
                                          de=dict_xi[name]['de'],
                                          xi=dict_xi[name]['xi'],
+                                         shear_scaled=(name in lscaled),
                                          strain_dirs=lstrain_dir)
     # to here: every mode has a full y_dir of strained inputs
 
     ### write the manifest the post script reads -------------------------------
-    # record the same eV/Å³ -> GPa constant mymetal.post uses, so the two never drift
+    # record the same eV/Å³ -> GPa constant mymetal.post uses, so the two never drift. The
+    # per-mode ``direction`` is authoritative -- a small-shear run rescaled it in place, so the
+    # post-processing MUST read directions from here, never from the global mode table.
     dict_manifest = dict(symmetry=symmetry, natoms=natoms, v0_ang3=v0,
                          ev_per_a3_to_gpa=vf.phy_const('qe') * 1e21,
                          emax=emax, de=de, xi=lxi, scale_window=scale_window,
-                         relax_ions=relax_ions,
+                         relax_ions=relax_ions, small_shear=bool(lscaled),
+                         shear_scale=(shear_scale if lscaled else None),
+                         shear_cap=(shear_cap if lscaled else None),
+                         small_shear_modes=lscaled,
                          ref_dir=str(path_full_relax), modes=dict_manifest_modes)
     (path_out / "y_hoec_modes.json").write_text(
         json.dumps(dict_manifest, indent=2), encoding='utf-8')

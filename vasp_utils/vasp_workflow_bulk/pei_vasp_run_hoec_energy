@@ -32,11 +32,21 @@
 #  correct choice when the metastable HCP branch must be kept from following an internal
 #  shuffle into another stacking sequence. Use clamped-ion SOEC with it.
 #
+#  --small-shear (hex only) is the RELAXED-ion alternative to --static: it rescales the
+#  engineering shear entries of the target modes IN PLACE by --shear-scale (default 0.5, so the
+#  tensor shear becomes half the accompanying normal strain), keeping their names, and caps their
+#  window so the tensor shear stays below --shear-cap -- small enough that a relaxed run stays on
+#  the metastable HCP branch instead of shuffling into FCC. The target defaults to every
+#  shear-carrying mode; --small-shear-modes restricts it. No mode is added or renamed, so the
+#  post-processing reads each mode's (rescaled) direction from the run's manifest.
+#
 #  >>> Example usage:
 #      pei_vasp_run_hoec_energy                        # auto-detect symmetry
 #      pei_vasp_run_hoec_energy --symmetry hex
 #      pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025
 #      pei_vasp_run_hoec_energy --symmetry hex --static # HCP clamped-ion branch
+#      pei_vasp_run_hoec_energy --symmetry hex --small-shear   # relaxed HCP, sub-critical shear
+#      pei_vasp_run_hoec_energy --symmetry hex --small-shear --small-shear-modes M13,M14,M15
 #      pei_vasp_run_hoec_energy --no-scale-window      # one shared window (old behaviour)
 #
 #  Prerequisite: y_full_relax must be a CONVERGED conventional cell (dense k-points,
@@ -47,6 +57,7 @@ import argparse
 from pathlib import Path
 
 from mymetal.build.workflow.hoec import generate_hoec_dirs
+from mymetal.calculate.calmechanics.hoec import SMALL_SHEAR_SCALE, SMALL_SHEAR_SHEAR_CAP
 
 # Kept in sync with the ">>> Example usage" block at the top of this file; argparse only
 # shows what we hand it, so the header comment alone never reaches a --help reader.
@@ -56,6 +67,7 @@ most common:
   pei_vasp_run_hoec_energy --symmetry hex           # force the 20 hexagonal modes
   pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025  # wider window, same step count
   pei_vasp_run_hoec_energy --symmetry hex --static  # HCP clamped-ion branch
+  pei_vasp_run_hoec_energy --symmetry hex --small-shear   # relaxed HCP, shear rescaled in place
   pei_vasp_run_hoec_energy --no-scale-window        # one shared window (literal Wang-Li)
 
 then:
@@ -84,6 +96,20 @@ parser.add_argument("--static", "--no-relax-ions", dest="relax_ions", action="st
                     help="Single ionic step (NSW=0, IBRION=-1) instead of relaxing the ions "
                          "at fixed cell shape; returns clamped-ion constants. Use clamped-ion "
                          "SOEC with this option for multi-sublattice structures such as HCP.")
+parser.add_argument("--small-shear", dest="small_shear", action="store_true",
+                    help="Hex only: rescale the engineering shear of the target modes IN PLACE by "
+                         "--shear-scale (keeping names) and cap their window at --shear-cap, so a "
+                         "RELAXED-ion HCP run stays on the metastable branch. No mode is added or "
+                         "renamed; the pure-normal modes are untouched.")
+parser.add_argument("--shear-scale", dest="shear_scale", type=float, default=SMALL_SHEAR_SCALE,
+                    help="small-shear multiplier for the shear entries (default %.2f, i.e. shear "
+                         "= half the normal strain)." % SMALL_SHEAR_SCALE)
+parser.add_argument("--small-shear-modes", dest="small_shear_modes", default=None,
+                    help="Comma-separated modes to rescale (e.g. M13,M14,M15). Default: every "
+                         "shear-carrying mode. The rest keep their original shear.")
+parser.add_argument("--shear-cap", dest="shear_cap", type=float, default=SMALL_SHEAR_SHEAR_CAP,
+                    help="Max tensor shear at a rescaled mode's window edge (default %.3f). "
+                         "Keep it below the material's HCP->FCC critical shear." % SMALL_SHEAR_SHEAR_CAP)
 parser.add_argument("--srcdir", default="y_full_relax", help="Relaxed reference directory.")
 parser.add_argument("--outdir", default="y_hoec_energy", help="Output directory.")
 parser.add_argument("--force", action="store_true",
@@ -95,6 +121,14 @@ print("Max |xi|   :", args.emax)
 print("xi step    :", args.de)
 print("Per-mode   :", "equal-severity windows" if args.scale_window else "one shared window")
 print("Ions       :", "relaxed (ISIF=2)" if args.relax_ions else "static (NSW=0, IBRION=-1)")
+# "KPAR:NCORE"-style parsing has no place here; a plain comma split is all the mode list needs
+lsmall_shear_modes = ([s for s in args.small_shear_modes.split(",") if s]
+                      if args.small_shear_modes is not None else None)
+print("Small-shear:", ("on, shear ×%.2f cap %.3f, modes %s"
+                        % (args.shear_scale, args.shear_cap,
+                           ("all shear modes" if lsmall_shear_modes is None
+                            else lsmall_shear_modes)))
+                       if args.small_shear else "off")
 print("Source dir :", args.srcdir)
 print("Output dir :", args.outdir)
 
@@ -102,5 +136,7 @@ path_root = Path.cwd().resolve()
 print("🟢 ===== pei_vasp_run_hoec_energy in %s" % path_root)
 generate_hoec_dirs(path_root=path_root, symmetry=args.symmetry,
                    emax=args.emax, de=args.de, scale_window=args.scale_window,
-                   relax_ions=args.relax_ions,
+                   relax_ions=args.relax_ions, small_shear=args.small_shear,
+                   shear_scale=args.shear_scale, small_shear_modes=lsmall_shear_modes,
+                   shear_cap=args.shear_cap,
                    srcdir=args.srcdir, outdir=args.outdir, force=args.force)

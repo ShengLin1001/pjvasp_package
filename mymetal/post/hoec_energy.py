@@ -326,7 +326,8 @@ def read_fixed_soec(path_txt: str = None, model=None) -> np.ndarray:
     return np.array([dict_cij["C" + nm] for nm in lname], dtype=float)
 
 
-def fixed_p2_per_mode(model=None, soec: np.ndarray = None, lname: list = None) -> dict:
+def fixed_p2_per_mode(model=None, soec: np.ndarray = None, lname: list = None,
+                      dict_modes: dict = None) -> dict:
     """Each mode's xi^2 coefficient implied by an imported SOEC vector.
 
     ``P2(d) = P_coeffs(2, d) @ SOEC`` -- the exact xi^2 coefficient a mode must have if the
@@ -335,18 +336,20 @@ def fixed_p2_per_mode(model=None, soec: np.ndarray = None, lname: list = None) -
     Args:
         model (HOECModel): The reduced model for this symmetry.
         soec (np.ndarray): SOEC vector aligned with ``model.names(2)``.
-        lname (list): Mode names; defaults to every mode of this symmetry.
+        lname (list): Mode names; defaults to every mode in ``dict_modes``.
+        dict_modes (dict): Mode name -> direction; defaults to the global ``MODES`` table (only
+            correct for a run with standard, unscaled directions -- see :func:`post_hoec_energy`).
 
     Returns:
         dict: Mode name -> fixed P2 (GPa).
     """
-    sym = model.symmetry
-    lname = lname if lname is not None else list(MODES[sym].keys())
-    return {n: float(model.P_coeffs(2, MODES[sym][n]) @ soec) for n in lname}
+    dict_modes = dict_modes if dict_modes is not None else MODES[model.symmetry]
+    lname = lname if lname is not None else list(dict_modes.keys())
+    return {n: float(model.P_coeffs(2, dict_modes[n]) @ soec) for n in lname}
 
 
 def select_solve_modes(model=None, order: int = None, lname_avail: list = None,
-                       loverride: list = None) -> list:
+                       loverride: list = None, dict_modes: dict = None) -> list:
     """Pick an exactly-determined 'typical' mode subset that solves the order-n constants.
 
     Elastic constants must not be solved from every mode at once: modes fluctuate, and an
@@ -354,24 +357,27 @@ def select_solve_modes(model=None, order: int = None, lname_avail: list = None,
     minimal, well-conditioned subset (size = nconst) determines the constants instead, and the
     modes left out become an independent out-of-sample check (see :func:`solve_constants`).
 
-    Selection is deterministic and prefers the physically 'typical' modes: candidates are tried
-    in the ``MODES`` order (A, B, C ... / M01 ...), which runs from the simple uniaxial / shear
-    deformations to the multi-component ones, and a mode is kept only when it adds a new
-    independent direction to the growing system, until nconst independent rows are collected.
-    So the earliest, simplest spanning set is chosen -- exactly the modes that (per the plateau
-    audit) stay inside the Taylor regime -- and the heavier combined modes are left for the
-    out-of-sample check. Use ``loverride`` (``--solve-modes``) to name the set explicitly.
+    Selection is deterministic and normally prefers the physically 'typical' modes: candidates
+    are tried in the ``MODES`` order (A, B, C ... / M01 ...), which runs from the simple uniaxial
+    / shear deformations to the multi-component ones.  The default hexagonal order-4 solve first
+    tries every pure-normal mode, however, including M21--M23.  Those modes were added
+    specifically to close the pure-normal fourth-order block; leaving them until the end lets
+    shear-bearing M01--M20 rows reach full rank first and defeats their purpose.  A mode is kept
+    only when it adds a new independent direction to the growing system, until nconst independent
+    rows are collected. Use ``loverride`` (``--solve-modes``) to name the set explicitly.
 
     Args:
         model (HOECModel): The reduced model for this symmetry.
         order (int): 2, 3 or 4.
         lname_avail (list): Mode names that have usable data.
         loverride (list): Explicit solve-mode names; validated for full column rank.
+        dict_modes (dict): Mode name -> direction, and the candidate order; defaults to the global
+            ``MODES`` table (see :func:`post_hoec_energy` for why a run must pass its manifest).
 
     Returns:
         list: The chosen mode names (length nconst).
     """
-    sym = model.symmetry
+    dict_modes = dict_modes if dict_modes is not None else MODES[model.symmetry]
     nconst = len(model.names(order))
 
     def _rank(A):                          # rank with a relative threshold (robust to scale)
@@ -384,15 +390,21 @@ def select_solve_modes(model=None, order: int = None, lname_avail: list = None,
         lbad = [n for n in loverride if n not in lname_avail]
         if lbad:
             fail("--solve-modes lists modes without data: %s" % ", ".join(lbad))
-        if _rank(model.system(order, [MODES[sym][n] for n in loverride])) < nconst:
+        if _rank(model.system(order, [dict_modes[n] for n in loverride])) < nconst:
             fail("order %d: --solve-modes {%s} does not span the %d constants (rank-deficient)"
                  % (order, ",".join(loverride), nconst))
         return list(loverride)
 
-    lcand = [n for n in MODES[sym] if n in lname_avail]     # typical order, only available modes
+    # The added M21--M23 rows only isolate the normal FOEC block if the older pure-normal rows
+    # stay with them.  Prioritizing all of that block prevents shear rows such as M17/M18 from
+    # closing total rank first and relegating normal information to the check set.
+    lpriority = ([n for n, d_dir in dict_modes.items()
+                  if n in lname_avail and not any(d_dir[3:])]
+                 if model.symmetry == 'hex' and order == 4 else [])
+    lcand = lpriority + [n for n in dict_modes if n in lname_avail and n not in lpriority]
     lpick, rank_prev = [], 0
     for n in lcand:
-        rank_new = _rank(model.system(order, [MODES[sym][m] for m in lpick + [n]]))
+        rank_new = _rank(model.system(order, [dict_modes[m] for m in lpick + [n]]))
         if rank_new > rank_prev:           # this mode adds a new independent direction
             lpick.append(n)
             rank_prev = rank_new
@@ -405,7 +417,7 @@ def select_solve_modes(model=None, order: int = None, lname_avail: list = None,
 
 
 def solve_constants(model=None, dict_P: dict = None, orders: tuple = (2, 3, 4),
-                    dict_solve_modes: dict = None) -> dict:
+                    dict_solve_modes: dict = None, dict_modes: dict = None) -> dict:
     """Solve SOEC/TOEC/FOEC from a chosen 'typical' mode subset, with an out-of-sample check.
 
     For each order the constants are solved from ``dict_solve_modes[order]`` -- a minimal,
@@ -423,12 +435,15 @@ def solve_constants(model=None, dict_P: dict = None, orders: tuple = (2, 3, 4),
         orders (tuple): Orders to solve.
         dict_solve_modes (dict): Order -> list of mode names used for the solve. Defaults to
             every mode in ``dict_P`` for every order (original all-mode behaviour).
+        dict_modes (dict): Mode name -> direction; defaults to the global ``MODES`` table. A run
+            with rescaled (small-shear) directions must pass its manifest's directions here.
 
     Returns:
         dict: Order -> dict with ``names``, ``values``, ``rank``, ``nconst``, ``resid``
         (solve-set residual), ``resid_check`` (out-of-sample residual over the excluded modes),
         ``solve_modes`` and ``check_modes``.
     """
+    dict_modes = dict_modes if dict_modes is not None else MODES[model.symmetry]
     lall = list(dict_P.keys())
     key_of = {2: 'P2', 3: 'P3', 4: 'P4'}
     dict_result = {}
@@ -436,7 +451,7 @@ def solve_constants(model=None, dict_P: dict = None, orders: tuple = (2, 3, 4),
         key = key_of[order]
         lsolve = list((dict_solve_modes or {}).get(order, lall))
         lcheck = [n for n in lall if n not in lsolve]
-        A = model.system(order, [MODES[model.symmetry][n] for n in lsolve])
+        A = model.system(order, [dict_modes[n] for n in lsolve])
         b = np.array([dict_P[n][key] for n in lsolve])
         sol, res, rank, sv = np.linalg.lstsq(A, b, rcond=None)
         if rank < A.shape[1]:
@@ -467,7 +482,7 @@ def solve_constants(model=None, dict_P: dict = None, orders: tuple = (2, 3, 4),
         # out-of-sample check: predict P_n for every mode left out of the solve
         resid_check = 0.0
         if lcheck:
-            Ac = model.system(order, [MODES[model.symmetry][n] for n in lcheck])
+            Ac = model.system(order, [dict_modes[n] for n in lcheck])
             bc = np.array([dict_P[n][key] for n in lcheck])
             resid_check = float(np.sqrt(np.mean((Ac @ sol - bc) ** 2)))
         dict_result[order] = dict(names=model.names(order), values=sol,
@@ -480,7 +495,7 @@ def solve_constants(model=None, dict_P: dict = None, orders: tuple = (2, 3, 4),
 
 def check_fit_quality(model=None, dict_P: dict = None, dict_result: dict = None,
                       orders: tuple = (2, 3, 4), fixed_soec: bool = False,
-                      tol_p1: float = 0.5, tol_p2: float = 2.0) -> list:
+                      tol_p1: float = 0.5, tol_p2: float = 2.0, dict_modes: dict = None) -> list:
     """Check whether the fit window is small enough for the Taylor expansion to hold.
 
     The fit rms cannot answer this: a high-degree polynomial reproduces u(xi) to <0.1 GPa
@@ -507,10 +522,13 @@ def check_fit_quality(model=None, dict_P: dict = None, dict_result: dict = None,
         fixed_soec (bool): The SOEC was imported and held fixed (skips check 2).
         tol_p1 (float): Warn above this |P1| (GPa).
         tol_p2 (float): Warn above this P2 spread within a symmetry-equivalent group (GPa).
+        dict_modes (dict): Mode name -> direction; defaults to the global ``MODES`` table. Pass
+            the run manifest's directions so the P2-grouping uses the actual (scaled) directions.
 
     Returns:
         list: The report lines (also emitted as warnings).
     """
+    dict_modes = dict_modes if dict_modes is not None else MODES[model.symmetry]
     lline = ["\n--- fit-window diagnostics"]
 
     ### 1. P1 must vanish at a stress-free reference ----------------------------
@@ -530,7 +548,7 @@ def check_fit_quality(model=None, dict_P: dict = None, dict_result: dict = None,
     else:
         dict_group = {}
         for n in dict_P:
-            key = tuple(np.round(model.P_coeffs(2, MODES[model.symmetry][n]), 9))
+            key = tuple(np.round(model.P_coeffs(2, dict_modes[n]), 9))
             dict_group.setdefault(key, []).append(n)
         lworst = []
         for lgrp in dict_group.values():
@@ -570,7 +588,7 @@ def check_fit_quality(model=None, dict_P: dict = None, dict_result: dict = None,
 def scan_fit_windows(dict_data: dict = None, dict_manifest: dict = None, model=None,
                      lw: list = None, fitdeg: int = 4, minpts: int = None,
                      orders: tuple = (2, 3, 4), dict_p2fixed: dict = None,
-                     dict_solve_modes: dict = None) -> dict:
+                     dict_solve_modes: dict = None, dict_modes: dict = None) -> dict:
     """Refit and re-solve at a series of base windows -- the Wang-Li Fig. 6 scan.
 
     ``lw`` are base windows in reference-mode units; each mode is cut at ``w * scale``, the
@@ -590,6 +608,8 @@ def scan_fit_windows(dict_data: dict = None, dict_manifest: dict = None, model=N
         dict_p2fixed (dict): Mode name -> fixed P2. When given, every window is fitted with
             :func:`fit_P_fixed` (the ``--fix-soec`` scan); otherwise :func:`fit_P` is used.
         dict_solve_modes (dict): Order -> typical solve modes, passed to :func:`solve_constants`.
+        dict_modes (dict): Mode name -> direction, forwarded to :func:`solve_constants`; defaults
+            to the global ``MODES`` table.
 
     Returns:
         dict: Base window -> dict with ``P`` (per-mode coefficients) and ``result``
@@ -617,7 +637,8 @@ def scan_fit_windows(dict_data: dict = None, dict_manifest: dict = None, model=N
                 dict_block[n] = dict_block.get(n, 0) + 1
             continue
         dict_scan[w] = dict(P=dict_P,
-                            result=solve_constants(model, dict_P, orders, dict_solve_modes))
+                            result=solve_constants(model, dict_P, orders, dict_solve_modes,
+                                                   dict_modes=dict_modes))
 
     print("🔍 window scan: %d/%d windows usable (fitdeg=%d, minpts=%d)"
           % (len(dict_scan), len(lw), fitdeg, minpts))
@@ -893,7 +914,15 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
     dict_manifest = load_hoec_manifest(path_out)
     emax = dict_manifest["emax"]
     fitmax = fitmax if fitmax is not None else emax
-    model = get_model(dict_manifest["symmetry"])
+    sym = dict_manifest["symmetry"]
+    model = get_model(sym)
+    # Resolve each mode's direction from THIS run's manifest, never the global MODES table: a
+    # small-shear run rescaled the shear entries in place (same names), so the manifest direction
+    # is the only one that matches the energies. Fall back to MODES for manifests written before
+    # the per-mode ``direction`` field existed.
+    dict_modes = {n: (tuple(info["direction"]) if info.get("direction") is not None
+                      else MODES[sym].get(n))
+                  for n, info in dict_manifest["modes"].items()}
     maxorder = maxorder if maxorder is not None else min(fitdeg, 4)
     if not (2 <= maxorder <= min(fitdeg, 4)):
         fail("maxorder must be in [2, min(fitdeg,4)]=[2,%d], got %d" % (min(fitdeg, 4), maxorder))
@@ -908,7 +937,7 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
         if not Path(fix_soec_path).is_file():
             fail("--fix-soec file not found: %s" % fix_soec_path)
         soec_imported = read_fixed_soec(fix_soec_path, model)
-        dict_p2fixed = fixed_p2_per_mode(model, soec_imported)
+        dict_p2fixed = fixed_p2_per_mode(model, soec_imported, dict_modes=dict_modes)
         orders_data = tuple(range(3, maxorder + 1))          # 2 is imported, not solved
         print("🔒 SOEC imported & fixed from %s : %s"
               % (fix_soec_path, ", ".join("C%s=%.2f" % (nm, v)
@@ -935,7 +964,8 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
         if solve_all_modes:
             dict_solve_modes[order] = list(lname_avail)      # original all-mode least squares
         else:
-            dict_solve_modes[order] = select_solve_modes(model, order, lname_avail, solve_modes)
+            dict_solve_modes[order] = select_solve_modes(model, order, lname_avail, solve_modes,
+                                                         dict_modes=dict_modes)
         print("   order %d solve modes: {%s}"
               % (order, ",".join(dict_solve_modes[order])))
 
@@ -944,7 +974,7 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
     lw = [round(k * de, 10) for k in range(1, int(round(emax / de)) + 1)]
     dict_scan = scan_fit_windows(dict_data, dict_manifest, model, lw, fitdeg, minpts,
                                  orders=orders_data, dict_p2fixed=dict_p2fixed,
-                                 dict_solve_modes=dict_solve_modes)
+                                 dict_solve_modes=dict_solve_modes, dict_modes=dict_modes)
     if not dict_scan:
         fail("no fit window has enough points; lower --minpts, lower fitdeg, or use a finer de")
 
@@ -969,13 +999,14 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
             dict_P[n] = dict(P0=P0, P1=P1, P2=P2, P3=P3, P4=P4, rms=rms, coeffs=coeffs)
 
     ### main: solve, report, plot ----------------------------------------------
-    dict_result = solve_constants(model, dict_P, orders_data, dict_solve_modes)
+    dict_result = solve_constants(model, dict_P, orders_data, dict_solve_modes, dict_modes=dict_modes)
     if fix_soec:                                    # inject the imported, fixed 2nd-order block
         dict_result[2] = dict(names=model.names(2), values=soec_imported,
                               rank=len(soec_imported), nconst=len(soec_imported),
                               resid=0.0, resid_check=0.0, solve_modes=[], check_modes=[],
                               source='imported')
-    ldiag = check_fit_quality(model, dict_P, dict_result, orders_data, fixed_soec=bool(fix_soec))
+    ldiag = check_fit_quality(model, dict_P, dict_result, orders_data, fixed_soec=bool(fix_soec),
+                              dict_modes=dict_modes)
     element = read_element(path_out, dict_manifest)
     dict_ref = None
     if dict_manifest["symmetry"] == "cubic":
