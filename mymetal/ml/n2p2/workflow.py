@@ -592,29 +592,43 @@ class PeiN2p2:
 
     # ===== 1 核常驻控制器的 child 作业编排（提交即捕获作业号，阶段末统一阻塞等待）=====
     @staticmethod
-    def _sbatch_capture(script: str, cwd: Path) -> str:
+    def _sbatch_capture(script: str, cwd: Path, retries: int = 99, retry_interval: int = 10) -> str:
         """在 cwd 下 sbatch 单个脚本并返回作业号（--parsable，确定性捕获）。
+
+        提交偶发失败（slurmctld 繁忙 / 超时 / 通信抖动）时 returncode 非 0、拿不到作业号。
+        这类失败意味着作业根本没被创建，重试绝对安全（不会产生重复作业），故轮询重试而不是
+        立刻抛错中断整条流水线；重试用尽仍失败才抛 RuntimeError。与 _snapshot_jobids 的
+        squeue 重试同一套 99×10s 策略。
 
         Args:
             script: 提交脚本文件名（相对 cwd）。
             cwd: 提交目录（作业的工作目录即此目录）。
+            retries: 提交失败时的重试次数。
+            retry_interval: 每次重试前等待的秒数。
 
         Returns:
             Slurm 作业号字符串。
 
         Raises:
-            RuntimeError: sbatch 返回非零或未解析到作业号。
+            RuntimeError: 重试用尽仍无法提交，或提交成功却未解析到作业号。
         """
-        out = subprocess.run(['sbatch', '--parsable', str(script)], cwd=str(cwd),
-                             capture_output=True, text=True)
-        if out.returncode != 0:
-            raise RuntimeError(f"❌ sbatch failed in {cwd}: {out.stderr.strip() or out.stdout.strip()}")
-        # --parsable 输出 "<jobid>" 或 "<jobid>;<cluster>"
-        jobid = out.stdout.strip().split(';')[0]
-        if not jobid:
-            raise RuntimeError(f"❌ Could not parse jobid from sbatch in {cwd}: {out.stdout!r}")
-        print(f"  submitted job {jobid}: {cwd}/{script}")
-        return jobid
+        last_err = ''
+        for attempt in range(1, retries + 1):
+            out = subprocess.run(['sbatch', '--parsable', str(script)], cwd=str(cwd),
+                                 capture_output=True, text=True)
+            # returncode==0 才算提交成功：--parsable 无 --wait，提交成功即 0、stdout 是作业号。
+            if out.returncode == 0:
+                # --parsable 输出 "<jobid>" 或 "<jobid>;<cluster>"
+                jobid = out.stdout.strip().split(';')[0]
+                if not jobid:
+                    raise RuntimeError(f"❌ Could not parse jobid from sbatch in {cwd}: {out.stdout!r}")
+                print(f"  submitted job {jobid}: {cwd}/{script}")
+                return jobid
+            last_err = out.stderr.strip() or out.stdout.strip()
+            if attempt < retries:
+                print(f"  ⚠️  sbatch submit failed (attempt {attempt}/{retries}) in {cwd}: {last_err}; retry in {retry_interval}s")
+                time.sleep(retry_interval)
+        raise RuntimeError(f"❌ sbatch failed after {retries} attempts in {cwd}: {last_err}")
 
 
     @staticmethod
