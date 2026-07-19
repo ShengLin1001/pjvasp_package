@@ -1110,13 +1110,15 @@ class PeiN2p2:
 
         self.last_jobids = []
         if if_sbatch:
-            # pei_slurm_univ_submit 内部 sbatch 出 chunks 个 chunk 作业、不回传作业号，
-            # 故用提交前后的 squeue 差集捕获本次新提交的全部 child 作业号供控制器等待。
+            # pei_slurm_univ_submit 不回传作业号；each-subdir 的默认 shared 布局只提交
+            # 1 个编排父作业，per-chunk / single-alloc 则可能提交多个。用提交前后的
+            # squeue 差集捕获本次新增 Slurm 作业；只要 shared 父作业仍在等待，它就能
+            # 覆盖后续尚未提交的 chunk 子作业尾部。
             before = self._snapshot_jobids()
             os.system(f'pei_slurm_univ_submit.py {cli_args}')
             after = self._snapshot_jobids()
             self.last_jobids = sorted(after - before)
-            print(f"  post_properties submitted {len(self.last_jobids)} chunk job(s): {self.last_jobids}")
+            print(f"  post_properties observed {len(self.last_jobids)} new Slurm job(s): {self.last_jobids}")
         return dir_props
 
 

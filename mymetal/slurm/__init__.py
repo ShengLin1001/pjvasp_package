@@ -3,11 +3,12 @@ mymetal.slurm
 
 This subpackage provides a tool-agnostic engine for generating Slurm job
 scripts and submitting batch jobs across many subdirectories (e.g. VASP,
-n2p2, LAMMPS workflows). It is the Python twin of the standalone
-``pei_slurm_univ_submit`` shell tool and must stay output-compatible with it.
+n2p2, LAMMPS workflows). The standalone ``pei_slurm_univ_submit.py`` command
+is its thin argparse/preset CLI and must keep parameter names aligned with the
+library entry point.
 
 Modules:
     - submit: Builds the base/sequential Slurm scripts, splits job directories
-        into chunks, and drives submission in the parallel / each-subdir /
-        single-alloc modes via ``pei_slurm_univ_submit``.
+        into scheduling lanes, and drives submission in the parallel /
+        each-subdir / single-alloc modes via ``pei_slurm_univ_submit``.
 """

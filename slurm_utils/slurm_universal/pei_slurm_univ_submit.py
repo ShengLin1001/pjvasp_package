@@ -9,9 +9,6 @@ pei_slurm_univ_submit —— 通用 Slurm 作业脚本生成 / 提交 CLI。
     每个命令行选项名都与库函数的形参严格同名（dest 一致），因此 main 里可以直接
     `pei_slurm_univ_submit(**vars(args))` 透传，无需手抄一份参数映射、也不会漏改。
     所有结构性 / 枚举 / None / 正整数校验都下推给库函数，这里只搬运。
-
-TODO:
-    each-subdir的父脚本应该在一个任务里
 """
 
 import argparse
@@ -213,7 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent(
             """\
-            示例（对应库里的 test_args1/2/3 三种模式）：
+            示例（三种模式与 each-subdir 兼容布局）：
 
               # parallel：每个子目录一个独立作业，只提交不等待
               pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
@@ -226,6 +223,10 @@ def build_parser() -> argparse.ArgumentParser:
                   --mode each-subdir --dir_root ./y_dir --chunks 5 \\
                   --module_profile_type zcm6-vasp-0 --launcher_type srun \\
                   --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
+
+              # 恢复历史行为：each-subdir 的每个 chunk 各提交一个父作业
+              pei_slurm_univ_submit --preset zcm6-vasp-0 \\
+                  --chunk_parent_layout per-chunk --if_sbatch
 
               # single-alloc：单次分配内顺序跑各子目录
               pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
@@ -267,7 +268,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lsubdir", nargs="*", default=None,
                         help="子目录名列表（basename，需位于 dir_root 下）；留空则自动遍历 dir_root。")
     parser.add_argument("--chunks", type=int, default=1,
-                        help="把作业目录分成多少块（仅 each-subdir / single-alloc 生效）。默认 1。")
+                        help="把作业目录分成多少条并发调度流（仅 each-subdir / single-alloc 生效）。默认 1。")
+    parser.add_argument(
+        "--chunk_parent_layout",
+        default="auto",
+        help=("chunk 父作业布局：auto / shared / per-chunk。auto 在 each-subdir 下用一个父作业"
+              "并发管理所有 chunk，在 single-alloc 下保持每个 chunk 一个父作业。"),
+    )
 
     # —— script 相关参数 ——
     parser.add_argument("--module_profile_type",
@@ -351,4 +358,3 @@ if __name__ == "__main__":
 #SBATCH -N 1
 #SBATCH -n 1
 # /public3/home/scg6928/mysoft/env/pyenv/codex/bin/python "$@"
-

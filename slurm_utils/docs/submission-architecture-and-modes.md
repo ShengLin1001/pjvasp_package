@@ -9,45 +9,40 @@
 
 ## 一、整体心智模型
 
-整套东西就 **4 个"活"文件 + 3 个父作业文件**，分四层。所有批量提交最终都汇聚到**一个引擎**，
-引擎再把"每个目录具体做什么"交给底层 runner 或子作业。
+所有批量提交都从 `pei_slurm_univ_submit.py` 进入。CLI 只负责 preset 和 argparse；目录
+切分、脚本生成与提交拓扑由 `mymetal.slurm.submit` 实现。父脚本和每目录 base 脚本均为
+运行时自动生成文件，不再依赖历史固定父 wrapper。
 
 ```
-你敲的命令
-   │
-   ├─ sbatch 父.sh ───────────┐         （场景 1/3/4：需要 #SBATCH 资源声明）
-   └─ pei_slurm_univ_submit ──┤         （场景 2/5：登录节点直接调引擎）
-                              ▼
-                ┌─────────────────────────────┐
-                │  pei_slurm_univ_submit       │  引擎：遍历目录 + 按 --mode 派活 + 汇总
-                │  （source lib）              │
-                └──────────────┬──────────────┘
-            parallel │ each-subdir │ single-alloc │ --chunks
-                     ▼           ▼              ▼          ▼
-              sbatch 子作业  sbatch --wait   在分配内直接   sbatch K 个
-              （不等）       子作业（等）     调 runner      父作业
-                                 │              │
-                                 ▼              ▼
-                       pei_slurm_univ_vasp_544.sh   pei_vasp_univ_sbatch
-                       （-n128 子作业，内部又调 →）  （真正跑 VASP 的 runner）
+pei_slurm_univ_submit.py
+  └─ mymetal.slurm.submit.pei_slurm_univ_submit
+       ├─ parallel
+       │    └─ 每目录 sbatch sub_slurm_univ.sh
+       ├─ each-subdir --chunks K
+       │    └─ 1 个 shared parent (-n1)
+       │         ├─ chunk001 worker ── 逐个 sbatch --wait 子作业
+       │         ├─ ...
+       │         └─ chunk00K worker ── 逐个 sbatch --wait 子作业
+       └─ single-alloc --chunks K
+            └─ K 个计算资源父作业，各自在分配内顺序执行 cmd
 ```
 
-**地基层（删任何一个全崩）：**
+**源码层：**
 
 | 文件 | 角色 |
 |---|---|
-| `pei_slurm_univ_lib.sh` | 共享库，被 source。提供 `ps_ok/ps_warn/ps_fail`、preflight 回显、**目录解析** `ps_resolve_job_dirs`、脚本路径解析、失败汇总 |
-| `pei_slurm_univ_submit` | **通用引擎**。软件无关，只懂"遍历目录 → 派活 → 汇总" |
-| `pei_vasp_univ_load_env` | VASP 专属，被父 `.sh` source：加载 module、把 `vasp_std` 放进 PATH、逐文件 ✅ 检查输入 |
+| `slurm_utils/slurm_universal/pei_slurm_univ_submit.py` | 薄 CLI、preset、module profile 注册表 |
+| `mymetal/slurm/submit.py` | 软件无关的目录切分、脚本生成、父作业布局与提交逻辑 |
 | `pei_vasp_univ_sbatch` | **真正跑一个 VASP 计算的 runner**：判收敛、断点续算、清理、`srun`、给退出码 |
 
-**父作业层（必须是文件，因为 `#SBATCH` 指令只能写在文件里）：**
+**运行时生成层：**
 
 | 文件 | 资源 | 角色 |
 |---|---|---|
-| `pei_slurm_univ_vasp_544.sh` | `-n 128` | 单作业父脚本；也作 each-subdir 模式的子作业 |
-| `pei_slurm_univ_vasp_544_sequential_single_allocation.sh` | `-n 128` | single-alloc 父脚本 |
-| `pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh` | `-n 1` | each-subdir 父脚本（只调度，不跑 VASP） |
+| `<case>/sub_slurm_univ.sh` | 用户指定 | parallel / each-subdir 的单目录计算子作业 |
+| `slurm/sub_slurm_each_subdir_chunkNNN.sh` | `-n 1` | 可独立 sbatch 的 chunk worker，保留历史恢复接口 |
+| `slurm/sub_slurm_each_subdir_parent.sh` | `-n 1` | 并发启动并等待本次 K 个 worker 的 shared parent |
+| `slurm/sub_slurm_single_alloc_chunkNNN.sh` | 用户指定 | single-alloc 的每 chunk 计算资源父作业 |
 
 ---
 
@@ -89,124 +84,125 @@ pei_vasp_univ_sbatch <dir> [exe] [完成标记] [EDIFF过大标记]
 
 ## 三、引擎的三种 `--mode`：作用与流程
 
-引擎对每个目录做的"动作"由 `--mode` 决定。三种模式最大的区别有两个：
-① 每个目录干什么；② **引擎本身在哪运行**（登录节点 vs. 分配内）。
+引擎对每个目录做的动作由 `--mode` 决定。`nodes/ncores` 始终描述真正的计算资源；
+`each-subdir` 的 worker/shared parent 只负责编排，会另外固定成 `-N 1 -n 1`。
 
-| `--mode` | 每个目录的动作 | 引擎本身在哪跑 | 父作业占核 | 并发度 |
-|---|---|---|---|---|
-| `parallel` | `sbatch 子脚本`，不等 | **登录节点** | 子作业各自申请 128 | 全部目录同时排队 |
-| `each-subdir` | `sbatch --wait 子脚本`，完后复检 | **-n 1 父分配内** | 1 核父 + 逐个 128 子 | 一次一个子作业 |
-| `single-alloc` | 分配内直接调 runner | **-n 128 父分配内** | 父独占 128 | 一次一个，复用同一分配 |
+| `--mode` | 每个目录的动作 | 父作业占核 | `chunks=K` 时的布局 |
+|---|---|---|---|
+| `parallel` | `sbatch sub_slurm_univ.sh`，不等 | 子作业各自申请 | chunks 被忽略 |
+| `each-subdir` | worker 内 `sbatch --wait sub_slurm_univ.sh` | shared parent / worker 均 `-n 1` | 默认 1 父 + K worker |
+| `single-alloc` | chunk 父作业内直接执行 cmd | 每父作业持有用户指定资源 | K 个资源父作业 |
 
-引擎对每个目录共通的前置动作（来自 lib）：
-解析目录列表（`--root-dir` 全部 / `--lsubdir a,b,c` 子集）→ 逐目录进入 →
-可选 `--skip-if-file-contains` 预过滤 → 末尾打印 `submitted/converged/skipped/failed` 汇总 + 失败目录清单。
+引擎只做结构性检查和编排，不提前读取 OUTCAR 等业务文件。是否完成/跳过由 `cmd`
+或下游 runner 自己判定，沿用退出码 `0/10/其它` 契约。
 
 ### 3.1 `parallel` —— 全部铺开，互不等待
 
 ```
 你在登录节点跑引擎
   └─ 对每个 dir：
-        OUTCAR 已含完成标记？→ skip（连提交都省了）
-        否则 → sbatch pei_slurm_univ_vasp_544.sh   （丢出去就走，不等）
-  └─ 汇总 submitted/skipped/failed
+        生成 sub_slurm_univ.sh
+        sbatch sub_slurm_univ.sh   （丢出去就走，不等）
+  └─ 汇总提交成功/失败
        ↓（调度器各自排队、并行起跑）
-   每个子作业 = pei_slurm_univ_vasp_544.sh (-n128)
-        内部：preflight → load_env → 检查输入 → pei_vasp_univ_sbatch . vasp_std
+   每个子作业按 module_profile + launcher + cmd 运行
 ```
 
 - **作用**：吞吐最大化。N 个目录 = N 个独立作业同时排队。
-- **双重跳过**：引擎先 grep OUTCAR 预过滤；子作业里的 runner 还会再判一次（exit 10）。
-- **`failed` 含义**：这里只表示 `sbatch` 提交命令本身失败，不代表 VASP 算错（算得怎样要看各子作业日志）。
+- **完成判定下推**：引擎不 grep 业务文件；VASP 可让 `pei_vasp_univ_sbatch` 自行判断。
+- **`failed` 含义**：这里只表示 `sbatch` 提交命令本身失败，不代表计算内容失败。
 
 ### 3.2 `each-subdir` —— 顺序，每个目录一个独立子作业
 
 ```
-sbatch 父.sh (-n 1)  →  父分配内 exec 引擎
-  └─ 对每个 dir：
-        已含完成标记？→ skip
-        否则 → sbatch --wait pei_slurm_univ_vasp_544.sh   （阻塞，等子作业结束）
-               子作业结束后 → 复检 OUTCAR 标记 → converged / 未收敛
-  └─ 汇总 submitted/converged/skipped/failed
+sbatch shared parent (-n 1)
+  └─ 并发启动 K 个 chunk worker（普通后台 Bash 进程）
+       └─ 每个 worker 对本组 dir 顺序执行：
+            sbatch --wait sub_slurm_univ.sh
+            根据子作业退出码统计完成/未收敛
+  └─ wait 全部 worker，聚合成功/失败后 exit 0/1
 ```
 
-- **作用**：串行但隔离。父作业只调度（所以只要 1 核、不加载 VASP module），
-  每个计算是**独立子作业**（各自 128 核、各自日志）。
-- **两级日志**：父日志（进入哪个目录、提交、复检结果）在提交目录；
-  每个子作业日志在对应计算目录。
+- **作用**：每条 worker 内串行、worker 之间并发；每个计算仍是独立 Slurm 子作业。
+- **三级日志**：shared parent stdout 记录 worker 启动/聚合；每个 worker 写独立日志；
+  每个计算子作业日志仍在对应计算目录。
 - **特点**：一个目录算崩不影响别的（子作业相互独立），父进程继续往下走。
+- **历史恢复**：chunk worker 文件继续保留，可用 `sbatch chunkNNN.sh` 单独重跑。
 
 ### 3.3 `single-alloc` —— 顺序，复用同一个分配
 
 ```
-sbatch 父.sh (-n 128)  →  父分配内 exec 引擎
+sbatch sub_slurm_single_alloc_chunkNNN.sh（用户指定资源）
   └─ 对每个 dir：
-        在 dir 内直接 eval "pei_vasp_univ_sbatch . vasp_std ..."   （就在这 128 核里 srun）
+        在 dir 内直接执行 launcher + cmd
         看退出码：0 完成 / 10 跳过 / 其它 失败（计数后继续下一个）
   └─ 汇总 completed/skipped/failed
 ```
 
-- **作用**：**只排一次队**。一次拿到 128 核，在同一个分配里逐个 `srun` 跑完所有目录，
-  省去反复排队的等待。
+- **作用**：每个 chunk 只排一次队；一次拿到该 chunk 的完整资源，在同一个分配里逐个
+  `srun/mpirun` 跑完本组目录。
 - **跳过靠 runner**：真正运行时，已收敛的目录 runner 返回 10，引擎记 skip。
-  传入 `--dry-run` 时，引擎只打印每个目录将执行的 runner 命令，不会调用 runner 或 `srun`。
-- **引擎层遇错不中止**：`set +e; eval; set -e`，某目录未收敛只计入 `failed` 并继续下一个。
+  不传 `--if_sbatch` 时只生成脚本，不会调用 runner 或 launcher。
+- **引擎层遇错不中止**：某目录未收敛只计入 `failed` 并继续下一个。
 - **可选的外部中止**：若另外起一个 `pei_vasp_univ_monitor_error`（独立 `-n 1` 监控作业）
   在旁边轮询，它会扫描各作业 stdout，一旦发现致命错误关键词
   （`hermitian` / `sloshing` / `ERROR in subspace rotation PSSYEVX` / `highest band`）
-  就 `scancel` 该作业——对 single-alloc 而言那个 job 就是整个父作业，于是整批顺序流被中止、
-  无法继续剩余目录。这就是 README 中 "monitor 脚本会终止整个父作业" 的来源。
+  就 `scancel` 该作业——对 single-alloc 而言那个 job 就是一个 chunk 父作业，于是该组
+  剩余目录无法继续，其它 chunk 父作业不受影响。
 
 ---
 
 ## 四、`--chunks` —— 正交叠加，把核预算铺成 K 条并发流
 
-chunk 不是第四种模式，而是**叠在 sequential 模式上的一个开关**：
+chunk 不是第四种模式。`--chunks K` 只负责把排序后的目录用 base/rem 算法均分成
+K 条调度流；父作业数量由 `--chunk_parent_layout` 决定：
 
 ```
-你在登录节点跑：
-  pei_slurm_univ_submit --chunks K --chunk-parent <某个sequential父.sh> --root-dir ./y_dir
-  └─ 把一级子目录均分成 K 组（base/rem 算法，余数摊到前几组）
-  └─ 对每组 → sbatch <父.sh> "$root_dir" "$group"
-       ↓
-   K 个父作业并发起跑，每个父作业内部就是 §3.2 或 §3.3 的顺序流
+--chunk_parent_layout auto
+  ├─ each-subdir  → shared：1 个父作业 + K 个后台 worker
+  ├─ single-alloc → per-chunk：K 个计算资源父作业
+  └─ parallel     → chunks 被忽略
 ```
 
-- **意义**：单个 sequential 父作业是串行的；切 K 块 = K 个父作业并发，
-  等于把总核预算（K×128）铺成 **K 条并发的顺序流**，
-  在"全并行会瞬间占满队列"和"全串行太慢"之间取平衡。
-- **只对 sequential 有意义**：`parallel` 本来就最大并发，再 chunk 没用。
-- `--chunk-parent` 用哪个 `.sh`，就决定每条流内部是 `each-subdir` 还是 `single-alloc`。
+- **each-subdir/shared**：K 个 worker 同时各自执行 `sbatch --wait`，所以仍可有最多 K 个
+  计算子作业同时运行；调度器中只多出一个 `-n 1` 编排父作业。
+- **each-subdir/per-chunk**：显式兼容开关；K 个 chunk 文件各自 `sbatch`，恢复历史 K 父作业。
+- **single-alloc/per-chunk**：每条流需要真实计算资源，必须是 K 个独立父分配；不允许 shared。
+- **shared 汇总**：父脚本等待全部 worker，任一 worker 失败则父作业最终退出 1。worker
+  独立日志避免并发输出交错。
+- **残留文件安全**：shared parent 嵌入本次生成的 worker 绝对路径列表，不使用 glob，旧的
+  `chunk006.sh` 等文件即使保留也不会被误执行。
 
 ---
 
-## 五、五个场景的端到端调用链
+## 五、端到端调用链
 
 | # | 场景 | 你敲的命令 | 调用链 |
 |---|---|---|---|
-| 1 | 单目录 | `sbatch pei_slurm_univ_vasp_544.sh` | 父.sh → runner |
-| 2 | 并行全铺开 | `pei_slurm_univ_submit --mode parallel --root-dir ./y_dir --submit-script pei_slurm_univ_vasp_544.sh --skip-if-file-contains OUTCAR "reached required accuracy"` | 引擎 → N×(sbatch 父.sh → runner) |
-| 3 | 顺序·同一分配 | `sbatch pei_slurm_univ_vasp_544_sequential_single_allocation.sh [root] [lsubdir]` | 父.sh(-n128) → 引擎 single-alloc → 逐个 runner |
-| 4 | 顺序·每目录子作业 | `sbatch pei_slurm_univ_vasp_544_sequential_each_subdir_sbatch.sh [root] [lsubdir]` | 父.sh(-n1) → 引擎 each-subdir → 逐个 sbatch --wait 父.sh → runner |
-| 5 | 分块并发流 | `pei_slurm_univ_submit --chunks 4 --root-dir ./y_dir --chunk-parent <场景3或4的父.sh>` | 引擎 chunk → K×(sbatch 父.sh → 场景3/4 流程) |
+| 1 | 并行全铺开 | `pei_slurm_univ_submit.py --preset zcm6-vasp-0 --mode parallel --if_sbatch` | 引擎 → N×`sbatch sub_slurm_univ.sh` |
+| 2 | each-subdir shared | `pei_slurm_univ_submit.py --preset zcm6-vasp-0 --chunks 4 --if_sbatch` | 1 父 → 4 worker → 逐目录子作业 |
+| 3 | each-subdir 历史布局 | 上一命令加 `--chunk_parent_layout per-chunk` | 4 父 → 各自逐目录子作业 |
+| 4 | single-alloc | 上一命令改 `--mode single-alloc` | 4 个资源父作业 → 各自在分配内逐目录执行 |
 
 **通用旋钮：**
 
-- `--lsubdir "a,b,c"`：只跑这几个一级子目录（默认全部）。
-- `--dry-run`：只打印动作、不提交/不运行。除 `single-alloc` 外都支持。
-- `--skip-if-file-contains FILE MARKER`：当目录内 `FILE` 含 `MARKER` 时跳过该目录。
+- `--lsubdir a b c`：只跑这几个一级子目录（默认全部）。
+- 不传 `--if_sbatch`：只生成/覆盖脚本，不提交作业。
+- `--if_sbatch False`：与不传相同；裸写 `--if_sbatch` 等价于 True。
+- 业务完成检查放在 `--cmd` 或 runner 内，不在通用编排层提前读取结果文件。
 
 ---
 
 ## 六、软件无关性
 
-引擎 `pei_slurm_univ_submit` 不绑定 VASP——把 `--submit-script` 换成别的 Slurm 脚本即可用于
-n2p2 / LAMMPS 等任何 `sbatch` 工作流：
+引擎不绑定 VASP。切换 preset 或显式设置 module profile、launcher、cmd 即可服务
+n2p2 / LAMMPS 等工作流：
 
 ```bash
-pei_slurm_univ_submit --mode parallel --root-dir ./train_dirs \
-    --submit-script pei_slurm_univ_n2p2_train.sh --dry-run
+pei_slurm_univ_submit.py --preset zcm6-n2p2-train-0 --if_sbatch
+pei_slurm_univ_submit.py --preset zcm6-lammps-0 \
+    --cmd "lmp -in lmp.in" --if_sbatch
 ```
 
-VASP 相关的部分（`pei_vasp_univ_load_env` 环境加载、`pei_vasp_univ_sbatch` 计算 runner、
-三个 `pei_slurm_univ_vasp_544*.sh` 父脚本）是建在通用引擎之上的 VASP 适配层。
+VASP 相关的 `pei_vasp_univ_sbatch` 只是建在通用引擎之上的业务 runner；父脚本仍由
+同一个 `mymetal.slurm.submit` 动态生成。
