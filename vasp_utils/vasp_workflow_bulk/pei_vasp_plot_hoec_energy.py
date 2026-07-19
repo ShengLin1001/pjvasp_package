@@ -47,6 +47,14 @@
 #  Each fitted order uses a minimal, full-rank 'typical' mode subset, NOT every mode; the
 #  remaining modes are an independent out-of-sample cross-check (resid_check in the report).
 #  --solve-modes / --solve-all-modes tune that selection.
+#
+#  >>> hex HCP -- force the 19 primary-strain modes into the solve (pins the added M21-M23,
+#      which the auto/--solve-all-modes paths otherwise relegate to the check set, leaving the
+#      normal FOEC block C1113/C1333 underdetermined):
+#      pei_vasp_plot_hoec_energy.py --fitdeg 5 --maxorder 4 --skip-univ-post \
+#        --suffix _solvemodes_deg5_o4_free \
+#        --solve-modes M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,M14,M15,M16
+#      11 pure-normal (incl. M21-M23) + 8 shear; full rank 5/10/19 at order 2/3/4, order 4 exact.
 
 import argparse
 from pathlib import Path
@@ -72,6 +80,16 @@ strategy knobs (compare their y_post_hoec_conv*.pdf side by side):
   --fitdeg 3 --skip-univ-post --suffix _d3      # cubic fit, no P4 forced in
   --fix-soec ../y_cij_energy_small/y_post_cij_energy.txt --suffix _fix
                                                 # import C2, fit only the higher orders
+
+hex HCP -- force the 19 primary-strain 'typical' modes into the solve (--solve-modes):
+  pei_vasp_plot_hoec_energy.py --fitdeg 5 --maxorder 4 --skip-univ-post \\
+    --suffix _solvemodes_deg5_o4_free \\
+    --solve-modes M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,M14,M15,M16
+    primary-strain first: all 11 pure-normal modes (incl. the added M21/M22/M23) then 8 shear
+    modes; full rank 5/10/19 at order 2/3/4, order 4 exactly determined. Pins M21-M23 into the
+    fit -- the auto and --solve-all-modes paths otherwise leave them in the check set, so the
+    normal fourth-order block (C1113/C1333) stays underdetermined. The other 4 shear-heavy
+    modes {M06,M11,M17,M18} become the out-of-sample resid_check.
 
 notes:
   read the "fit-window diagnostics" block of y_post_hoec.txt when scanning --fitmax,
@@ -100,7 +118,11 @@ parser.add_argument("--suffix", default="",
                          "y_post_hoec_conv<suffix>.pdf) so comparison runs coexist.")
 parser.add_argument("--solve-modes", default=None,
                     help="Comma-separated 'typical' mode names for every fitted order, "
-                         "overriding the automatic full-rank selection (e.g. A,B,D,...).")
+                         "overriding the automatic full-rank selection (e.g. A,B,D,...). "
+                         "hex HCP primary-strain set (11 pure-normal incl. M21-M23, then 8 "
+                         "shear to close the order-4 rank): "
+                         "M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,"
+                         "M14,M15,M16 .")
 parser.add_argument("--solve-all-modes", action="store_true",
                     help="Revert to the original all-mode least squares for every order "
                          "(no typical subset, no out-of-sample check).")
