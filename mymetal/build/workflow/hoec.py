@@ -67,8 +67,8 @@ INCAR_TAGS = {
     'isif': '2',
     'isym': '1',
     'lcharg': 'F',
-    'algo': 'Normal',
-    'nbands': 'comment',
+    #'algo': 'Normal',
+    #'nbands': 'comment',
 }
 
 # Added on top of INCAR_TAGS only when relax_ions=False: one ionic step, no relaxation.
