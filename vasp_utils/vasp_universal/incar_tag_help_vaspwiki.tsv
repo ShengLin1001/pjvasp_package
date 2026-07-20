@@ -1,0 +1,615 @@
+# VASP Wiki INCAR tag help for pei_vasp_univ_find_and_change.
+# Source: https://vasp.at/wiki/Category:INCAR_tag
+# Retrieved: 2026-07-20; 609 INCAR keys/families from 612 category pages.
+# NPPSTR and PFLAT use their page titles because their Wiki TAGDEF templates currently name another tag.
+# NICS, POSNICS, NMRCAR.magres, and Profiling are category pages but not INCAR keys.
+# Format: TAG<TAB>concise description; common choices and/or defaults.
+ADDGRID	ADDGRID determines whether an additional support grid is used for the evaluation of the augmentation...; T=on, F=off; default=FALSE
+AEXX	AEXX specifies the fraction of exact exchange in a Hartree-Fock-type/hybrid-functional calculation; defaults=0.25/1/0
+AGGAC	AGGAC is a parameter that multiplies the gradient correction in the GGA correlation functional; defaults=1.0/0.0
+AGGAX	AGGAX is a parameter that multiplies the gradient correction in the GGA exchange functional; defaults=1.0-AEXX/1.0
+ALDAC	ALDAC is a parameter that multiplies the LDA correlation functional or the LDA part of the GGA...; defaults=1.0/0.0
+ALDAX	ALDAX is a parameter that multiplies the LDA exchange functional or the LDA part of the GGA exchange...; defaults=1.0-AEXX/1.0
+ALGO	Selects the electronic-minimization algorithm and/or the many-body method; default=Normal
+ALPHA_VDW	Specify in vdW-DF3-opt1/vdW-DF3-opt2; defaults=0.94950/0.28248
+AMGGAC	AMGGAC is a parameter that multiplies the meta-GGA correlation functional (available as of VASP.6.4.0); defaults=1.0/0.0
+AMGGAX	AMGGAX is a parameter that multiplies the meta-GGA exchange functional (available as of VASP.6.4.0); defaults=1.0-AEXX/1.0
+AMIN	AMIN specifies the minimal mixing parameter in Kerker's initial approximation to the charge-dielectric...; default=min(0.1,AMIX,AMIX_MAG)
+AMIX	AMIX specifies the linear mixing parameter; defaults=0.8/0.4
+AMIX_MAG	Linear mixing parameter for the magnetization density; default=1.6
+ANDERSEN_PROB	ANDERSEN_PROB sets the collision probability for the Anderson thermostat (in case VASP was compiled...; options=0[real]1; default=0
+ANTIRES	ANTIRES determines whether the Tamm-Dancoff approximation is used or not; options=0/1/2; default=0
+APACO	APACO sets the maximum distance in the evaluation of the pair-correlation function (in A); default=10
+BANDGAP	BANDGAP determines the verbosity for reporting the bandgap to the OUTCAR file; options=COMPACT/WEIGHT/KPOINT; default=COMPACT
+BEXT	Specifies an external magnetic field in eV; format=[real] or three [real] values; defaults=0.0/3*0.0/N/A
+BEXX	BEXX specifies the fraction of short-range exact exchange in range-separated hybrid-functionals...; default=1
+BMIX	BMIX sets the cutoff wave vector for Kerker mixing scheme (IMIX=1 and/or INIMIX=1); default=1.0
+BMIX_MAG	Sets the cutoff wave vector for Kerker mixing scheme (IMIX=1 and/or INIMIX=1) for the magnetization...; default=1.0
+BPARAM	The tag BPARAM specifies the value of the parameter b in the kernel of the nonlocal rVV10 correlation...; default=6.3
+BSEELECTRON	BSEELECTRON sets the coordinates of the fixed electron of the exciton wavefunction
+BSEHOLE	BSEHOLE sets the coordinates of the fixed hole of the exciton wavefunction
+BSEPREC	Determines the precision of the time-evolution algorithm, where it controls the timestep and the...; options=Low/Medium/High/Accurate; default=Medium
+CHECKPOINT_FD	Enables a finite differences calculation to be restarted or split up into displacements; options=CONTINUE/RESET/NONE/SINGLE; default=RESET
+CH_AMPLIFICATION	This tag is used to scale (amplify) the calculated dielectric function within the supercell core-hole...; default=1.0
+CH_LSPEC	This flag controls whether the dielecectric function using the supercell core-hole method is...; T=on, F=off; default=FALSE
+CH_NEDOS	This tag specifies the number of frequency (energy) grid points on the x-axis in the calculation of...; default=1000
+CH_SIGMA	This tag specifies the width of the Gaussian broadening in eV of the imaginary dielectric function...; default=0.3
+CLL	CLL selects the angular quantum number l of the excited core electron when using ICORELEVEL>0; default=0
+CLN	CLN selects the main quantum number n of the excited core electron when using ICORELEVEL>0; default=1
+CLNT	CLNT selects the type of the excited atoms in XAS calculations with ICORELEVEL>0; default=1
+CLZ	CLZ selects a fractional or the full electron charge for the core hole in the core-excitation...; default=0
+CMBJ	Defines the c parameter in the MBJ potential; default=calculated self-consistently
+CMBJA	Sets the parameter in the MBJ and LMBJ potentials; defaults=0.012/0.488
+CMBJB	Sets the parameter in the MBJ and LMBJ potentials; defaults=1.023/0.5
+CMBJE	Sets the e parameter in the MBJ and local MBJ potentials; default=0.5
+CPARAM	The tag CPARAM allows to specify the value of the parameter C in the kernel of the nonlocal rVV10...; default=0.0093
+CSHIFT	CSHIFT sets a Lorentzian broadening in eV of the dielectric tensor via the complex shift in the...; defaults=0.1/OMEGAMAX*1.3 / max(NOMEGA,40)
+CUTOFF_MU	CUTOFF_MU specifies the energy cutoff in eV for the function specified by CUTOFF_MU; format=one or two real values; default=0.8 * Fermi level of a system with NUM_WANN...
+CUTOFF_SIGMA	CUTOFF_SIGMA specifies the broadening in eV for the cutoff function specified by CUTOFF_TYPE; format=one or two real values; default=0.1
+CUTOFF_TYPE	CUTOFF_TYPE chooses the type of cutoff function to be used before performing the singular-value...; options=erfc/gaussian/fermi/num_wann; default=erfc
+DEG_THRESHOLD	DEG_THRESHOLD specifies whether two eigenvalues should be treated as degenerate during clustering of...; default=$2 10^{-3}$
+DEPER	DEPER specifies a relative stopping criterion for the optimization of an eigenvalue; default=0.3
+DFTD4_MODEL	DFTD4_MODEL defines the model in the DFT-D4 method; default=D4
+DFTD4_XC	DFTD4_XC sets the exchange-correlation functional which determines the van der Waals parameters used...; default=The functional set by the GGA, METAGGA or XC tag
+DIMER_DIST	The flag DIMER_DIST defines the step size for the numerical differentiation (in ) for the Improved...; default=0.01
+DIPOL	Specifies the center of the cell in direct lattice coordinates with respect to which the total dipole-...
+DQ	Step size for the finite difference k-space derivative in the linear response calculation of chemical...; default=0.001
+EBREAK	EBREAK specifies an absolute stopping criterion for the optimization of an eigenvalue; default=EDIFF/NBANDS/4
+EDIFF	EDIFF specifies the global break condition for the electronic SC-loop. EDIFF is specified in units of eV; default=10^{-4}
+EDIFFG	EDIFFG defines the break condition for the ionic relaxation loop; default=EDIFF10
+EFERMI	Defines how the Fermi energy is calculated in VASP. It is recommended to use EFERMI = MIDGAP; options=MIDGAP/LEGACY/[real]; default=LEGACY
+EFERMI_NEDOS	Number of GaussLegendre integration points used to evaluate the FermiDirac distribution and determine...; default=21
+EFIELD	EFIELD controls the magnitude of the applied electric force field
+EFIELD_PEAD	EFIELD_PEAD specifies the homogeneous electric force field in the electric enthalpy functional used to...; defaults=3*0.01/3*0.0
+EFOR	EFOR sets external forces in eV/A on each atom in the cartesian x-, y-, and z-directions. The order of...; default=3 * NIONS * 0.0
+EINT	EINT sets the energy interval for bands contributing to the calculation of the partial charge density...; default=not set
+ELPH_DECOMPOSE	Chooses which contributions to include in the computation of the electron-phonon matrix elements; default=VDPR
+ELPH_DRIVER	Chooses which driver to use for electron-phonon calculations; options=el/mels; default=el
+ELPH_FERMI_NEDOS	Number of GaussLegendre integration points used to evaluate the FermiDirac distribution and determine...; default=501
+ELPH_IGNORE_IMAG_PHONONS	If enabled, VASP ignores imaginary phonon frequencies during electron-phonon calculations; T=on, F=off; default=FALSE
+ELPH_ISMEAR	Chooses the smearing method to determine the fermi level and chemical potential before an electron-...; options=-15/-14/-5/-4/-1/0/[integer]>0; default=0
+ELPH_KSPACING	The tag ELPH_KSPACING determines the k point mesh if the KPOINTS_ELPH file is not present; default=0.5
+ELPH_LR	Controls the treatment of the long-range part of the electron-phonon potential; default=1
+ELPH_MODE	Meta tag that selects reasonable defaults for electron-phonon calculations
+ELPH_NBANDS	Number of bands to compute on the dense k point grid for the electron-phonon driver; default=NBANDS
+ELPH_NBANDS_SUM	Number of intermediate states to include in the computation of the phonon-induced electron self-energy; default=ELPH_NBANDS
+ELPH_POT_FFT_MESH	Specifies the FFT mesh for mapping the electron-phonon potential to the primitive cell
+ELPH_POT_GENERATE	Calculates the electron-phonon potential from finite atomic displacements; T=on, F=off; default=False
+ELPH_POT_LATTICE	Allows specifying an alternative primitive cell for the mapping of the electron-phonon potential
+ELPH_PREPARE	Writes the potential, the force-constants and other information related to electron-phonon...; T=on, F=off; default=FALSE
+ELPH_RUN	Select whether to run and electron-phonon calculation; T=on, F=off; default=false
+ELPH_SCATTERING_APPROX	Select which type of approximation is used to compute the electron scattering lifetimes due to...; default=SERTA MRTA_LAMBDA
+ELPH_SELFEN_BAND_START	Compute the electron self-energy due to electron-phonon coupling only for bands with indices starting...; default=1
+ELPH_SELFEN_BAND_START_KP	Index of the first k' band included in the electron self-energy sum; -1 uses all bands, and -2...; default=-1
+ELPH_SELFEN_BAND_STOP	Compute the electron self-energy due to electron-phonon coupling only for bands with indices until...; default=ELPH_NBANDS
+ELPH_SELFEN_BAND_STOP_KP	Index of the last k' band included in the electron self-energy sum; -1 uses all bands up to...; default=-1
+ELPH_SELFEN_BROAD_TOL	Defines the fraction of the total weight of the broadening function (derived from the imaginary part...; default=1e-6
+ELPH_SELFEN_CARRIER_DEN	List of additional carrier densities in units of cm^{-3} at which to compute the phonon-mediated...; default=0.0
+ELPH_SELFEN_CARRIER_DEN_RANGE	List of carrier density ranges in logarithmic scale (in cm^{-3}) at which to compute the phonon-...
+ELPH_SELFEN_CARRIER_PER_CELL	List of additional number of carriers for which to compute the phonon-mediated electron self-energy...; default=0.0
+ELPH_SELFEN_DELTA	Complex imaginary shift to use when computing the self-energy due to electron-phonon coupling; default=0.01
+ELPH_SELFEN_DW	Controls whether the Debye-Waller contribution is included in the calculation of the phonon-induced...; T=on, F=off; default=FALSE
+ELPH_SELFEN_ENERGY_WINDOW	Specifies the energy window (in eV) around the band edges within which the electron-phonon self-energy...; default=0.0 0.0
+ELPH_SELFEN_FAN	Controls whether the Fan-Migdal contribution is included in the calculation of the phonon-induced...; T=on, F=off; default=FALSE
+ELPH_SELFEN_GAPS	Find the direct and indirect gaps and the valence and conduction Kohn-Sham states that form it and...; T=on, F=off; default=FALSE
+ELPH_SELFEN_G_SKIP	Skip the computation of the electron-phonon matrix elements and instead assume their numerical value is 1; T=on, F=off; default=FALSE
+ELPH_SELFEN_IKPT	Compute the electron self-energy due to electron-phonon for a list of k-points specified by their...; default=All k-points
+ELPH_SELFEN_IMAG_SKIP	Use the tetrahedron method to skip the computation of electron-phonon matrix elements for which the...; T=on, F=off; default=FALSE
+ELPH_SELFEN_KPTS	Computes the electron self-energy due to electron-phonon for a list of k-points specified by their...; default=All k-points
+ELPH_SELFEN_MU	List of chemical potentials at which to compute the phonon-mediated electron self-energy and transport...; default=0.0
+ELPH_SELFEN_MU_RANGE	List of the range of chemical potentials (in eV) at which to compute the phonon-mediated electron...
+ELPH_SELFEN_NW	Number of energies to use when computing the phonon-induced electron self-energy; default=1
+ELPH_SELFEN_STATIC	Activates the adiabatic approximation for the phonon-induced electron self-energy; T=on, F=off; default=FALSE
+ELPH_SELFEN_TEMPS	List of temperatures for which to compute the electron self-energy due to electron-phonon coupling; default=0 100 200 300 400 500
+ELPH_SELFEN_TEMPS_RANGE	The range of temperatures (in K) at which to compute the phonon-mediated electron self-energy and...
+ELPH_SELFEN_WRANGE	Together with ELPH_SELFEN_NW specifies the energy window in which to evaluate the phonon-induced...; default=0
+ELPH_TRANSPORT	Activates transport calculation involving electron-phonon coupling; T=on, F=off; default=FALSE
+ELPH_TRANSPORT_DFERMI_TOL	Choose the fraction of the integral weight of the derivative of the FermiDirac distribution that is...; default=1e-6
+ELPH_TRANSPORT_DRIVER	Choose method to compute the Onsager coefficients, which are then used to compute the transport...; default=2
+ELPH_TRANSPORT_EMAX	Upper bound of the energy window in which states are considered for transport calculations
+ELPH_TRANSPORT_EMAX_PLOT	Specifies the maximum energy (in eV) to be considered when computing the transport distribution...; default=(_{n{k
+ELPH_TRANSPORT_EMIN	Lower bound of the energy window in which states are considered for transport calculations
+ELPH_TRANSPORT_EMIN_PLOT	Specifies the minimum energy (in eV) to be considered when computing the transport distribution...; default=(_{n{k
+ELPH_TRANSPORT_NEDOS_PLOT	Specifies the number of energy points used to sample the transport distribution function for plotting; default=-1
+ELPH_USEBLAS	Toggles the use of BLAS routines for computing electron-phonon matrix elements; T=on, F=off; default=TRUE
+ELPH_USERECIP	Computes electron-phonon matrix elements in reciprocal space instead of real space; T=on, F=off; default=FALSE
+ELPH_WF_CACHE_MB	Maximum memory (in MB) allocated for caching wavefunctions during electron-phonon matrix element...; default=1000
+ELPH_WF_CACHE_PREFILL	Pre-fills the wavefunction cache before the main electron-phonon loop begins; T=on, F=off; default=TRUE
+ELPH_WF_COMM_OPT	Selects the MPI communication pattern used to exchange orbitals between different MPI ranks; default=0
+ELPH_WF_REDISTRIBUTE	After computing the electronic states, they are redistributed among the CPUs such that the workload to...; T=on, F=off; default=FALSE
+ELPH_WRITE_HDF5VEL	If set, writes the electron group velocities to the vaspout.h5 file; T=on, F=off; default=FALSE
+ELPH_WRITE_TEXTVEL	If set, writes the electron group velocities to a velocity human-readable text file; T=on, F=off; default=FALSE
+EMAX	EMAX specifies the upper boundary of the energy range for the evaluation of the electronic density of...; default=highest KS eigenvalue +
+EMIN	EMIN specifies the lower boundary of the energy range for the evaluation of the electronic density of...; default=lowest KS eigenvalue -
+ENAUG	Specifies the cutoff energy of the plane-wave representation of the augmentation charges in eV; default=largest EAUG read from the POTCAR file
+ENCUT	ENCUT specifies the energy cutoff for the plane-wave basis set in eV; default=largest ENMAX in the POTCAR file
+ENCUTFOCK	The ENCUTFOCK tag sets the energy cutoff that determines the FFT grids used by the Hartree-Fock routines
+ENCUTGW	The tag ENCUTGW sets the energy cutoff for the response function. It controls the basis set for the...; default=2/3 ENCUT
+ENCUTGWSOFT	The flag ENCUTGWSOFT sets the energy cutoff for the response function, such that it allows to truncate...; defaults=ENCUTGW 0.8/ENCUTGW
+ENCUTLR	Reciprocal space cutoff for the treatment of the long-range contribution; default=50 eV
+ENINI	ENINI controls the cutoff during the initial (steepest descent) phase for IALGO=48; default=ENCUT
+EPSILON	EPSILON sets the dielectric constant of the medium; default=1
+ESTOP	ESTOP specifies the stop condition for stochastic MP2; default=0.05
+EVENONLY	EVENONLY=.TRUE. selects a subset of k-points for the representation of the Fock exchange potential,...; T=on, F=off; default=FALSE
+EVENONLYGW	EVENONLYGW allows to restrict the k-points in the evaluation of response functions (in GW...; T=on, F=off; default=FALSE
+EWALD_CUTOFF	EWALD_CUTOFF sets the unified cutoff radius for the Ewald summation of the electrostatic interaction....; default=4.0
+FBIAS_A	Defines the step height for the bias potential in eV
+FBIAS_D	Sets the slope of the bias potential
+FBIAS_R0	Defines the half-step position for the bias potential
+FERDO	FERDO sets the occupancies of the states in the down-spin channel for ISMEAR=-2 and ISPIN=2
+FERWE	FERWE sets the occupancies of the states for ISMEAR=-2
+FINDIFF	Defines whether a forward (FINDIFF=1) or a central (FINDIFF=2) difference formula for the numerical...; default=1
+FMP_ACTIVE	Select which atom types in the POSCAR-file participate in swapping within the Muller-Plathe method; options=logical (aray); default=NIONS * False
+FMP_DIRECTION	Index of the lattice vector {a}_i along which the temperature gradient is created in the (Muller-...; options=1/2/3; default=3
+FMP_PERIOD	Number of time steps between two swapping events in the Muller-Plathe method; default=10
+FMP_SNUMBER	Number of slabs perpendicular to the temperature gradient in the Muller-Plathe method; default=10
+FMP_SWAPNUM	Number of pairs that are exchanged in a single swapping event in the Muller-Plathe method; default=1
+FOCKCORR	The tag FOCKCORR determines how the Coulomb convergence corrections are applied; options=1/2; defaults=2/1
+GAMMA_VDW	Specify in vdW-DF3-opt1/vdW-DF3-opt2; defaults=1.12/1.29
+GGA	Selects a LDA or GGA exchange-correlation functional; default=The functional specified by LEXCH in the POTCAR...
+GGA_COMPAT	If set to GGA_COMPAT = .FALSE., this tag restores the full lattice symmetry for gradient-corrected...; T=on, F=off; default=TRUE
+HFALPHA	HFALPHA sets the decay constant used in the method of Massida, Posternak, and Baldereschi, which is...; default=6/sqrt(ENMAX)/(2)
+HFLMAX	To be compatible w.r.t. old releases, VASP also reads the flag HFLMAX to the same effect as LMAXFOCK; default=4
+HFRCUT	HFRCUT specifies how the Coulomb kernel is approximated at G=0 when the Fock energy and the exchange...; default=0
+HFSCREEN	HFSCREEN (in A-1) specifies the range-separation parameter in range-separated hybrid functionals; default=0 (none)
+HILLS_BIN	HILLS_BIN sets the number of steps after which the bias potential is updated in a metadynamics run (in...; default=NSW
+HILLS_H	HILLS_H specifies the height of the Gaussian hill (in eV) used in metadynamics (in case VASP was...; default=10^{-3}
+HILLS_W	HILLS_W specifies the width of the Gaussian hill (in units of the corresponding collective variable)...; default=10^{-3}
+HITOLER	HITOLER specifies the convergence parameter for the iterative Hirschfeld partitioning in the...; default=510^{-5}
+IALGO	IALGO selects the algorithm to optimize the orbitals; options=-1/2-4/5-8/15-18/28/38/44-48/53-58; defaults=8/38
+IALL_IN_ONE	IALL_IN_ONE>0 enables the all-in-one mode for many-body perturbation theory calculations, i.e.,...; defaults=1/-1
+IBAND	IBAND sets a list of bands that contribute to calculating the partial charge density; default=not set
+IBRION	Determines how the crystal structure changes during the calculation; options=-1/0/1/2/3/5/6/7/...; defaults=-1/0
+IBSE	IBSE can be used to select the algorithm for solving the Bethe-Salpeter or Casida equation; options=0/1/2/3; default=2
+ICHARG	ICHARG determines how VASP constructs the initial charge density; options=0/1/2/4/5; defaults=2/0
+ICHIBARE	Determines the order of the finite difference stencil used to calculate the magnetic susceptibility; options=1/2/3; default=1
+ICORELEVEL	ICORELEVEL controls whether the core energies are explicitly calculated or not and how they are...; options=0/1/2; default=0
+IDIPOL	IDIPOL switches on monopole/dipole and quadrupole corrections to the total energy in a specific...; options=1/2/3/4
+IEPSILON	IEPSILON determines along which Cartesian direction the E field is applied; options=1/2/3/4
+IFC_ASR	If positive, enforces the acoustic sum rule on the interatomic force constants during an electron-...; default=1
+IFC_LR	Controls the treatment of the long-range part of the interatomic force constants during electron-...; default=1
+IGPAR	Specifies the reciprocal-space integration direction used with LCALCPOL; options=1/2/3
+IMAGES	Defines the number of VASP calculations in separate directories, (e.g., 01, 02, 03, etc.) for nudged...; default=0
+IMAGE_1	Group INCAR settings for calculations using IMAGES; options=block construct; default=None
+IMIX	IMIX specifies the type of density mixing; options=0/1/2/4; default=4
+INCREM	INCREM controls the transformation velocity in the slow-growth approach (in case VASP was compiled...; default=0
+INIMIX	Determines the functional form of the initial mixing matrix in the Broyden scheme (IMIX=4); options=0/1/2; default=1
+INIWAV	Specifies how to set up the initial orbitals in case ISTART=0; options=0/1; default=1
+INMRPRINT	Determines the verbosity of the NMR output; options=-1/0/1; default=0
+INTERACTIVE	INTERACTIVE enables an interactive mode in which a series of structures is piped into VASP via stdin; T=on, F=off; default=FALSE
+IPEAD	IPEAD specifies the order of the finite difference stencil used to compute the derivative of the cell-...; options=1/2/3/4; default=4
+IRC_DELTA0	Defines the tolerance factor _0 in A used in the IRC calculations; default=0.0015
+IRC_DIRECTION	Defines the direction of the initial displacement of the initial transition-state structure in IRC...; options=-1/1; default=1
+IRC_MAXSTEP	Upper limit for the step size (in fs); default=3.000
+IRC_MINSTEP	Lower limit for the step size (in fs); default=0.0250
+IRC_STOP	Sets the number of steps in which the energy must monotonously increase before an IRC calculation...; default=20
+IRC_VNORM0	The constant velocity vector (in A/fs) in an IRC calculation; default=0.002
+ISEARCH	Controls the line-search algorithm used during the direct minimization of the electronic structure...; options=0/1; default=0
+ISIF	Determines if the stress tensor is calculated and which ionic degrees of freedom are varied; options=0/1/2/3/4/5/6/7/...; defaults=0/2
+ISMEAR	ISMEAR determines how the partial occupancies fnk are set for each orbital. SIGMA determines the width...; options=-15/-14/-5/-4/-3/-2/-1/0/...; default=1
+ISPIN	ISPIN specifies whether a calculation is performed with or without spin polarization; options=1/2; default=1
+ISTART	ISTART determines whether or not to read the WAVECAR file; options=0/1/2/3; defaults=1/0
+ISYM	ISYM determines the way VASP treats symmetry; options=-1/0/1/2/3; defaults=1/3/2
+IVDW	IVDW specifies a vdW dispersion term of the atom-pairwise or many-body type; default=0
+IVDW_NL	IVDW_NL allows to select the kernel of the nonlocal van der Waals part of a functional (available as...; defaults=1/2
+IWAVPR	IWAVPR determines how orbitals and/or charge densities are extrapolated from one ionic configuration...; options=0/1/2/3/10/11/12/13; defaults=12/0
+I_CONSTRAINED_M	I_CONSTRAINED_M switches on the constrained local moments approach; options=1/2/4; default=none
+KBLOCK	After KBLOCK * NBLOCK ionic steps the averaged pair-correlation function and DOS are written to the...; default=NSW
+KERNEL_TRUNCATION/FACTOR	Determines the spatial extent of the truncated Coulomb interaction relative to the computational cell...; defaults=sqrt(3)/1
+KERNEL_TRUNCATION/IDIMENSIONALITY	Specifies the boundary condition used to compute the hartree and ionic potential; options=0/2/3; default=3
+KERNEL_TRUNCATION/IPAD	KERNEL_TRUNCATION/IPAD controls the padding strategy used for the Coulomb kernel truncation in...; defaults=3/2
+KERNEL_TRUNCATION/ISURFACE	Specifies the non-periodic dimension when performing calculations with the Coulomb-kernel-truncation...; options=1/2/3
+KERNEL_TRUNCATION/LCOARSEN	Coarsen the charge density before padding to speed up the computation of the local potential in the...; T=on, F=off; default=False
+KERNEL_TRUNCATION/LTRUNCATE	Truncates the Coulomb kernel to remove electrostatic interactions along non-periodic dimensions; T=on, F=off; default=False
+KGAMMA	Whether the automatically generated k-point mesh is centered at the point; T=on, F=off; default=TRUE
+KPAR	KPAR determines the number of k-points that are to be treated in parallel (available as of...; default=1
+KPOINTS_OPT_MODE	Selects which diagonalization algorithm to use for the optional k-points driver; options=0/1/2; default=1
+KPOINTS_OPT_NKBATCH	KPOINTS_OPT_NKBATCH determines the size of the batch of k-points for the KPOINTS_OPT driver; options=Number of k-points in the irreducible Brillouin zone of the...
+KPOINT_BSE	KPOINT_BSE specifies the k-point index at which VASP calculates the dielectric matrix; format=one index or three integer indices
+KPUSE	KPUSE sets a list of k points that contribute to calculating the partial charge density; default=not set
+KSPACING	Spacing between k points in automatically generated mesh if the KPOINTS file is not present; default=0.5
+KSPACING_OPT	Spacing between k points in the automatically generated mesh for the KPOINTS_OPT driver if the...; default=0.5
+K_MULTIPLY	K_MULTIPLY sets the per-direction k-point grid multiplier for downsampling from a denser WAVECAR; default=-1 -1 -1
+LADDER	Controls whether the ladder diagrams are included in the BSE calculation. Note that the default for...; T=on, F=off; default=NOT. LRPA
+LAECHG	When LAECHG=.TRUE. the all-electron charge density will be reconstructed explicitly and written to files; T=on, F=off; default=FALSE
+LALL_IN_ONE	LALL_IN_ONE=.TRUE. enables the all-in-one mode for many-body perturbation theory calculations, i.e.,...; T=on, F=off; defaults=FALSE/TRUE
+LAMBDA	LAMBDA sets the weight with which the penalty terms of the constrained local moment approach enter...; default=0
+LANCZOSTHR	LANCZOSTHR is used by the BSE Lanczos algorithm to stop the iterative procedure, once the dielectric...; default=10^{-3}
+LANGEVIN_GAMMA	LANGEVIN_GAMMA specifies the friction coefficients (in ps-1) for atomic degrees-of-freedom when using...; default=NTYP0
+LANGEVIN_GAMMA_L	LANGEVIN_GAMMA_L specifies the friction coefficient (in ps-1) for lattice degrees-of-freedom in case...; default=0
+LASPH	Include non-spherical contributions related to the gradient of the density in the PAW spheres; T=on, F=off; default=FALSE
+LASYNC	Controls the overlap in communication; T=on, F=off; default=FALSE
+LATTICE_CONSTRAINTS	Sets three boolean to selectively allow changes in the lattice vectors
+LBERRY	This tag is used in the the evaluation of the Berry phase expression for the electronic polarization...; T=on, F=off; default=FALSE
+LBLUEOUT	For LBLUEOUT=.TRUE., VASP writes output for the free-energy gradient calculation to the REPORT file...; T=on, F=off; default=FALSE
+LBONE	LBONE adds the small B-component to the chemical shift tensor; T=on, F=off; default=FALSE
+LCALCEPS	For LCALCEPS=.TRUE. the macroscopic ion-clamped static dielectric tensor, Born effective charge...; T=on, F=off; default=FALSE
+LCALCPOL	LCALCPOL=.TRUE. switches on the evaluation of the Berry phase expressions for the macroscopic...; T=on, F=off; default=FALSE
+LCHARG	Determines whether the charge density is written; T=on, F=off; default=True
+LCHARGH5	Determines whether the charge densities are written to vaspwave.h5; T=on, F=off; default=LH5
+LCHIMAG	Calculate the chemical shifts and magnetic susceptibility within linear response theory; T=on, F=off; default=FALSE
+LCORR	Controls whether Harris corrections are calculated or not; T=on, F=off; default=TRUE
+LDAU	LDAU=.TRUE. switches on DFT+U; T=on, F=off; default=FALSE
+LDAUJ	Sets the effective on-site exchange interactions (eV); default=NTYP*0.0
+LDAUL	LDAUL specifies the l-quantum number for which the on-site interaction is added; default=NTYP*2
+LDAUPRINT	LDAUPRINT controls the verbosity of a DFT+U calculation; options=0/1; default=0
+LDAUTYPE	LDAUTYPE specifies the DFT+U variant that will be used; options=1/2/4; default=2
+LDAUU	Sets the effective on-site Coulomb interactions (eV); default=NTYP*0.0
+LDIAG	Determines whether a subspace diagonalization is performed within the algorithm selected by ALGO or IALGO; T=on, F=off; default=TRUE
+LDIPOL	LDIPOL switches on corrections to the potential and forces. Can be applied for charged molecules and...; T=on, F=off; default=FALSE
+LDISENTANGLED	Selects the disentanglement-cRPA method; T=on, F=off; default=FALSE
+LDMATRIX	Computes the zero-field splitting (ZFS) matrix; T=on, F=off; default=FALSE
+LDOWNSAMPLE	LDOWNSAMPLE selects a sub-grid of k-points defined in KPOINTS from WAVECAR; T=on, F=off; default=FALSE
+LEFG	The LEFG computes the electric field gradient (EFG) at positions of the atomic nuclei; T=on, F=off; default=FALSE
+LELF	LELF determines whether to create an ELFCAR file or not; T=on, F=off; default=FALSE
+LEPSILON	LEPSILON=.TRUE. determines the static dielectric matrix, ion-clamped piezoelectric tensor, and the...; T=on, F=off; default=FALSE
+LFINITE_TEMPERATURE	LFINITE_TEMPERATURE switches on the finite-temperature formalism of many-body perturbation theory for...; T=on, F=off; default=FALSE
+LFOCKACE	LFOCKACE determines whether the Adaptively Compressed Exchange Operator is used. *N.B.:Available for...; T=on, F=off; defaults=TRUE/N/A
+LFOCKAEDFT	LFOCKAEDFT forces VASP to use the same charge augmentation for the Hartree and DFT exchange...; T=on, F=off; default=FALSE
+LFOCKSTD	LFOCKSTD applies to RPA and GW calculations. It forces VASP to evaluate the exact exchange fully...; T=on, F=off; default=FALSE
+LFXC	LFXC enables the (semi-)local exchange-correlation kernel in Casida and time-evolution TDDFT calculations; T=on, F=off; default=FALSE
+LH5	LH5 determines whether the output is written to the legacy files (CHGCAR, CHG, WAVECAR) or the...; T=on, F=off; default=FALSE
+LHARTREE	Controls whether the bubble diagrams are included in the BSE calculation; T=on, F=off; default=TRUE
+LHFCALC	LHFCALC specifies whether a Hartree-Fock/DFT hybrid functional type calculation is performed; T=on, F=off; default=FALSE
+LHYPERFINE	Compute the hyperfine tensors at the atomic sites (available as of vasp.5.3.2); T=on, F=off; default=FALSE
+LIBMBD_ALPHA	LIBMBD_ALPHA defines the free-atom polarizabilities _{0} (bohr^{3}) used in the Tkatchenko-Scheffler...
+LIBMBD_C6AU	LIBMBD_C6AU defines the free-atom C_6 parameters ({Hartree} {bohr}^{6}) used in the Tkatchenko-...
+LIBMBD_K_GRID	LIBMBD_K_GRID sets the k-mesh of the collective oscillations defined in the methods available in the...; default=determined in libMBD according to the cell shape
+LIBMBD_K_GRID_SHIFT	LIBMBD_K_GRID_SHIFT sets the shift for the k-mesh of the collective oscillations defined in the...; default=0.5 (default in libMBD)
+LIBMBD_MBD_A	LIBMBD_MBD_A sets the value of the damping parameter a in the many-body methods as implemented in the...; default=6.0
+LIBMBD_MBD_BETA	LIBMBD_MBD_BETA sets the value of the scaling factor (usually denoted s_R) in the many-body methods as...; default=value that was determined for the exchange-...
+LIBMBD_METHOD	LIBMBD_METHOD selects one of the methods available in the library libMBD of many-body dispersion...; default=mbd-rsscs (default in libMBD)
+LIBMBD_N_OMEGA_GRID	LIBMBD_N_OMEGA_GRID sets the number of points on the grid of imaginary frequencies used in the library...; default=15 (default in libMBD)
+LIBMBD_PARALLEL_MODE	LIBMBD_PARALLEL_MODE selects the parallelization scheme used in the library libMBD of many-body...; options=auto/kpoints/atoms
+LIBMBD_R0AU	LIBMBD_R0AU defines the free-atom R_0 parameters (bohr) used in the Tkatchenko-Scheffler and Many-body...
+LIBMBD_TS_D	LIBMBD_TS_D sets the value of the damping parameter d in the Tkatchenko-Scheffler method as...; default=20
+LIBMBD_TS_SR	LIBMBD_TS_SR sets the value of the scaling factor s_R in the Tkatchenko-Scheffler method as...; default=value that was determined for the exchange-...
+LIBMBD_VDW_PARAMS_KIND	LIBMBD_VDW_PARAMS_KIND sets the type of free-atom van der Waals parameters that are used for the...; options=ts/tssurf
+LIBMBD_XC	LIBMBD_XC sets the exchange-correlation functional for the setting of damping parameters used in the...; options=pbe/pbe0/hse/blyp/b3lyp/revpbe/am05/none
+LIBXC1	LIBXC1 specifies the exchange or exchange-correlation functional from the library of exchange-...
+LIBXC1_PN	LIBXC1_Pn, where n=1, 2, allows to specify the values of the parameters of the functional implemented...
+LIBXC2	LIBXC2 specifies the correlation functional from the library of exchange-correlation functionals...
+LIBXC2_PN	LIBXC2_Pn, where n=1, 2, allows to specify the values of the parameters of the functional implemented...
+LKPOINTS_OPT	Enable reading the KPOINTS_OPT file; T=on, F=off; default=TRUE
+LKPOINTS_WAN	LKPOINTS_WAN controlls whether VASP reads the KPOINTS_WAN file; T=on, F=off; default=TRUE
+LKPROJ	Switches on the k-point projection scheme; T=on, F=off; default=FALSE
+LLRAUG	LLRAUG calculates the two-center contributions to the chemical shift tensor; T=on, F=off; default=FALSE
+LMAXFOCK	LMAXFOCK sets the maximum angular momentum quantum number L for the augmentation of charge densities...; default=4
+LMAXFOCKAE	NMAXFOCKAE and LMAXFOCKAE determine whether the overlap densities in the Fock exchange and correlated...; defaults=-1/4
+LMAXMIX	LMAXMIX controls up to which l-quantum number the one-center PAW charge densities are passed through...; default=2
+LMAXPAW	The maximum l-quantum number for the evaluation of the one-center terms on the radial grids in the PAW...; default=2l max, where l max is the maximum angular...
+LMAXTAU	LMAXTAU is the maximum l-quantum number included in the PAW one-center expansion of the kinetic energy...; defaults=6/0
+LMIXTAU	Send the kinetic-energy density through the density mixer as well; T=on, F=off; default=FALSE
+LMODELHF	LMODELHF selects dielectric-dependent range-separated hybrid functionals with AEXX and BEXX for the...; T=on, F=off; default=FALSE
+LMONO	LMONO switches on monopole-monopole corrections for the total energy; T=on, F=off; default=FALSE
+LMP2LT	LMP2LT selects a Laplace transformed MP2 algorithm; T=on, F=off; default=FALSE
+LNABLA	LNABLA=.TRUE. evaluates the transversal expression for the frequency dependent dielectric matrix; T=on, F=off; default=FALSE
+LNICSALL	LNICSALL=.TRUE. calculates the NICS at the positions on the fine FFT grid NGXF x NGYF x NGZF; T=on, F=off; default=FALSE
+LNMRCAR	Write the NMRCAR.magres file for EFG calculations and chemical shielding calculations; T=on, F=off; default=TRUE
+LNMRLEG	LNMRLEG controls whether VASP prints NMR properties to OUTCAR according to the old format (pre-version...; T=on, F=off; default=FALSE
+LNMRSHIELD	LNMRSHIELD controls whether the shielding or shift is printed; T=on, F=off; default=TRUE
+LNMR_SYM_RED	Discard symmetry operations that are not consistent with the way k-space derivatives are calculated in...; T=on, F=off; default=FALSE
+LNOAUGXC	LNOAUGXC specifies if a METAGGA functional is evaluated with a density that is augmented or not; T=on, F=off; default=FALSE
+LNONCOLLINEAR	Switch on noncollinear magnetic calculations; T=on, F=off; defaults=False/True
+LOCPROJ	The LOCPROJ tag specifies local functions on which the orbitals are projected. These projections are...; options=' : ' : '; default=None
+LOPTICS	LOPTICS=.TRUE. calculates the frequency dependent dielectric matrix after the electronic ground state...; T=on, F=off; default=FALSE
+LORBIT	Selects a projection method onto local quantum numbers (lm) and writes PROCAR/PROOUT file; options=0/1/2/5/10/11/12; default=0
+LORBMOM	Specifies whether the orbital moments are written out. Only applicable in a calculation using; T=on, F=off; default=FALSE
+LPARD	Determines whether partial (band and/or k-point-decomposed) charge densities are evaluated; T=on, F=off; default=FALSE
+LPARDH5	LPARDH5 determines whether the partial charges are written to PARCHG or vaspout.h5; T=on, F=off; default=FALSE
+LPEAD	For LPEAD=.TRUE., the derivative of the cell-periodic part of the orbitals w.r.t. k, |kunk, is...; T=on, F=off; default=FALSE
+LPHON_DISPERSION	LPHON_DISPERSION requests the calculation of the phonon dispersion along the q-point path supplied in...; T=on, F=off; default=FALSE
+LPHON_POLAR	LPHON_POLAR includes dipole-dipole corrections in the computation of the phonon dispersion. For this...; T=on, F=off; default=FALSE
+LPHON_READ_FORCE_CONSTANTS	LPHON_READ_FORCE_CONSTANTS read the force constants from a vaspin.h5 file containing the force...; T=on, F=off; default=FALSE
+LPLANE	LPLANE switches on the plane-wise data distribution in real space; T=on, F=off; default=TRUE
+LPOSNICS	LPOSNICS controls if VASP reads the POSNICS file; T=on, F=off; default=TRUE
+LREAL	LREAL determines whether the projection operators are evaluated in real-space or in reciprocal space; options=FALSE/Auto (or A)/On (or O)/TRUE; default=FALSE
+LRHFCALC	Switch on the decomposition of the exchange for the hybrid functionals using full Hartree-Fock...; T=on, F=off; default=FALSE
+LRPA	LRPA=.TRUE. includes local field effect on the Hartree level only; T=on, F=off; default=FALSE
+LRPAFORCE	LRPAFORCE=.TRUE. calculates forces in the random-phase approximation (RPA); T=on, F=off; default=FALSE
+LSCAAWARE	LSCAAWARE controls the distribution of the Hamilton matrix; T=on, F=off; defaults=TRUE/FALSE
+LSCALAPACK	LSCALAPACK controls the use of scaLAPACK; T=on, F=off; defaults=TRUE/FALSE
+LSCALER0	Decides whether to re-scale the van der Waals radii R_{0} (LSCALER0=.TRUE.) or not; T=on, F=off; default=TRUE
+LSCALU	LSCALU switches on the parallel LU decomposition (using scaLAPACK) in the orthonormalization of the...; T=on, F=off; default=FALSE
+LSCDM	LSCDM switches on the selected columns of the density matrix (SCDM) method; T=on, F=off; default=FALSE
+LSCK	LSCK=.True. switches on the squeezed Coulomb kernel; T=on, F=off; default=FALSE
+LSCRPA	LSCRPA selects the spectral-cRPA method; T=on, F=off; default=FALSE
+LSCSGRAD	Decides whether to compute gradients in the calculation of the MBD dispersion energy or the SCS...; T=on, F=off; default=TRUE
+LSELFENERGY	Controls whether the frequency-dependent self-energy is calculated or not; T=on, F=off; default=FALSE
+LSEPB	Specifies whether the partial charge density is summed up for all selected bands or separated and...; T=on, F=off; default=FALSE
+LSEPK	Specifies whether the partial charge density is summed up for all selected k points or separated and...; T=on, F=off; default=FALSE
+LSFBXC	Removes sources and drains from the exchange-correlation B field; T=on, F=off; default=FALSE
+LSINGLES	Switch on singles contribution to correlation energy for GW algorithms; T=on, F=off; default=FALSE
+LSMP2LT	LSMP2LT selects a stochastic Laplace transformed MP2 algorithm; T=on, F=off; default=FALSE
+LSORBIT	Switch on spin-orbit coupling; T=on, F=off; default=FALSE
+LSOSHIFT	LSOSHIFT=.True. activates spinorbit coupling (SOC) contributions to the calculated chemical shielding...; T=on, F=off; default=LSORBIT
+LSPECTRAL	LSPECTRAL specifies to use the spectral method; T=on, F=off; default=TRUE
+LSPECTRALGW	LSPECTRALGW specifies to use the spectral method for calculating the self-energy; T=on, F=off; default=FALSE
+LSPIN_VDW	LSPIN_VDW=.TRUE. switches on the use of the spin-polarized formulation for the nonlocal part of a van...; T=on, F=off; default=FALSE
+LSPIRAL	Set LSPIRAL=.TRUE. to represent spin spirals by means of a generalized Bloch condition; T=on, F=off; default=FALSE
+LSUBROT	This flag can be set for hybrid functionals (HF-type calculations). LSUBROT determines whether an...; T=on, F=off
+LSYNCH5	LSYNCH5 determines whether the output in vaspout.h5 is always synchronized with VASP while the...; T=on, F=off; default=FALSE
+LTAU	Request evaluation of the kinetic energy density; T=on, F=off; defaults=False/True
+LTBOUNDLIBXC	LTBOUNDLIBXC specifies whether or not the lower bound for the Kohn-Sham kinetic-energy density _{}...; T=on, F=off; default=FALSE
+LTEMPER	LTEMPER specified whether parallel tempering is used. The flag must be used in combination with IMAGES; T=on, F=off; default=FALSE
+LTHOMAS	LTHOMAS selects a decomposition of the exchange functional based on Thomas-Fermi exponential screening; T=on, F=off; default=FALSE
+LTRIPLET	LTRIPLET selects a triplet ansatz for Bethe-Salpeter-equations (BSE) calculations. This is synonymous...; T=on, F=off; default=FALSE
+LTSSURF	If set to .TRUE., the standard parametrization of the Tkatchenko-Scheffler method is replaced by the...; T=on, F=off; default=FALSE
+LTWO_CENTRE	LTWO_CENTRE calculates off-center Coulomb integrals; T=on, F=off; default=FALSE
+LUSENCCL	LUSENCCL allows deactivating the NVIDIA Collective Communications Library (NCCL) during runtime when...; T=on, F=off; default=TRUE
+LUSE_VDW	LUSE_VDW=.TRUE. switches on the use of a nonlocal vdW-DF functional. These functionals depend on the...; T=on, F=off; default=FALSE
+LVACPOTAV	Switch on determining the vacuum potential by averaging the local potential over a field-free region; T=on, F=off; default=False
+LVDWEXPANSION	Decides whether to write the two- to six- body contributions to MBD dispersion energy in the OUTCAR file; T=on, F=off; default=FALSE
+LVDWSCS	Activates the self-consistent screening in Tkatchenko-Scheffler method; defaults=TRUE/FALSE
+LVDW_EWALD	LVDW_EWALD decides whether the lattice summation in E_{disp} expression by means of Ewald's summation...; T=on, F=off; default=FALSE
+LVDW_ONECELL	Can be used to disable vdW interaction with mirror image in X Y Z direction. This is advisable for...; default=FALSE. .FALSE. .FALSE
+LVGVAPPL	LVGVAPPL determines whether the vGv orbital magnetic susceptibility is applied in the calculation of...; T=on, F=off; default=FALSE
+LVGVCALC	LVGVCALC switches on calculation of the vGv expression for the orbital magnetic susceptibility; T=on, F=off; default=TRUE
+LVHAR	Determines whether the local potential V_{{ionic}}({r}) +V_{{hartree}}({r}) (in eV) is written to the...; T=on, F=off; default=FALSE
+LVTOT	Determines whether the total local potential V_{{LOCPOT}}({r}) (in eV) is written to the LOCPOT file; T=on, F=off; default=FALSE
+LWANNIER90	LWANNIER90=.TRUE. switches on the interface between VASP and [http://www.wannier.org WANNIER90]; T=on, F=off; default=FALSE
+LWANNIER90_RUN	LWANNIER90_RUN executes wannier_setup (see LWANNIER90=.TRUE.) and subsequently runs...; T=on, F=off; default=FALSE
+LWAVE	Determines whether the wavefunctions are written at the end of a run; T=on, F=off; default=TRUE
+LWAVEH5	Determines whether the wavefunctions are written to vaspwave.h5 file at the end of a run; T=on, F=off; default=LH5
+LWEIGHTED	LWEIGHTED selects the weighted-cRPA method; T=on, F=off; default=FALSE
+LWRITE_MMN_AMN	LWRITE_MMN_AMN=.TRUE. tells the VASP2WANNIER90 interface to write the wannier90.mmn and wannier90.amn...; T=on, F=off; defaults=TRUE/FALSE
+LWRITE_SPN	Write wannier90.spn file for noncollinear calculations; T=on, F=off; default=FALSE
+LWRITE_UNK	LWRITE_UNK decides whether the cell-periodic part of the relevant Bloch functions is written; T=on, F=off; default=FALSE
+LWRITE_WANPROJ	LWRITE_WANPROJ determines whether the Wannier projection file WANPROJ is written; T=on, F=off; default=FALSE
+LWRT_AUGMENTED_DENSITY	Switch for WRT_DENSITY to write without augmentation (compensation charge=0); T=on, F=off; default=TRUE
+LZEROZ	For LZEROZ=.TRUE. the z-component of the spin-spiral magnetisation density will be forced to be and to...; T=on, F=off; default=FALSE
+LZORA	LZORA=.True. yields ZORA scalar-relativistic chemical shieldings in NMR; T=on, F=off; default=False
+MAGMOM	Initial magnetic moment for each atom if no magnetization density is present. Considered when symmetry...; defaults=NIONS * 1.0/3 * NIONS * 1.0
+MAXDIS	This tag sets the maximum distance that an atom is allowed to travel (in Angstrom) between two ab-...; default=0.0 (switched off)
+MAXMEM	MAXMEM specifies the maximum memory one MPI rank will attempt to allocate (in MByte); default=2800 (VASP.5.4.4. and older), automatically set...
+MAXMIX	MAXMIX specifies the maximum number of steps stored in the Broyden mixer (IMIX=4); default=-45
+MDALGO	Specifies the thermostat and lattice dynamics for molecular-dynamics calculations (in case IBRION=0); options=0/1/2/3/4/5/11/21/...; default=0
+METAGGA	Selects a meta-GGA exchange-correlation functional; default=The functional specified by LEXCH in the POTCAR...
+MINROT	The flag MINROT defines the value for which the dimer is rotated only if the predicted rotation angle...; default=0.01
+MIXPRE	MIXPRE specifies the metric in the Broyden mixing scheme(IMIX=4); options=0/1/2/3; default=1
+ML_AFILT2	This tag sets the filtering parameter for the angular filtering for ML_IAFILT2 in the machine learning...; default=0.002
+ML_CALGO	Chooses error estimation type for on-the-fly training or reselection of local referenc configurations; default=0
+ML_CDOUB	This tag controls the criterion for "enforced" DFT calculations within the machine learning force...; defaults=4.0/2.0
+ML_CSIG	Parameter used in the automatic determination of threshold ML_CTIFOR for error estimation in the...; default=0.4
+ML_CSLOPE	Parameter used in the automatic determination of threshold for error estimation in the machine...; default=0.2
+ML_CTIFOR	This flag sets the threshold for the error estimation in the machine learning force field method; defaults=0.002/0.02
+ML_CX	The parameter determines to which value the threshold (ML_CTIFOR) is updated within the machine...; default=0.0
+ML_DESC_TYPE	Selects the descriptor type of the three-body descriptor used in machine learning force fields; default=0
+ML_EATOM_REF	Reference total energies of isolated atoms used in the machine learning force field method; default=0.0
+ML_EMPPOT_RCUT	Sets the cutoff radius for the empirical potentials; default=0.0
+ML_EPS_LOW	Threshold for the CUR algorithm used in the sparsification of local reference configurations within...; defaults=1E-11/1E-9
+ML_EPS_REG	Initial value for the threshold of the eigenvalues of the covariance matrix in the evidence approximation; default=1E-15
+ML_ESTBLOCK	Calculation and output frequency of error estimates for ML_MODE=RUN computations; default=ML_OUTBLOCK
+ML_GRACE_MODEL	String-based tag specifying the GRACE force field name or path; default=/SavedModel
+ML_IAFILT2	This tag specifies the type of angular filtering used in the machine learning force field method; default=2
+ML_IALGO_LINREG	This tag determines the algorithm that is employed to solve the system of linear equations in the...; defaults=4/1
+ML_ICOUPLE	This tag specifies the atoms where the coupling parameter is introduced to calculate the chemical...
+ML_ICRITERIA	Decides how the error threshold (ML_CTIFOR) is updated within the machine learning force field method....; defaults=3/1/0
+ML_IREG	This tag specifies whether the regularization parameters are kept constant or not in the machine...; default=2
+ML_ISCALE_TOTEN	This tag specifies how to scale the energy data in the machine learning force field method; default=2
+ML_ISTART	This tag selects the mode of operation (e.g. start from scratch, prediction-only,...) of the machine...; default=0
+ML_IWEIGHT	This tag controls which procedure is used for normalizing and weighting the energies, forces, and...; default=3
+ML_LAFILT2	This tag specifies whether angular filtering is applied or not within the machine learning force field...; T=on, F=off; default=TRUE
+ML_LBASIS_DISCARD	Controls whether calculation is continued or stopped after the maximum number of local reference...; T=on, F=off; default=TRUE
+ML_LCOUPLE	This tag specifies whether thermodynamic integration is activated in order to calculate the chemical...; T=on, F=off; defaults=TRUE/FALSE
+ML_LEATOM	This term specifies whether the total atomic energy is written out or not; T=on, F=off; default=FALSE
+ML_LEMPPOT	Enables the use of auxiliary empirical potentials for thermodynamic integration using VCAIMAGES; T=on, F=off; default=FALSE
+ML_LERR	Decides whether the Bayesian error estimates are calculated and written out or not; T=on, F=off; default=TRUE
+ML_LFAST	This tag switches on the descriptors for refitting in the fast execution mode within machine learning...; T=on, F=off; defaults=TRUE/FALSE
+ML_LHEAT	This tag specifies whether the heat flux is calculated or not in the machine learning force field method; T=on, F=off; default=FALSE
+ML_LIB	ML_LIB enables/disables the use of the VASPml C++ library for machine-learning features; T=on, F=off; defaults=TRUE/FALSE
+ML_LMAX2	This tag specifies the maximum angular momentum quantum number L_ of spherical harmonics used to...; defaults=3/6
+ML_LMLFF	Main control tag which enables/disables the use of machine learning force fields; T=on, F=off; default=FALSE
+ML_LSPARSDES	Specifies whether angular-descriptor sparsification is enabled within the machine learning force field...; T=on, F=off; default=FALSE
+ML_LUSE_NAMES	Decides whether training structures are additionally subdivided into groups internally due to their...; T=on, F=off; default=FALSE
+ML_MB	This tag sets the maximum number of local reference configurations (i.e. basis functions in the...; default=see below
+ML_MB_MIN	ML_MB_MIN sets the minimum number of local reference configurations required for generation of a...; default=3
+ML_MCONF	This tag sets the maximum number of structures stored in memory that are used for training in the...; default=see below
+ML_MCONF_NEW	This tag sets the number of configurations that are stored temporarily as candidates for the training...; default=5
+ML_MHIS	This tag sets the number of estimated errors stored in memory to determine the threshold for error...; default=10
+ML_MODE	String-based tag selecting operation mode for machine learning force fields; options=train/select/refit/refitbayesian/run/delta/none; default=none
+ML_MOPOT_DM	Specifies the well depth of the Morse potentials used as auxiliary potentials in thermodynamic...; default=1.0
+ML_MOPOT_IJM	Specifies the list of Morse potential pairs used as auxiliary potentials in thermodynamic integration...; default=none
+ML_MOPOT_NM	Specifies the number of Morse-potential pairs used as auxiliary potentials in thermodynamic...; default=0
+ML_MOPOT_RKM	Specifies the width parameter of the Morse potentials used as auxiliary potentials in thermodynamic...; default=1.0
+ML_MOPOT_RM	Specifies the equilibrium bond distance of the Morse potentials used as auxiliary potentials in...; default=1.0
+ML_MRB1	This tag sets the number N_{R}^0 of radial basis functions used to expand the radial descriptor...; default=12
+ML_MRB2	This tag sets the number N_{R}^l (for all l) of radial basis functions used to expand the angular...; default=8
+ML_NATOM_COUPLED	This tag specifies the number of atoms for which a coupling parameter is introduced to calculate the...; default=0
+ML_NCSHMEM	Specifies the number of MPI ranks that share a single shared memory segment; defaults=komplex see below/Number of available ranks per...
+ML_NHYP	This tag specifies the polynomial power of the kernel within the machine learning force field method...; default=4
+ML_NMDINT	Tag to control the minimum interval to get training samples in the machine learning force field method; defaults=1/10
+ML_NRANK_SPARSDES	This tag sets the number of highest eigenvalues to which the correlation is measured within the...; default=5
+ML_OUTBLOCK	Output distance in number of steps for molecular-dynamics simulations with machine-learned force...; defaults=1/10
+ML_OUTPUT_MODE	This tag allows to disable certain file output which helps to increase performance in molecular-...; defaults=0/1
+ML_RCOUPLE	This tag specifies the value of the coupling parameter for the calculation of the chemical potential...; defaults=0.0/1.0
+ML_RCUT1	Sets the cutoff radius R_{cut} for the radial descriptor ^{(2)}_i(r) in; default=8.0
+ML_RCUT2	This flag sets the cutoff radius R_{cut} for the angular descriptor ^{(3)}_i(r) in the machine...; default=5.0
+ML_RDES_SPARSDES	Sets the ratio of descriptors kept during angular-descriptor sparsification; default=0.5
+ML_SCLC_CTIFOR	Sets fraction by which the error threshold for the maximum forces is lowered in the selection of local...; default=0.6
+ML_SIGV0	This flag sets the noise parameter s_{{v}} (see here for definition) for the fitting in the machine...; default=1.0
+ML_SIGW0	This flag sets the precision parameter s_{{w}} (see here for definition) for the fitting in the...; defaults=1E-7/1.0
+ML_SION1	This tag specifies the width _{atom} of the Gaussian functions used for broadening the atomic...; default=0.5
+ML_SION2	This tag specifies the width _{atom} of the Gaussian functions used for broadening the atomic...; default=ML_SION1
+ML_SRPOT_B0	Specifies the height of a soft repulsive exponential potential used as an auxiliary potential in...; default=1.0
+ML_SRPOT_N0	Specifies the exponent of a soft repulsive exponential potential used as an auxiliary potential in...; default=10
+ML_SRPOT_S0	Specifies the broadening of a soft repulsive exponential potential used as an auxiliary potential in...; default=2.0
+ML_TYPE	String-based tag selecting type of machine-learned force field to use; options=kernel/vasp/grace; default=kernel
+ML_W1	This tag defines the weight for the radial (and angular) descriptor within the machine learning force...; default=0.1
+ML_WTIFOR	This tag sets the weight for the scaling of the forces in the training data within the machine...; defaults=0.05/1.0
+ML_WTOTEN	Sets a scaling of the fitted potential energy; defaults=0.005/1.0
+ML_WTSIF	This tag sets the weight for the scaling of the stress in the training data within the machine...; defaults=5.0/1.0
+MSDGW_F	A positive value of MSDGW_F triggers the mixed stochastic-deterministic compression algorithm of...; default=-1
+M_CONSTR	M_CONSTR specifies the desired local magnetic moment (size and/or direction) for the constrained local...; default=3*NIONS*0.0
+NATURALO	Calculate RPA natural orbitals; default=0; for low scaling GW type calculations the...
+NBANDS	NBANDS specifies the total number of KS or QP orbitals in the calculation; default=( {1}{2}{nint} (N_{{elect
+NBANDSEXACT	NBANDSEXACT specifies the number of bands used in the all-in-one mode of many-body perturbation theory...; defaults=-1/maximum number of plane waves
+NBANDSGW	The flag determines how many QP energies are calculated and updated in GW type calculations; default=twice the number of occupied states
+NBANDSO	NBANDSO determines how many occupied orbitals are included in the Casida/BSE calculations or time...; default=number of occupied orbitals
+NBANDSV	NBANDSV determines how many unoccupied orbitals are included in the Casida/BSE calculations or...
+NBANDS_WAVE	NBANDS_WAVE specifies the number of bands written to WAVECAR in the all-in-one mode of many-body...; defaults=NBANDSGW/NBANDS/NBANDSEXACT
+NBLK	NBLK determines the blocking factor in many BLAS level 3 routines; defaults=-1/256
+NBLOCK	After NBLOCK ionic steps the pair-correlation function and the DOS are calculated and the ionic...; default=1
+NBLOCK_FOCK	Sets the number of orbitals that are processed simultaneously when computing the action of the Fock...; defaults=64/32/OMP_NUM_THREADS
+NBMOD	NBMOD controls how bands are selected when computing partial charge densities; options=-3/-2/-1/0/[positive integer]; defaults=n/-2/-1
+NBSEBLOCKO	NBSEBLOCKO specifies the blocking factor for the occupied states when setting up the BSE Hamiltonian; default=-1
+NBSEBLOCKV	NBSEBLOCKV specifies the blocking factor for the unoccupied states when setting up the BSE Hamiltonian; default=-1
+NBSEEIG	NBSEEIG sets the number of BSE eigenvectors written to the BSEFATBAND file. If BSEHOLE or BSEELECTRON...; default=0
+NCORE	NCORE controls how many MPI ranks collaborate on a single band, parallelizing the FFTs for that band; default=1
+NCORE_IN_IMAGE1	This tag specifies the number of cores in the first image; default=0
+NCRPA_BANDS	Controls which bands are excluded in the constrained random-phase approximation. Check also...
+NEDOS	Number of grid points for the electronic density of states (DOS) and dielectric function; default=301
+NELECT	NELECT sets the number of electrons; default=number of valence electrons
+NELM	NELM sets the maximum number of electronic SC (self-consistency) steps; default=60
+NELMDL	NELMDL specifies the number of non-self-consistent steps at the beginning; defaults=-12/0/-5
+NELMGW	NELMGW sets the number of self-consistent GW steps; default=1
+NELMIN	NELMIN specifies the minimum number of electronic self-consistency steps; default=2
+NFREE	Depending on IBRION, NFREE specifies the number of remembered steps in the history of ionic...; defaults=1/0
+NGX	NGX sets the number of grid points in the FFT grid along the first lattice vector; default=set in accordance with PREC and ENCUT
+NGXF	NGXF sets the number of grid points in the "fine" FFT grid along the first lattice vector; default=set in accordance with PREC, NGX, ENCUT and ENAUG
+NGY	NGY sets the number of grid points in the FFT grid along the second lattice vector; default=set in accordance with PREC and ENCUT
+NGYF	NGYF sets the number of grid points in the "fine" FFT grid along the second lattice vector; default=set in accordance with PREC, NGY, ENCUT and ENAUG
+NGYROMAG	NGYROMAG specifies the nuclear gyromagnetic ratios (in MHz, for H0 = 1 T) for the atomic types on the...; default=NTYP*1.0
+NGZ	NGZ sets the number of grid points in the FFT grid along the third lattice vector; default=set in accordance with PREC and ENCUT
+NGZF	NGZF sets the number of grid points in the "fine" FFT grid along the first lattice vector; default=set in accordance with PREC, NGZ, ENCUT and ENAUG
+NHC_NCHAINS	Length of the Nose-Hoover chain; default=0
+NHC_NRESPA	The number of subdivisions of the integration step used in propagation of thermostat variables in the...; default=1
+NHC_NS	The number of subdivisions of each RESPA step used in the integration step used in propagation of...; options=1/3/7; default=1
+NKRED	NKRED specifies an uniform reduction factor for the q-point grid representation of the exact exchange...; default=1
+NKREDX	NKREDX specifies a reduction factor for the q-point grid representation of the exact exchange...; default=1
+NKREDY	NKREDY specifies a reduction factor for the q-point grid representation of the exact exchange...; default=1
+NKREDZ	NKREDZ specifies a reduction factor for the q-point grid representation of the exact exchange...; default=1
+NLSPLINE	Construct the PAW projectors in reciprocal space using spline interpolation so that they are...; T=on, F=off; default=FALSE
+NMAXFOCKAE	NMAXFOCKAE and LMAXFOCKAE determine whether the overlap densities in the Fock exchange and correlated...; options=1/2; default=1
+NOMEGA	NOMEGA specifies the number of (imaginary) frequency and imaginary time grid points; defaults=100/12
+NOMEGAPAR	NOMEGAPAR available as of VASP.6, specifies the number of processor groups sharing the same imaginary...; default=NOMEGA
+NOMEGAR	NOMEGAR specifies the number of frequency grid points along the real axis; defaults=NOMEGA/0
+NOMEGA_DUMP	NOMEGA_DUMP selects the imaginary frequency point of screened potential in low-scaling GW calculations...; default=-1
+NPACO	NPACO sets the number of slots in the pair-correlation function written to PCDAT; default=256
+NPAR	NPAR determines the number of bands that are treated in parallel. This is a legacy tag; use NCORE instead; default=available ranks
+NPPSTR	Specifies the number of k-points on strings along the IGPAR direction
+NRMM	Maximum number of iterative steps for RMM-DIIS (IALGO=4X) or Davidson algorithms (IALGO=3X); default=4
+NSIM	NSIM sets the number of bands that are optimized simultaneously by the RMM-DIIS algorithm. This also...; default=4
+NSTORB	NSTORB specifies the number of stochastic orbitals per cycle in the stochastic MP2 algorithm; default=-1
+NSUBSYS	NSUBSYS defines the atomic subsystems in calculations with multiple Anderson thermostats (in case VASP...
+NSW	NSW sets the maximum number of ionic steps; default=0
+NTARGET_STATES	Controls which Wannier states are excluded in constrained random-phase approximation. Check also...
+NTAUPAR	NTAUPAR available as of VASP.6, specifies the number of MPI groups sharing same imaginary time grid...; default=depends on MAXMEM
+NTEMPER	NTEMPER specifies how often temperature swaps are attempted during parallel tempering. The flag must...; default=200
+NUCIND	Allows the nucleus-independent chemical shielding (NICS) to be calculated; T=on, F=off; default=FALSE
+NUM_WANN	Controls the number of Wannier orbitals to be constructed; default=NBANDS
+NUPDOWN	Sets the difference between the number of electrons in the up and down spin components; default=not set
+NWRITE	This tag determines how much will be written to the file OUTCAR ('verbosity tag'); options=0/1/2/3/4; default=2
+ODDONLY	ODDONLY=.TRUE. selects a subset of k-points for the representation of the Fock exchange potential,...; T=on, F=off; default=FALSE
+ODDONLYGW	ODDONLYGW allows to avoid the inclusion of the point in the evaluation of response functions (in GW...; T=on, F=off; default=FALSE
+OFIELD_A	The tag OFIELD_A sets the desired order parameter Q_6 in the Interface pinning method
+OFIELD_KAPPA	The tag OFIELD_KAPPA sets the strength of the bias potential in the Interface pinning method
+OFIELD_Q6_FAR	OFIELD_Q6_FAR sets the far fading distance for the computation of a continuous Q_6 parameter in the...
+OFIELD_Q6_NEAR	OFIELD_Q6_NEAR sets the near-fading distance (in ) for the computation of a continuous Q_6 parameter...
+OMEGAMAX	OMEGAMAX specifies the maximum frequency for the dense part of the frequency grid for GW calculations...; default=outermost node in dielectric function ()/1.3
+OMEGAMIN	OMEGAMIN sets the minimum frequency in the frequency grid; default=minimum transition energy (0.05 for metals)
+OMEGATL	OMEGATL specifies the maximum frequency for the coarse part of the frequency grid; default=10 outermost node in dielectric function ()
+PARAM1	For GGA=MK, for GGA=BO; default=0.1234
+PARAM2	For GGA=MK, or for GGA=BO; default=1.0
+PFLAT	Controls flat-profile output from profiling routines; T=on, F=off
+PHON_BORN_CHARGES	PHON_BORN_CHARGES sets the Born effective charges to be used for the dipole-dipole corrections in the...; default=None
+PHON_DIELECTRIC	PHON_DIELECTRIC sets the static dielectric tensor to be used for the dipole-dipole corrections in the...; default=None
+PHON_DOS	Select the approach to use when computing the phonon density-of-states (DOS); options=0/1/2; default=0
+PHON_G_CUTOFF	PHON_G_CUTOFF sets the cutoff radius in reciprocal space used to determine the number of {G} vectors...; default=8.0
+PHON_LBOSE	Determines whether structures in the sampling are created according to Bose-Einstein or Maxwell-...; T=on, F=off; default=TRUE
+PHON_LMC	Controls whether electron-phonon interactions from Monte-Carlo sampling are calculated or not; T=on, F=off; default=FALSE
+PHON_NEDOS	Sets the number of frequency points to compute the phonon density of states; default=2000
+PHON_NSTRUCT	Sets the number of structures for electron-phonon interactions from Monte-Carlo (MC) sampling; default=none
+PHON_NWRITE	PHON_NWRITE determines how much output is written to the OUTCAR file when computing the phonon...; default=1
+PHON_SIGMA	Set the width of the Gaussian function in eV to compute the phonon density of states; default=0.0005 eV
+PHON_TLIST	Provides the list of temperatures for that the electron-phonon interaction using the ZG configuration...; default=none
+PLEVEL	Control tag for the output of the profiling routines
+PLUGINS/FORCE_AND_STRESS	PLUGINS/FORCE_AND_STRESS calls the Python plugin for the force and stress interface for each ionic...; T=on, F=off; default=False
+PLUGINS/LOCAL_POTENTIAL	PLUGINS/LOCAL_POTENTIAL calls the Python plugin for the local potential interface for each SCF step; T=on, F=off; default=False
+PLUGINS/MACHINE_LEARNING	PLUGINS/MACHINE_LEARNING calls the Python plugin for the machine learning interface for each ionic...; T=on, F=off; default=False
+PLUGINS/ML_MODE	String-based tag selecting operation mode for running PLUGINS/FORCE_AND_STRESS plugins; options=none/run; default=none
+PLUGINS/ML_OUTBLOCK	Equivalent to ML_OUTBLOCK for calculations run via plugins instead of using VASP internal force fields; default=1
+PLUGINS/ML_OUTPUT_MODE	Equivalent to ML_OUTPUT_MODE for calculations run via plugins instead of using VASP internal force fields; default=1
+PLUGINS/NEIGHBOR_CUTOFF	PLUGINS/NEIGHBOR_CUTOFF determines the cutoff up to which the neighbor list is computed that is passed...
+PLUGINS/OCCUPANCIES	PLUGINS/OCCUPANCIES calls the Python plugin for the occupancies interface for each ionic relaxation step; T=on, F=off; default=False
+PLUGINS/STRUCTURE	PLUGINS/STRUCTURE calls the Python plugin for the structure interface for each ionic relaxation step; T=on, F=off; default=False
+PMASS	PMASS assigns a fictitious mass (in amu) to the lattice degrees-of-freedom in case of Parrinello-...; default=1000
+POMASS	Array of masses of the atoms in atomic units; default=values read from POTCAR
+POTIM	POTIM sets the time step in molecular dynamics or the step width in ionic relaxations; defaults=none/0.5/0.015
+PREC	PREC specifies the "precision" mode; options=Normal/Single/SingleN/Accurate/Low/Medium/High; defaults=Medium/Normal
+PRECFOCK	PRECFOCK controls the FFT grids used in the exact exchange routines (Hartree-Fock and hybrid functionals); options=Normal/Accurate/Fast/Medium/Single/Low;...
+PROUTINE	Control flag for the output of the profiling routines
+PSTRESS	Sets the external pressure in kB or adds corrections to the stress tensor; default=0
+PSUBSYS	PSUBSYS sets the collision probabilities for the atoms in each atomic subsystem in calculations with...
+PTHRESHOLD	Control flag for the output of the profiling routines
+QMAXFOCKAE	Controls at which wave vectors the local augmentation charges are fitted to obtain an accurate charge...
+QSPIRAL	The QSPIRAL-tag specifies the spin spiral propagation vector; default=3*0.0
+QUAD_EFG	Nuclear quadrupole moment (in millbarn) for the atomic types on the POTCAR file; default=NTYP*1.0
+RANDOM_GENERATOR	Specifies the random-number generator used to initialize the wavefunction (see INIWAV) for electronic...; options=default/pcg_32
+RANDOM_SEED	RANDOM_SEED specifies the seed of the random-number generator (compile VASP with -Dtbdyn); default=based on the system clock
+ROPT	ROPT determines how accurately the projectors are represented in real space. With LREAL=On, the real...; format=one real value per POTCAR species
+RSMBJ	Sets the r_{s}^{{th}} parameter (in bohr) in the LMBJ potential; default=7
+RWIGS	RWIGS specifies the Wigner-Seitz radius (in ) for each atom type; default=-1
+SAXIS	Set the global spin-quantization axis w.r.t. Cartesian coordinates; default=(0, 0, 1)
+SCALEE	This tag specifies the coupling parameter of the energies and forces between a fully interacting...; default=1
+SCISSOR	SCISSOR specifies the shift for the scissor operator in eV; default=0
+SCSRAD	SCSRAD defines the cutoff radius (in ) used in the calculation of _{ij} within the Tkatchenko-...; default=120
+SDFTD3_DAMPING	SDFTD3_DAMPING sets the type of damping function in the DFT-D3 method implemented in the simple-DFT-D3...; options=zero/rational/mzero/mrational/optimizedpower
+SDFTD3_XC	SDFTD3_XC sets the exchange-correlation functional which determines the van der Waals parameters used...; default=The functional set by the GGA, METAGGA or XC tag
+SHAKEMAXITER	SHAKEMAXITER specifies the maximum number of iterations in the SHAKE algorithm (in case VASP was...; default=1000
+SHAKETOL	SHAKETOL specifies the tolerance for the SHAKE algorithm (in case VASP was compiled with -Dtbdyn); default=10^{-5}
+SHAKETOLSOFT	SHAKETOLSOFT specifies the soft tolerance for the SHAKE algorithm (in case VASP was compiled with...; default=SHAKETOL
+SIGMA	SIGMA specifies the width of the smearing in eV; default=0.2
+SMASS	SMASS controls the velocities during an ab-initio molecular-dynamics run; options=-3/-2/-1/[real] 0; default=-3
+SMBJ	Sets the parameter (in ) in the LMBJ potential; default=2
+SMEARINGS	SMEARINGS defines the smearing parameters for ISMEAR=-3 in the calculation of the partial occupancies; default=not set
+SPRING	SPRING gives the spring constant between the images as used in the elastic band method; default=-5
+SPRING_K	Force constant for harmonic bias potential
+SPRING_R0	Position of the minimum for a harmonic bias potential
+SPRING_V0	Rate at which the bias potential is shifted in uc/fs; default=0
+STEP_MAX	The flag STEP_MAX defines the trust radius (upper limit) for the optimization step (in ) in the...; default=0.1
+STEP_SIZE	The flag STEP_SIZE defines the trial step size for the optimization step (in ) in the Improved Dimer...; default=0.01
+STOP_ON	STOP_ON defines if the code should stop on errors only or also on alerts; options=Error/Alert; default=Error
+SYMPREC	SYMPREC determines to which accuracy the positions in the POSCAR file must be specified (as of...; default=10^{-5}
+SYSTEM	The "title string" defined by SYSTEM is for the user only and should help the user to identify what...; default=unknown system
+TEBEG	TEBEG sets the starting temperature (in K) for an ab-initio molecular dynamics run (IBRION=0) and...; default=0
+TEEND	TEEND sets the final temperature (in K) for an ab-initio molecular-dynamics run; default=TEBEG
+TILAMBDA	TILAMBDA defines the coupling parameter used in Thermodynamic integration using a Hessian reference....; default=0.0
+TIME	TIME controls the time step for IALGO=5X and for the initial (steepest descent) phase of IALGO=4X; default=0.4
+TRANSPORT_NEDOS	Choose the number of points in the Gauss-Legendre integration grid for the computation of the Onsager...; default=501
+TRANSPORT_RELAXATION_TIME	Value of the constant relaxation time in unit of seconds; default=1E-14
+TSUBSYS	TSUBSYS sets the temperatures for the atomic subsystems in calculations with multiple Anderson...
+VACPOTFLAT	Maximum permissible 2D-averaged electric field for a region considered to be field-free in eV/A; default=0.1
+VALUE_MAX	VALUE_MAX sets the upper limits for the monitoring of geometric parameters (in case VASP was compiled...
+VALUE_MIN	VALUE_MIN sets the lower limits for the monitoring of geometric parameters (in case VASP was compiled...
+VCA	VCA is short for the virtual crystal approximation; the tag allows to "weight" each species found in...; default=read from the POTCAR file
+VCAIMAGES	The tag VCAIMAGES allows to perform thermodynamic integrations (TI); it defines the coupling parameter; default=-1
+VCUTOFF	The parameter VCUTOFF sets the energy cutoff for bare Coulomb matrix elements and controls the basis...; default=1.1 ENCUTGW
+VDW_A1	VDW_A1 sets the scaling a_{1} of the critical radii in the rational Becke-Johnson damping function of...
+VDW_A2	VDW_A2 sets the offset a_{2} of the critical radii in the rational Becke-Johnson damping function of...
+VDW_ALPHA	VDW_ALPHA defines the polarizability _{0} (bohr^{3}) for each species defined in the POSCAR file
+VDW_BETA	VDW_BETA sets the offset for the damping radius or the power for the zero-damping component in the...
+VDW_C6	VDW_C6 defines the C_6 parameters ({Jnm}^{6}{mol}^{-1}) for each species defined in the POSCAR file
+VDW_C6AU	VDW_C6AU defines the C_6 parameters ({Hartree} {bohr}^{6}) for each species defined in the POSCAR file
+VDW_CNRADIUS	VDW_CNRADIUS (in A) sets the coordination number cutoff of the DFT-D3 and DFT-D4 methods; defaults=21.17/15.88
+VDW_D	VDW_D defines the damping parameter d; defaults=20/0.6966/6
+VDW_R0	VDW_R0 defines the R_0 parameters () for each species defined in the POSCAR file
+VDW_R0AU	VDW_R0AU defines the R_0 parameters (bohr) for each species defined in the POSCAR file
+VDW_RADIUS	VDW_RADIUS (in A) sets the two-body interaction cutoff in van der Waals methods; defaults=50/50.20/31.75
+VDW_S6	VDW_S6 sets a parameter in the damping function of van der Waals methods
+VDW_S8	VDW_S8 sets the scaling s_{8} of the dipole-quadrupole dispersion of the DFT-D3 and DFT-D4 methods
+VDW_S9	VDW_S9 sets the contribution of the three-body term to the dispersion energy; defaults=1/0
+VDW_SR	VDW_SR sets a parameter in the damping function of van der Waals methods
+VDW_SR8	VDW_SR8 sets the radii scaling s_{r,8} in the dipole-quadrupole zero-damping function of the DFT-D3...
+VELOCITY	Determines whether the ionic velocities are written to the vaspout.h5 file during an MD run; T=on, F=off; default=false
+VOSKOWN	Determines whether Vosko-Wilk-Nusair interpolation is used or not; options=0/1; default=0
+WANNIER90_WIN	WANNIER90_WIN sets the content of the wannier90.win file; default=None
+WC	WC specifies the weight factor for each step in Broyden mixing scheme (IMIX=4); default=1000
+WEIMIN	WEIMIN specifies the maximum weight for a band to be considered empty; defaults=0.001/0
+WRT_DENSITY	Select which densities associated to the local potential are written as a post-processing step; default=None
+WRT_NMRCUR	Allows to write the NMR current response in atomic units to file; options=0/1/2/3/4; default=0
+WRT_POTENTIAL	Select which component of the local potential to be written as a post-processing step; default=None
+XC	Specifies a combination of exchange-correlation functionals; options=Combination of functionals; defaults=GGA/METAGGA/The functional specified by LEXCH in...
+XCM_PN	XCm_Pn, where m=1, 2, and n=1, 2, allows to modify the parameters in a semilocal functional
+XC_C	Multiplication factors for the components of the functional given by the XC tag; default=1.0*NXC
+ZAB_VDW	The tag ZAB_VDW specifies the value of the parameter Z_{ab} in the kernel of the nonlocal vdW-DF...; default=-0.8491

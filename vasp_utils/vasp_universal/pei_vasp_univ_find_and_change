@@ -2,35 +2,102 @@
 # B. Yin
 
 
-if [ -z "$1" ]; then      # empty is true 
+if [ "$#" -eq 0 ]; then
     echo "==>  Please indicate the tag to modify. Abort!"
-    exit 
+    exit 1
 fi
 
-
-if [ -z "$2" ]; then      # empty is true
-    echo "==>  Please input the new value. Abort!"
-    exit
+if [ "$#" -lt 2 ] || [ $(( $# % 2 )) -ne 0 ]; then
+    echo "==>  Please provide option/value pairs, for example: -nbands 18 -algo Normal. Abort!"
+    exit 1
 fi
 
 # For INCAR tag changes, "comment" only comments the existing matched line.
 # Use "comment:value" to rewrite the tag with value and keep it commented.
-comment_mode="none"
-value1=$2
-if [ "$2" = "comment" ]; then
-    comment_mode="keep"
-    value1=""
-elif [[ "$2" == comment:* ]]; then
-    comment_mode="rewrite"
-    value1=${2#comment:}
-fi
+# Multiple option/value pairs are validated together, then applied from left to right.
+# INCAR tags without a dedicated case are accepted as -tag_name and written in uppercase.
+script_path=$(readlink -f "${BASH_SOURCE[0]}")
+script_dir=$(dirname "$script_path")
+tag_help_file="${script_dir}/incar_tag_help_vaspwiki.tsv"
+
+
+get_tag_help(){
+    local tag1=$1
+    local lookup_tag=$tag1
+    local tag_help
+
+    # These Wiki entries describe numbered tag families rather than literal keys.
+    case "$tag1" in
+        IMAGE_[0-9]*) lookup_tag="IMAGE_1" ;;
+        LIBXC1_P[0-9]*) lookup_tag="LIBXC1_PN" ;;
+        LIBXC2_P[0-9]*) lookup_tag="LIBXC2_PN" ;;
+        XC[0-9]*_P[0-9]*) lookup_tag="XCM_PN" ;;
+    esac
+
+    if [ -f "$tag_help_file" ]; then
+        tag_help=$(awk -F '\t' -v tag="$lookup_tag" '$1 == tag {print $2; exit}' "$tag_help_file")
+    fi
+    if [ -z "$tag_help" ]; then
+        tag_help="VASP INCAR tag; verify spelling and options in VASP Wiki"
+    fi
+    printf '%s' "$tag_help"
+}
+
+
+check_option_pair(){
+    local option=$1
+    local raw_value=$2
+    local raw_tag
+
+    if [ -z "$raw_value" ]; then
+        echo "==>  Empty value for option $option. Abort!"
+        return 1
+    fi
+    case "$option" in
+        -*)
+            raw_tag=${option#-}
+            case "$raw_tag" in
+                ""|*[!A-Za-z0-9_/]*)
+                    echo "==>  Invalid option $option. Use letters, numbers, '_', or '/'. Abort!"
+                    return 1
+                    ;;
+            esac
+            ;;
+        *)
+            echo "==>  Option $option must start with '-'. Abort!"
+            return 1
+            ;;
+    esac
+}
+
+
+replace_line(){
+    local file_path=$1
+    local line_number=$2
+    local replacement=$3
+    local temp_path
+
+    temp_path=$(mktemp "${file_path}.pei_tmp.XXXXXX") || return 1
+    if ! {
+        head -n "$((line_number - 1))" "$file_path"
+        printf '%s\n' "$replacement"
+        tail -n "+$((line_number + 1))" "$file_path"
+    } > "$temp_path"; then
+        rm "$temp_path"
+        return 1
+    fi
+    chmod --reference="$file_path" "$temp_path" || return 1
+    mv "$temp_path" "$file_path"
+}
 
 
 
 sub_change(){
-    file1=$1
-    tag1=$2
-    str1=$3
+    local file1=$1
+    local tag1=$2
+    local str1=$3
+    local filen
+    local j1
 
     if [ "$comment_mode" = "rewrite" ]; then
         if ! echo "$str1" | grep -q -E "^[[:space:]]*#"; then
@@ -53,18 +120,26 @@ sub_change(){
             echo $str1
         fi
         if [ "$j1" = "" ]; then
-            echo "no $tag1 in the file"
-	    else 
+            if [ "$comment_mode" = "keep" ]; then
+                echo "no $tag1 in the file; nothing to comment"
+            else
+                # Keep the appended tag on its own line even if INCAR lacks a final newline.
+                if [ -s "$filen" ] && [ "$(tail -c 1 "$filen" | od -An -t u1 | tr -d '[:space:]')" != "10" ]; then
+                    printf '\n' >> "$filen"
+                fi
+                printf '%s\n' "$str1" >> "$filen"
+                echo "added $tag1 to $filen"
+            fi
+        else
             if [ "$comment_mode" = "keep" ]; then
                 if sed -n "${j1}p" "$filen" | grep -q -E "^[[:space:]]*#"; then
                     echo "already commented"
                 else
-                    sed "${j1}s/^/#/" "$filen" > temp
-                    mv temp "$filen"
+                    str1="#$(sed -n "${j1}p" "$filen")"
+                    replace_line "$filen" "$j1" "$str1" || exit 1
                 fi
             else
-                sed $j1's/.*/'"$str1"'/' $filen > temp
-                mv temp $filen
+                replace_line "$filen" "$j1" "$str1" || exit 1
             fi
         fi
     done
@@ -76,6 +151,21 @@ sub_change(){
 
 
 
+
+process_option(){
+    local comment_mode="none"
+    local value1=$2
+    local str
+    local tag1
+    local tag_help
+
+    if [ "$2" = "comment" ]; then
+        comment_mode="keep"
+        value1=""
+    elif [[ "$2" == comment:* ]]; then
+        comment_mode="rewrite"
+        value1=${2#comment:}
+    fi
 
 case "$1" in
 
@@ -313,7 +403,34 @@ case "$1" in
         sub_change  INCAR  "NSIM"  "$str"
         ;;
 
+    -*)
+        tag1=${1#-}
+        case "$tag1" in
+            ""|*[!A-Za-z0-9_/]*)
+                echo "==>  Invalid INCAR tag option $1. Use letters, numbers, '_', or '/'. Abort!"
+                exit 1
+                ;;
+        esac
+        tag1=$(printf '%s' "$tag1" | tr '[:lower:]' '[:upper:]')
+        tag_help=$(get_tag_help "$tag1")
+        str=" $tag1= $value1      # $tag_help"
+        sub_change INCAR "$tag1" "$str"
+        ;;
+
     *)  echo "==>  Option $1 not recognized. Abort!"
-        exit
+        exit 1
         ;;
 esac
+}
+
+
+largs=("$@")
+
+# Validate every pair before editing any file, so malformed trailing input cannot cause partial changes.
+for ((index = 0; index < ${#largs[@]}; index += 2)); do
+    check_option_pair "${largs[index]}" "${largs[index + 1]}" || exit 1
+done
+
+for ((index = 0; index < ${#largs[@]}; index += 2)); do
+    process_option "${largs[index]}" "${largs[index + 1]}"
+done
