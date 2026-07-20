@@ -222,7 +222,8 @@ def build_parser() -> argparse.ArgumentParser:
               pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
                   --mode each-subdir --dir_root ./y_dir --chunks 5 \\
                   --module_profile_type zcm6-vasp-0 --launcher_type srun \\
-                  --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
+                  --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 \\
+                  --child_wall_time 2-00:00:00 --parent_wall_time 7-00:00:00 --if_sbatch
 
               # 恢复历史行为：each-subdir 的每个 chunk 各提交一个父作业
               pei_slurm_univ_submit --preset zcm6-vasp-0 \\
@@ -290,6 +291,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--partition", help="Slurm 分区（-p）。无 --preset 时必填。")
     parser.add_argument("--nodes", type=int, help="节点数（-N）。无 --preset 时必填。")
     parser.add_argument("--ncores", type=int, help="核数（-n）。无 --preset 时必填。")
+    parser.add_argument(
+        "--child_wall_time",
+        help=("计算子作业的最大 wall time，例如 12:00:00 或 2-00:00:00；仅 parallel / "
+              "each-subdir 生效。默认不生成 #SBATCH --time 行。"),
+    )
+    parser.add_argument(
+        "--parent_wall_time",
+        help=("父/编排作业的最大 wall time，例如 24:00:00 或 7-00:00:00；仅 each-subdir / "
+              "single-alloc 生效。默认不生成 #SBATCH --time 行。"),
+    )
 
     # —— 提交开关 ——
     # 接收布尔值：--if_sbatch True / --if_sbatch False；裸写 --if_sbatch 等价于 True；
