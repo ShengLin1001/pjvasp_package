@@ -65,13 +65,13 @@ def get_help_epilog() -> str:
             "why a directory is skipped:",
             "  Only a real calculation directory holds both POSCAR and CONTCAR, so the",
             "  check runs exactly in the per-job directories of pei_slurm_univ_submit",
-            "  --mode parallel / each-subdir. An orchestrating parent job runs from",
+            "  -mode parallel / each_subdir. An orchestrating parent job runs from",
             "  path_root/slurm/, which holds no structures, and is skipped.",
             "",
             "common usage:",
             "  pei_vasp_univ_check_phase_transition                    # current directory",
-            "  pei_vasp_univ_check_phase_transition --dir ./y_dir/1",
-            "  pei_vasp_univ_check_phase_transition --quiet            # only the verdict line",
+            "  pei_vasp_univ_check_phase_transition -dir ./y_dir/1",
+            "  pei_vasp_univ_check_phase_transition -quiet            # only the verdict line",
             "",
             "called automatically by:",
             "  pei_vasp_univ_monitor_error   # once per running job, on its StdOut directory",
@@ -104,22 +104,22 @@ parser = argparse.ArgumentParser(
     formatter_class=argparse.RawDescriptionHelpFormatter,
 )
 parser.add_argument(
-    "--dir",
+    "-dir",
     default=".",
     help="Directory holding the two structures. Default: .",
 )
 parser.add_argument(
-    "--initial",
+    "-initial",
     default="POSCAR",
     help="Reference structure file name. Default: POSCAR",
 )
 parser.add_argument(
-    "--final",
+    "-final",
     default="CONTCAR",
     help="Current structure file name. Default: CONTCAR",
 )
 parser.add_argument(
-    "--quiet",
+    "-quiet",
     action="store_true",
     help="Print only the one-line verdict, not the per-phase count table.",
 )

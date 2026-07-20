@@ -113,7 +113,7 @@ def check_phase_transition(path_dir: Path = None,
     The check is skipped whenever either structure is missing or empty. That is the
     intended behaviour, not an error: it is what makes the check apply only to real
     calculation directories (``parallel`` mode jobs, or the per-subdirectory jobs of
-    ``each-subdir``) and silently pass over an orchestrating parent job, whose
+    ``each_subdir``) and silently pass over an orchestrating parent job, whose
     directory holds no structures at all.
 
     Args:

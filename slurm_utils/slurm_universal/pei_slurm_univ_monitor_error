@@ -29,11 +29,12 @@ print_help(){
     echo -e "  ${GREEN}-vasp${NC}             pei_vasp_univ_monitor_error   VASP: error keywords, progress, CNA phase check"
     echo ""
     echo -e "${YELLOW}Options:${NC}"
-    echo -e "  ${GREEN}--dry-run${NC}         write the job script but do not sbatch it"
+    echo -e "  ${GREEN}-dry_run${NC}         write the job script but do not sbatch it"
     echo -e "  ${GREEN}-h, --help${NC}        show this help"
     echo -e "  Anything else is passed ${BLUE}through${NC} to the engine monitor, e.g.:"
-    echo -e "  ${GREEN}--cancel-on-phase-change${NC}   scancel a job when CONTCAR's CNA phases drift from POSCAR's"
-    echo -e "  ${GREEN}--no-phase-check${NC}           skip the CNA phase check"
+    echo -e "  ${GREEN}-phase_check${NC}              enable the CNA phase check (disabled by default)"
+    echo -e "  ${GREEN}-cancel_on_phase_change${NC}   scancel a job when CONTCAR's CNA phases drift from POSCAR's"
+    echo -e "  ${GREEN}-no_phase_check${NC}           keep the CNA phase check disabled (compatibility option)"
     echo -e "  (see ${GREEN}pei_vasp_univ_monitor_error --help${NC} for the full list)"
     echo ""
     echo -e "${YELLOW}Environment:${NC}"
@@ -43,7 +44,7 @@ print_help(){
     echo ""
     echo -e "${YELLOW}Notes:${NC}"
     echo -e "  - The watchdog watches ${BLUE}all${NC} of your jobs, so submit it ${BLUE}once${NC}, after your"
-    echo -e "    calculations are queued. It passes its own \$SLURM_JOB_ID as skip_jobid and"
+    echo -e "    calculations are queued. It passes its own \$SLURM_JOB_ID via -skip_ljobid and"
     echo -e "    exits by itself once no job of yours is RUNNING or PENDING."
     echo -e "  - It takes only 1 node / 1 core; the script and its slurm-*.out land in"
     echo -e "    ${BLUE}\$PEI_MONITOR_DIR${NC} so they do not mix with your calculation outputs."
@@ -52,8 +53,9 @@ print_help(){
     echo -e "    ${GREEN}pei_vasp_univ_monitor_error --help${NC} (see 'Summary sections')."
     echo ""
     echo -e "${YELLOW}Example:${NC}"
-    echo -e "  $(basename "$0") -vasp                              # watch + report"
-    echo -e "  $(basename "$0") -vasp --cancel-on-phase-change     # also scancel on a phase transition"
+    echo -e "  $(basename "$0") -vasp                              # monitor error keywords only"
+    echo -e "  $(basename "$0") -vasp -phase_check                # also report phase transitions"
+    echo -e "  $(basename "$0") -vasp -phase_check -cancel_on_phase_change"
     echo -e "  PEI_MONITOR_PARTITION=amd_256 $(basename "$0") -vasp"
     echo ""
 }
@@ -65,7 +67,7 @@ fail(){
 
 ## Generate the watchdog job script and submit it.
 # 参数原样透传给引擎监控脚本："$@" 里可能带引号/空格，用 printf %q 逐个转义后再写进脚本，
-# 否则 --foo "a b" 到了作业脚本里会被重新词分割成两个参数。
+# 否则 -foo "a b" 到了作业脚本里会被重新词分割成两个参数。
 sub_monitor(){
     monitor_cmd="$1"
     shift
@@ -95,13 +97,13 @@ sub_monitor(){
 #SBATCH -J $PEI_MONITOR_JOBNAME
 
 # 自动生成，请勿手改 —— 由 pei_slurm_univ_monitor_error 每次运行时覆盖。
-# 传自己的 JOB_ID 作为 skip_jobid，否则监控器会把自己算成"还有作业在跑"而永不退出。
-srun $monitor_cmd "\$SLURM_JOB_ID"$monitor_args
+# 传自己的 JOB_ID 到 skip list，否则监控器会把自己算成"还有作业在跑"而永不退出。
+srun $monitor_cmd -skip_ljobid "\$SLURM_JOB_ID"$monitor_args
 EOF
     chmod +x "$script_path"
 
     if [[ "$dry_run" -eq 1 ]]; then
-        echo -e "==> ⏭️  --dry-run: script written, not submitted."
+        echo -e "==> ⏭️  -dry_run: script written, not submitted."
         echo -e "==> 📍 submit it with: cd $monitor_dir && sbatch $script_path"
         return 0
     fi
@@ -132,11 +134,11 @@ fi
 engine="$1"
 shift
 
-# --dry-run 是本脚本自己的开关，不能透传给下游监控器（它不认），先摘出来。
+# -dry_run 是本脚本自己的开关，不能透传给下游监控器（它不认），先摘出来。
 dry_run=0
 largs=()
 for arg in "$@"; do
-    if [[ "$arg" == "--dry-run" ]]; then
+    if [[ "$arg" == "-dry_run" ]]; then
         dry_run=1
     else
         largs+=("$arg")
