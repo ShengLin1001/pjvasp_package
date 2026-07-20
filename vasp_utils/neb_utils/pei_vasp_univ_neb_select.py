@@ -9,13 +9,13 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description='处理NEB数据文件，提取指定frame的信息')
-parser.add_argument('--frame', type=int, default=None,
+parser.add_argument('-frame', type=int, default=None,
                     help='要提取的frame编号')
 
 args = parser.parse_args()
 
 if args.frame == None:
-    raise ValueError("You must input this parameter --frame")
+    raise ValueError("You must input this parameter -frame")
 
 myroot = Path(os.getcwd())
 path_neb_full = myroot / "p_neb_full.dat"

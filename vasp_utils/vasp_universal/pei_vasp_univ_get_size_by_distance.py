@@ -7,11 +7,11 @@ from ase.io import read
 
 # --- 1️⃣ 解析命令行参数 ---
 parser = argparse.ArgumentParser(description="Generate k-points sizes by distance.")
-parser.add_argument("-i", "--input", type=str, default="CONTCAR", help="Input structure file (default: CONTCAR)")
-parser.add_argument("-o", "--output", type=str, default="p_get_size_by_distance.txt", help="Output text file")
-parser.add_argument("--rmin", type=int, default=20, help="Minimum distance (default: 20)")
-parser.add_argument("--rmax", type=int, default=100, help="Maximum distance (default: 100)")
-parser.add_argument("--rstep", type=int, default=1, help="Distance step (default: 1)")
+parser.add_argument("-input", type=str, default="CONTCAR", help="Input structure file (default: CONTCAR)")
+parser.add_argument("-output", type=str, default="p_get_size_by_distance.txt", help="Output text file")
+parser.add_argument("-rmin", type=int, default=20, help="Minimum distance (default: 20)")
+parser.add_argument("-rmax", type=int, default=100, help="Maximum distance (default: 100)")
+parser.add_argument("-rstep", type=int, default=1, help="Distance step (default: 1)")
 args = parser.parse_args()
 
 # --- 2️⃣ 读取结构文件 ---

@@ -23,9 +23,9 @@ LOGFILE="git_sync_$(date +%F).log"
 # ---- Parse input arguments ----
 for arg in "$@"; do
   case $arg in
-    --push-only) PUSH_ONLY=true ;;
-    --log) ENABLE_LOG=true ;;
-    --no-stash) USE_STASH=false ;;
+    -push_only) PUSH_ONLY=true ;;
+    -log) ENABLE_LOG=true ;;
+    -no_stash) USE_STASH=false ;;
   esac
 done
 

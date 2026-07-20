@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Extract VASP structure information for each subdirectory in ``y_dir``.
 
-Like ``pei_vasp_univ_post``, the script searches ``--root`` (default ``.``) for
+Like ``pei_vasp_univ_post``, the script searches ``-root`` (default ``.``) for
 every ``y_dir`` and writes each table next to the ``y_dir`` it came from, so a
 multi-mode tree such as ``y_hoec_energy/*/y_dir`` is done in one go. Pass
-``--no-recursive`` to fall back to a single explicit work directory.
+``-no_recursive`` to fall back to a single explicit work directory.
 
 Functions:
     get_args: Parse command-line arguments.
@@ -102,7 +102,7 @@ def get_help_epilog() -> str:
         [
             "outputs:",
             "  p_post_struct_infos.txt   per-job a/c/energy/CNA summary",
-            "                            (--compare-poscar appends POSCAR columns)",
+            "                            (-compare_poscar appends POSCAR columns)",
             "  p_post_struct_infos2.txt  per-phase POSCAR/CONTCAR counts with same",
             "                            checks (✅/❌); the " + CROSS_JOB_LABEL + " footer row",
             "                            checks each count column across all jobs",
@@ -111,16 +111,16 @@ def get_help_epilog() -> str:
             "",
             "common usage:",
             "  pei_vasp_univ_get_struct_infos                      # every y_dir under .",
-            "  pei_vasp_univ_get_struct_infos --compare-poscar",
-            "  pei_vasp_univ_get_struct_infos --compare-poscar --strict",
-            "  pei_vasp_univ_get_struct_infos --structure POSCAR --output p_post_struct_infos_poscar.txt",
+            "  pei_vasp_univ_get_struct_infos -compare_poscar",
+            "  pei_vasp_univ_get_struct_infos -compare_poscar -strict",
+            "  pei_vasp_univ_get_struct_infos -structure POSCAR -output p_post_struct_infos_poscar.txt",
             "",
             "batch usage (every y_dir under a tree, e.g. y_hoec_energy/*/y_dir):",
             "  cd y_hoec_energy && pei_vasp_univ_get_struct_infos",
-            "  pei_vasp_univ_get_struct_infos --root ./y_hoec_energy --compare-poscar",
+            "  pei_vasp_univ_get_struct_infos -root ./y_hoec_energy -compare_poscar",
             "",
             "single work directory (no search):",
-            "  pei_vasp_univ_get_struct_infos --no-recursive --workdir ./y_dir",
+            "  pei_vasp_univ_get_struct_infos -no_recursive -workdir ./y_dir",
         ]
     )
 
@@ -140,29 +140,29 @@ def get_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--root",
+        "-root",
         default=".",
-        help="Root searched recursively for every --workdir. Default: .",
+        help="Root searched recursively for every -workdir. Default: .",
     )
     parser.add_argument(
-        "--workdir",
+        "-workdir",
         default="./y_dir",
         help=(
             "Directory containing calculation subdirectories. Only its name is "
-            "used as the search target, unless --no-recursive treats it as the "
+            "used as the search target, unless -no_recursive treats it as the "
             "one work directory. Default: ./y_dir"
         ),
     )
     parser.add_argument(
-        "--no-recursive",
+        "-no_recursive",
         action="store_true",
         help=(
-            "Do not search --root; process --workdir alone and honour the full "
-            "--output/--output2 paths."
+            "Do not search -root; process -workdir alone and honour the full "
+            "-output/-output2 paths."
         ),
     )
     parser.add_argument(
-        "--output",
+        "-output",
         default="p_post_struct_infos.txt",
         help=(
             "Output table path. Only its file name is used, next to each y_dir "
@@ -170,7 +170,7 @@ def get_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--output2",
+        "-output2",
         default="p_post_struct_infos2.txt",
         help=(
             "POSCAR/CONTCAR per-phase comparison table path. Only its file name "
@@ -179,17 +179,17 @@ def get_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--structure",
+        "-structure",
         default="CONTCAR",
         help="VASP structure file to summarize. Default: CONTCAR",
     )
     parser.add_argument(
-        "--compare-poscar",
+        "-compare_poscar",
         action="store_true",
         help="Also append POSCAR atom/FCC/HCP comparison columns to the main table.",
     )
     parser.add_argument(
-        "--strict",
+        "-strict",
         action="store_true",
         help=(
             "Return exit code 1 when any row fails, any POSCAR comparison "
@@ -242,8 +242,8 @@ def get_lworkdir(args: argparse.Namespace) -> list[Path]:
         args: Parsed argparse namespace.
 
     Returns:
-        Work directory list: every directory named like --workdir under the
-        --root tree, or the single --workdir when --no-recursive is given.
+        Work directory list: every directory named like -workdir under the
+        -root tree, or the single -workdir when -no_recursive is given.
     """
     if args.no_recursive:
         return [get_path_checked(args.workdir, "workdir")]
@@ -765,7 +765,7 @@ def main() -> int:
     ### prepare
     print("================ 📁 Search")
     if args.no_recursive:
-        print("📍 root    : - (--no-recursive)")
+        print("📍 root    : - (-no_recursive)")
     else:
         print("📍 root    : " + str(Path(args.root).expanduser().resolve()))
     print("📍 workdirs: " + str(len(lworkdir)) + " x " + Path(args.workdir).name)
@@ -776,8 +776,8 @@ def main() -> int:
     lskipped: list[Path] = []
     for path_workdir in lworkdir:
         # Each table lands beside its own y_dir, matching where
-        # pei_vasp_univ_post drops its y_post_* files. --no-recursive instead
-        # honours the full --output path the caller gave.
+        # pei_vasp_univ_post drops its y_post_* files. -no_recursive instead
+        # honours the full -output path the caller gave.
         path_base = None if args.no_recursive else path_workdir.parent
         path_output = get_path_output(args.output, path_base)
         path_output2 = get_path_output(args.output2, path_base)

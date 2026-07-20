@@ -9,11 +9,11 @@
 #
 # Examples:
 #   pei_slurm_univ_useful_command.sh                  # cheat sheet only
-#   pei_slurm_univ_useful_command.sh --claude         # probe Anthropic / Claude endpoints
-#   pei_slurm_univ_useful_command.sh --openai --proxy # probe OpenAI + show proxy vars
-#   pei_slurm_univ_useful_command.sh --net --ip       # probe every group + public IP
-#   pei_slurm_univ_useful_command.sh --monitor        # summarize running Slurm jobs
-#   pei_slurm_univ_useful_command.sh --all --timeout 3
+#   pei_slurm_univ_useful_command.sh -claude         # probe Anthropic / Claude endpoints
+#   pei_slurm_univ_useful_command.sh -openai -proxy # probe OpenAI + show proxy vars
+#   pei_slurm_univ_useful_command.sh -net -ip       # probe every group + public IP
+#   pei_slurm_univ_useful_command.sh -monitor        # summarize running Slurm jobs
+#   pei_slurm_univ_useful_command.sh -all -timeout 3
 
 script_name="$(basename "$0")"
 timeout_default=8
@@ -106,7 +106,7 @@ squeue_retry() {
 
 ################ endpoint table ################
 
-# Keys are the CLI flags (--openai, --claude, ...); values are space separated URLs.
+# Keys are the CLI flags (-openai, -claude, ...); values are space separated URLs.
 # Endpoints are picked so that a single group answers one practical question:
 # "can I use this tool from this node?"
 declare -A dict_group_url=(
@@ -200,7 +200,7 @@ net_check_group() {
 net_show_ip() {
     local service out
 
-    section "Network / --ip"
+    section "Network / -ip"
     for service in "ipinfo.io" "cip.cc"; do
         printf '  %s▶️  curl %s%s\n' "$command_color" "$service" "$reset"
         out="$(curl -s --max-time "$timeout" "$service" 2>/dev/null)"
@@ -219,7 +219,7 @@ net_show_proxy() {
     local lvar=(http_proxy https_proxy all_proxy no_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY NO_PROXY)
     local var value found=0
 
-    section "Network / --proxy"
+    section "Network / -proxy"
     for var in "${lvar[@]}"; do
         value="${!var:-}"
         if [ -n "$value" ]; then
@@ -458,7 +458,7 @@ slurm_monitor() {
     local out_age out_delta err_age err_delta
     declare -A dict_still_running=()
 
-    section "Slurm / --monitor"
+    section "Slurm / -monitor"
     if ! squeue_out="$(squeue_retry -h -u "$USER" -t RUNNING \
         -o '%i|%j|%M|%S|%P|%D|%C|%R')"; then
         fail "squeue failed while reading RUNNING jobs (after retries): $squeue_out"
@@ -639,7 +639,7 @@ print_commands() {
         "Show accounting information for a finished job."
     command_item "tail -f slurm-<jobid>.out" \
         "Follow the Slurm output file."
-    command_item "$script_name --monitor" \
+    command_item "$script_name -monitor" \
         "Summarize RUNNING jobs and sample StdOut/StdErr activity."
 
     section "VASP"
@@ -669,11 +669,11 @@ print_commands() {
         "Show public IP information."
     command_item "curl cip.cc" \
         "Show public IP and location information."
-    command_item "$script_name --openai" \
+    command_item "$script_name -openai" \
         "Probe the OpenAI endpoints (Codex / ChatGPT) from this node."
-    command_item "$script_name --claude" \
+    command_item "$script_name -claude" \
         "Probe the Anthropic endpoints (Claude Code / claude.ai) from this node."
-    command_item "$script_name --net --ip --proxy" \
+    command_item "$script_name -net -ip -proxy" \
         "Probe every endpoint group, show the public IP and the proxy variables."
     command_item "$script_name --help" \
         "List all options of this script."
@@ -688,23 +688,23 @@ usage() {
     printf 'With options, probe the network, monitor Slurm jobs, or print selected information.\n\n'
     printf 'Options:\n'
     printf '  -h, --help         Show this help and exit.\n'
-    printf '      --openai       Probe OpenAI endpoints (api.openai.com, chatgpt.com).\n'
-    printf '      --claude       Probe Anthropic endpoints (api.anthropic.com, claude.ai).\n'
-    printf '      --github       Probe GitHub web / API / raw download.\n'
-    printf '      --pypi         Probe PyPI, its CDN and the Tsinghua mirror.\n'
-    printf '      --conda        Probe Anaconda / conda-forge and the Tsinghua mirror.\n'
-    printf '      --base         Probe baseline sites (baidu / google / 1.1.1.1).\n'
-    printf '      --net          Probe all groups above.\n'
-    printf '      --ip           Show public IP information (ipinfo.io, cip.cc).\n'
-    printf '      --proxy        Show the proxy environment variables.\n'
-    printf '      --monitor      Show RUNNING jobs, paths, resources and output activity.\n'
-    printf '      --monitor-interval SEC\n'
+    printf '      -openai       Probe OpenAI endpoints (api.openai.com, chatgpt.com).\n'
+    printf '      -claude       Probe Anthropic endpoints (api.anthropic.com, claude.ai).\n'
+    printf '      -github       Probe GitHub web / API / raw download.\n'
+    printf '      -pypi         Probe PyPI, its CDN and the Tsinghua mirror.\n'
+    printf '      -conda        Probe Anaconda / conda-forge and the Tsinghua mirror.\n'
+    printf '      -base         Probe baseline sites (baidu / google / 1.1.1.1).\n'
+    printf '      -net          Probe all groups above.\n'
+    printf '      -ip           Show public IP information (ipinfo.io, cip.cc).\n'
+    printf '      -proxy        Show the proxy environment variables.\n'
+    printf '      -monitor      Show RUNNING jobs, paths, resources and output activity.\n'
+    printf '      -monitor_interval SEC\n'
     printf '                      Seconds between output-file samples (default: %s).\n' "$monitor_interval_default"
-    printf '      --stale-after SEC\n'
+    printf '      -stale_after SEC\n'
     printf '                      Warn after this many seconds without output (default: %s).\n' "$stale_after_default"
-    printf '      --commands     Print the cheat sheet (implicit when no option is given).\n'
-    printf '      --all          --net --ip --proxy --commands.\n'
-    printf '      --timeout SEC  Per-request timeout in seconds (default: %s).\n' "$timeout_default"
+    printf '      -commands     Print the cheat sheet (implicit when no option is given).\n'
+    printf '      -all          -net -ip -proxy -commands.\n'
+    printf '      -timeout SEC  Per-request timeout in seconds (default: %s).\n' "$timeout_default"
 }
 # to here
 
@@ -725,53 +725,53 @@ while [ $# -gt 0 ]; do
             usage
             exit 0
             ;;
-        --base|--openai|--claude|--github|--pypi|--conda)
-            lgroup_selected+=("${1#--}")
+        -base|-openai|-claude|-github|-pypi|-conda)
+            lgroup_selected+=("${1#-}")
             ;;
-        --net)
+        -net)
             lgroup_selected+=("${lgroup_order[@]}")
             ;;
-        --ip)
+        -ip)
             show_ip=1
             ;;
-        --proxy)
+        -proxy)
             show_proxy=1
             ;;
-        --monitor)
+        -monitor)
             show_monitor=1
             ;;
-        --monitor-interval)
-            [ $# -ge 2 ] || fail "--monitor-interval needs a value in seconds"
-            monitor_interval="$(check_positive_int "$2" "--monitor-interval")" || exit 1
+        -monitor_interval)
+            [ $# -ge 2 ] || fail "-monitor_interval needs a value in seconds"
+            monitor_interval="$(check_positive_int "$2" "-monitor_interval")" || exit 1
             shift
             ;;
-        --monitor-interval=*)
-            monitor_interval="$(check_positive_int "${1#--monitor-interval=}" "--monitor-interval")" || exit 1
+        -monitor_interval=*)
+            monitor_interval="$(check_positive_int "${1#-monitor_interval=}" "-monitor_interval")" || exit 1
             ;;
-        --stale-after)
-            [ $# -ge 2 ] || fail "--stale-after needs a value in seconds"
-            stale_after="$(check_positive_int "$2" "--stale-after")" || exit 1
+        -stale_after)
+            [ $# -ge 2 ] || fail "-stale_after needs a value in seconds"
+            stale_after="$(check_positive_int "$2" "-stale_after")" || exit 1
             shift
             ;;
-        --stale-after=*)
-            stale_after="$(check_positive_int "${1#--stale-after=}" "--stale-after")" || exit 1
+        -stale_after=*)
+            stale_after="$(check_positive_int "${1#-stale_after=}" "-stale_after")" || exit 1
             ;;
-        --commands)
+        -commands)
             show_commands=1
             ;;
-        --all)
+        -all)
             lgroup_selected+=("${lgroup_order[@]}")
             show_ip=1
             show_proxy=1
             show_commands=1
             ;;
-        --timeout)
-            [ $# -ge 2 ] || fail "--timeout needs a value in seconds"
-            timeout="$(check_positive_int "$2" "--timeout")" || exit 1
+        -timeout)
+            [ $# -ge 2 ] || fail "-timeout needs a value in seconds"
+            timeout="$(check_positive_int "$2" "-timeout")" || exit 1
             shift
             ;;
-        --timeout=*)
-            timeout="$(check_positive_int "${1#--timeout=}" "--timeout")" || exit 1
+        -timeout=*)
+            timeout="$(check_positive_int "${1#-timeout=}" "-timeout")" || exit 1
             ;;
         *)
             printf '%s❌ ERROR: unknown option: %s%s\n\n' "$fail_color" "$1" "$reset" >&2
@@ -804,7 +804,7 @@ fi
 [ "$show_monitor" -eq 1 ] && slurm_monitor
 
 if [ "${#lgroup_selected[@]}" -gt 0 ]; then
-    # Deduplicate while keeping the canonical order (--net --claude must not probe twice).
+    # Deduplicate while keeping the canonical order (-net -claude must not probe twice).
     for group in "${lgroup_order[@]}"; do
         for selected in "${lgroup_selected[@]}"; do
             if [ "$group" = "$selected" ]; then
