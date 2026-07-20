@@ -96,6 +96,15 @@ pei_vasp_univ_sbatch <dir> [exe] [完成标记] [EDIFF过大标记]
 引擎只做结构性检查和编排，不提前读取 OUTCAR 等业务文件。是否完成/跳过由 `cmd`
 或下游 runner 自己判定，沿用退出码 `0/10/其它` 契约。
 
+`parallel` / `each-subdir` 可用 `--child_wall_time 2-00:00:00` 给每个
+`<case>/sub_slurm_univ.sh` 写入 `#SBATCH --time=2-00:00:00`。不传该选项时不生成
+`--time` 行；它不限制 each-subdir 的 shared parent/chunk worker，`single-alloc` 也忽略它。
+
+父脚本使用独立的 `--parent_wall_time 7-00:00:00`。它作用于 `each-subdir` 的 shared
+parent / 可独立恢复的 chunk worker，以及 `single-alloc` 的 chunk 父脚本；`parallel`
+没有父作业，会忽略该参数。shared parent 用普通 Bash 启动 worker 时，worker 内的
+`#SBATCH` 指令只是注释，不会产生二次资源申请。
+
 ### 3.1 `parallel` —— 全部铺开，互不等待
 
 ```
@@ -187,6 +196,8 @@ K 条调度流；父作业数量由 `--chunk_parent_layout` 决定：
 **通用旋钮：**
 
 - `--lsubdir a b c`：只跑这几个一级子目录（默认全部）。
+- `--child_wall_time D-HH:MM:SS`：可选的计算子作业 wall time；不设置则不额外限制。
+- `--parent_wall_time D-HH:MM:SS`：可选的父作业 wall time；不设置则不额外限制。
 - 不传 `--if_sbatch`：只生成/覆盖脚本，不提交作业。
 - `--if_sbatch False`：与不传相同；裸写 `--if_sbatch` 等价于 True。
 - 业务完成检查放在 `--cmd` 或 runner 内，不在通用编排层提前读取结果文件。

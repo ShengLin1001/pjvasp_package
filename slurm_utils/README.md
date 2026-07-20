@@ -33,6 +33,8 @@ pei_slurm_univ_submit.py --mode parallel|each-subdir|single-alloc [options]
     --launcher_type srun|mpirun|none
     --cmd "CMD ..."              # 每个计算目录实际执行的命令
     --partition PART --nodes N --ncores C
+    --child_wall_time D-HH:MM:SS  # 可选；只限制 parallel / each-subdir 计算子作业
+    --parent_wall_time D-HH:MM:SS # 可选；只限制 each-subdir / single-alloc 父作业
     --if_sbatch [True|False]     # 默认 False：只生成脚本；裸写等价于 True
 ```
 
@@ -63,7 +65,8 @@ pei_slurm_univ_submit.py --list-presets
 pei_slurm_univ_submit.py --show-preset zcm6-vasp-0
 
 # each-subdir：5 条流、1 个 shared 父作业；不加 --if_sbatch 时只生成
-pei_slurm_univ_submit.py --preset zcm6-vasp-0 --chunks 5 --if_sbatch
+pei_slurm_univ_submit.py --preset zcm6-vasp-0 --chunks 5 \
+    --child_wall_time 2-00:00:00 --parent_wall_time 7-00:00:00 --if_sbatch
 
 # each-subdir 历史布局：5 条流、5 个父作业
 pei_slurm_univ_submit.py --preset zcm6-vasp-0 --chunks 5 \
@@ -73,6 +76,16 @@ pei_slurm_univ_submit.py --preset zcm6-vasp-0 --chunks 5 \
 pei_slurm_univ_submit.py --preset zcm6-vasp-0 --mode single-alloc \
     --chunks 5 --if_sbatch
 ```
+
+`--child_wall_time` 会向每个计算目录的 `sub_slurm_univ.sh` 写入
+`#SBATCH --time=<值>`。不设置时完全不写该行；它只适用于 `parallel` 和
+`each-subdir`，不会限制 each-subdir 的父/worker 脚本，在 `single-alloc` 下会被忽略。
+
+`--parent_wall_time` 则限制 `each-subdir` / `single-alloc` 的父脚本。shared 布局下，
+实际提交的 shared parent 和保留用于独立恢复的 chunk worker 都会写入该设置；worker 被
+shared parent 作为普通 Bash 脚本运行时，脚本内的 `#SBATCH` 行不会重复申请资源。
+`parallel` 没有父作业，因此会忽略该参数。each-subdir 的父时限应覆盖子作业排队和运行
+期间的全部等待时间；父作业超时不会自动取消已经提交给 Slurm 的计算子作业。
 
 生成文件布局：
 
