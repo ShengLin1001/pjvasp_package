@@ -991,14 +991,14 @@ class PeiN2p2:
     def _dict_to_cli_args(dict_args: dict) -> str:
         """将参数字典转换为 pei_slurm_univ_submit.py 的 CLI 长选项字符串。
 
-        每个 (key, value) 一律渲染成 ``--key <value>``（CLI 全用 -- 长选项，dest 与库形参
+        每个 (key, value) 一律渲染成 ``-key <value>``（CLI 全用单横杠长选项，dest 与库形参
         同名）；值统一 ``str`` 化后用 ``shlex.quote`` 保护，关键是 cmd 里的空格 / 双引号 /
         ``$(pwd)`` 不被本层 shell 解析——原样塞进 CLI、写进生成的作业脚本，留到作业里
         （cwd=epoch 目录）才展开 ``$(pwd)``。
 
         Note:
-            布尔值也按 ``--key True`` / ``--key False`` 输出，不做 store_true 式的省略；
-            CLI 侧 ``--if_sbatch`` / ``--if_use_my_launcher`` 用
+            布尔值也按 ``-key True`` / ``-key False`` 输出，不做 store_true 式的省略；
+            CLI 侧 ``-if_sbatch`` / ``-if_use_my_launcher`` 用
             ``type=parse_bool, nargs="?", const=True`` 接收，故能正确解析这种带值写法。
 
         Args:
@@ -1009,14 +1009,14 @@ class PeiN2p2:
         """
         parts = []
         for key, value in dict_args.items():
-            parts.append(f'--{key} {shlex.quote(str(value))}')
+            parts.append(f'-{key} {shlex.quote(str(value))}')
         return ' '.join(parts)
 
 
     # y_n2p2_train/y_post
     def post_properties(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
                         if_sbatch: bool = False,
-                        dict_args_to_submit: dict = {'preset': 'zcm6-lammps-0',
+                        dict_args_to_submit: dict = {'preset': 'zcm6_lammps_0',
                                                      'chunks': 5,
                                                      'nodes': 1,
                                                      'ncores': 1,
@@ -1112,7 +1112,7 @@ class PeiN2p2:
         #   cmd       runner + 4 个参数（见上；含 $(pwd)，必须留到作业里展开）
         #   path_root 扫描根（绝对）；其下 dir_root 的每个子目录 = 一个 epoch 物性作业
         #   dir_root  epoch 子目录的父目录（相对 path_root），覆盖 preset 的 ./y_dir
-        # 用 {**d, ...} 生成新 dict（不改可变默认参数）；--if_sbatch 决定真提交还是 dry-run。
+        # 用 {**d, ...} 生成新 dict（不改可变默认参数）；-if_sbatch 决定真提交还是 dry-run。
         args_to_submit = {**dict_args_to_submit,
                           'cmd': cmd,
                           'path_root': str(dir_epoch_scan_root.resolve()),
@@ -1124,8 +1124,8 @@ class PeiN2p2:
 
         self.last_jobids = []
         if if_sbatch:
-            # pei_slurm_univ_submit 不回传作业号；each-subdir 的默认 shared 布局只提交
-            # 1 个编排父作业，per-chunk / single-alloc 则可能提交多个。用提交前后的
+            # pei_slurm_univ_submit 不回传作业号；each_subdir 的默认 shared 布局只提交
+            # 1 个编排父作业，per_chunk / single_alloc 则可能提交多个。用提交前后的
             # squeue 差集捕获本次新增 Slurm 作业；只要 shared 父作业仍在等待，它就能
             # 覆盖后续尚未提交的 chunk 子作业尾部。
             before = self._snapshot_jobids()

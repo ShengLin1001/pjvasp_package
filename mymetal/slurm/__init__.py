@@ -10,5 +10,5 @@ library entry point.
 Modules:
     - submit: Builds the base/sequential Slurm scripts, splits job directories
         into scheduling lanes, and drives submission in the parallel /
-        each-subdir / single-alloc modes via ``pei_slurm_univ_submit``.
+        each_subdir / single_alloc modes via ``pei_slurm_univ_submit``.
 """

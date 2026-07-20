@@ -20,78 +20,78 @@ Slurm 提交脚本按用途分到三个子目录（均已加入 PATH，命令可
 
 整套批量提交围绕**一个软件无关的 Python 引擎** `pei_slurm_univ_submit.py`：它从
 `path_root/dir_root` 递归查找任意深度的所有 `y_dir`，汇总每个 `y_dir` 的一级计算
-子目录，生成 Slurm 脚本，并按 `--mode` 选择提交方式。VASP、LAMMPS 和 n2p2 的
-差异只体现在 module profile、launcher 和 `--cmd`。
+子目录，生成 Slurm 脚本，并按 `-mode` 选择提交方式。VASP、LAMMPS 和 n2p2 的
+差异只体现在 module profile、launcher 和 `-cmd`。
 
 ```
-pei_slurm_univ_submit.py --mode parallel|each-subdir|single-alloc [options]
-    --path_root PATH             # 项目绝对根目录；默认当前目录
-    --dir_root DIR               # y_dir 递归搜索根；相对 path_root，默认当前目录
-    --lsubdir a b c              # 按 basename 过滤全部 y_dir；默认处理发现的全部
-    --chunks K                   # sequential 模式的并发调度流数量
-    --chunk_parent_layout auto|shared|per-chunk
-    --module_profile_type NAME   # module 环境配置
-    --launcher_type srun|mpirun|none
-    --cmd "CMD ..."              # 每个计算目录实际执行的命令
-    --partition PART --nodes N --ncores C
-    --child_wall_time D-HH:MM:SS  # 可选；只限制 parallel / each-subdir 计算子作业
-    --parent_wall_time D-HH:MM:SS # 可选；只限制 each-subdir / single-alloc 父作业
-    --if_sbatch [True|False]     # 默认 False：只生成脚本；裸写等价于 True
+pei_slurm_univ_submit.py -mode parallel|each_subdir|single_alloc [options]
+    -path_root PATH             # 项目绝对根目录；默认当前目录
+    -dir_root DIR               # y_dir 递归搜索根；相对 path_root，默认当前目录
+    -lsubdir a b c              # 按 basename 过滤全部 y_dir；默认处理发现的全部
+    -chunks K                   # sequential 模式的并发调度流数量
+    -chunk_parent_layout auto|shared|per_chunk
+    -module_profile_type NAME   # module 环境配置
+    -launcher_type srun|mpirun|none
+    -cmd "CMD ..."              # 每个计算目录实际执行的命令
+    -partition PART -nodes N -ncores C
+    -child_wall_time D-HH:MM:SS  # 可选；只限制 parallel / each_subdir 计算子作业
+    -parent_wall_time D-HH:MM:SS # 可选；只限制 each_subdir / single_alloc 父作业
+    -if_sbatch [True|False]     # 默认 False：只生成脚本；裸写等价于 True
 ```
 
-三种 `--mode`（每个目录的动作）：
+三种 `-mode`（每个目录的动作）：
 
-| `--mode` | 每个目录做什么 | 父作业布局 |
+| `-mode` | 每个目录做什么 | 父作业布局 |
 |---|---|---|
 | `parallel` | 生成并直接 `sbatch sub_slurm_univ.sh`，不等待 | 每目录一个独立计算作业 |
-| `each-subdir` | chunk worker 逐个 `sbatch --wait sub_slurm_univ.sh` | 默认 1 个 `-n 1` shared 父作业管理 K 条 worker |
-| `single-alloc` | chunk 父作业内直接执行 `cmd`，按退出码统计 | K 个持有完整计算资源的父作业 |
+| `each_subdir` | chunk worker 逐个 `sbatch --wait sub_slurm_univ.sh` | 默认 1 个 `-n 1` shared 父作业管理 K 条 worker |
+| `single_alloc` | chunk 父作业内直接执行 `cmd`，按退出码统计 | K 个持有完整计算资源的父作业 |
 
-`--chunks K` 表示 **K 条并发调度流**，不再等同于 K 个父作业。默认
-`--chunk_parent_layout auto` 的解析规则为：
+`-chunks K` 表示 **K 条并发调度流**，不再等同于 K 个父作业。默认
+`-chunk_parent_layout auto` 的解析规则为：
 
-- `each-subdir` → `shared`：只 `sbatch` 一个父作业，父作业内并发启动 K 个 Bash worker；
-- `single-alloc` → `per-chunk`：仍 `sbatch` K 个父作业，每个 chunk 独占自己的计算资源；
+- `each_subdir` → `shared`：只 `sbatch` 一个父作业，父作业内并发启动 K 个 Bash worker；
+- `single_alloc` → `per_chunk`：仍 `sbatch` K 个父作业，每个 chunk 独占自己的计算资源；
 - `parallel` → 忽略 chunks，因为本来就是每目录一个独立作业。
 
-`each-subdir` 如需恢复历史 K 父作业行为，可显式传
-`--chunk_parent_layout per-chunk`。`single-alloc` 不允许使用 `shared`。
+`each_subdir` 如需恢复历史 K 父作业行为，可显式传
+`-chunk_parent_layout per_chunk`。`single_alloc` 不允许使用 `shared`。
 
 ## 常见用法
 
 内置 preset 已提供常见环境和资源组合：
 
 ```bash
-pei_slurm_univ_submit.py --list-presets
-pei_slurm_univ_submit.py --show-preset zcm6-vasp-0
+pei_slurm_univ_submit.py -list_presets
+pei_slurm_univ_submit.py -show_preset zcm6_vasp_0
 
-# each-subdir：5 条流、1 个 shared 父作业；不加 --if_sbatch 时只生成
-pei_slurm_univ_submit.py --preset zcm6-vasp-0 --chunks 5 \
-    --child_wall_time 2-00:00:00 --parent_wall_time 7-00:00:00 --if_sbatch
+# each_subdir：5 条流、1 个 shared 父作业；不加 -if_sbatch 时只生成
+pei_slurm_univ_submit.py -preset zcm6_vasp_0 -chunks 5 \
+    -child_wall_time 2-00:00:00 -parent_wall_time 7-00:00:00 -if_sbatch
 
-# each-subdir 历史布局：5 条流、5 个父作业
-pei_slurm_univ_submit.py --preset zcm6-vasp-0 --chunks 5 \
-    --chunk_parent_layout per-chunk --if_sbatch
+# each_subdir 历史布局：5 条流、5 个父作业
+pei_slurm_univ_submit.py -preset zcm6_vasp_0 -chunks 5 \
+    -chunk_parent_layout per_chunk -if_sbatch
 
-# single-alloc：5 条流、5 个计算资源父作业
-pei_slurm_univ_submit.py --preset zcm6-vasp-0 --mode single-alloc \
-    --chunks 5 --if_sbatch
+# single_alloc：5 条流、5 个计算资源父作业
+pei_slurm_univ_submit.py -preset zcm6_vasp_0 -mode single_alloc \
+    -chunks 5 -if_sbatch
 ```
 
-所有 preset 默认以当前提交位置（`--dir_root .`）为递归搜索根。比如从一个包含多个
+所有 preset 默认以当前提交位置（`-dir_root .`）为递归搜索根。比如从一个包含多个
 `mode/.../y_dir/<case>` 的 HOEC 顶层运行时，无需逐个进入 mode；任意深度的全部
-`y_dir/<case>` 会先统一排序，再由 `--chunks` 分配到各调度流。显式指定
-`--dir_root /path/to/search-root` 时仍采用同样的递归规则。如果 `dir_root` 本身就是
+`y_dir/<case>` 会先统一排序，再由 `-chunks` 分配到各调度流。显式指定
+`-dir_root /path/to/search-root` 时仍采用同样的递归规则。如果 `dir_root` 本身就是
 `y_dir`，该目录也会被纳入发现。
 
-`--child_wall_time` 会向每个计算目录的 `sub_slurm_univ.sh` 写入
+`-child_wall_time` 会向每个计算目录的 `sub_slurm_univ.sh` 写入
 `#SBATCH --time=<值>`。不设置时完全不写该行；它只适用于 `parallel` 和
-`each-subdir`，不会限制 each-subdir 的父/worker 脚本，在 `single-alloc` 下会被忽略。
+`each_subdir`，不会限制 each_subdir 的父/worker 脚本，在 `single_alloc` 下会被忽略。
 
-`--parent_wall_time` 则限制 `each-subdir` / `single-alloc` 的父脚本。shared 布局下，
+`-parent_wall_time` 则限制 `each_subdir` / `single_alloc` 的父脚本。shared 布局下，
 实际提交的 shared parent 和保留用于独立恢复的 chunk worker 都会写入该设置；worker 被
 shared parent 作为普通 Bash 脚本运行时，脚本内的 `#SBATCH` 行不会重复申请资源。
-`parallel` 没有父作业，因此会忽略该参数。each-subdir 的父时限应覆盖子作业排队和运行
+`parallel` 没有父作业，因此会忽略该参数。each_subdir 的父时限应覆盖子作业排队和运行
 期间的全部等待时间；父作业超时不会自动取消已经提交给 Slurm 的计算子作业。
 
 生成文件布局：
@@ -117,8 +117,8 @@ chunk worker 文件名保持不变，可在失败恢复时单独 `sbatch`。shar
 n2p2、LAMMPS 或普通 shell 命令：
 
 ```bash
-pei_slurm_univ_submit.py --preset zcm6-n2p2-train-0 --if_sbatch
-pei_slurm_univ_submit.py --preset zcm6-lammps-0 --cmd "lmp -in lmp.in" --if_sbatch
+pei_slurm_univ_submit.py -preset zcm6_n2p2_train_0 -if_sbatch
+pei_slurm_univ_submit.py -preset zcm6_lammps_0 -cmd "lmp -in lmp.in" -if_sbatch
 ```
 
 ## 文件一览（按子目录）

@@ -1,4 +1,4 @@
-"""Tests for shared and historical per-chunk Slurm parent layouts."""
+"""Tests for shared and historical per_chunk Slurm parent layouts."""
 
 import os
 import subprocess
@@ -78,7 +78,7 @@ class TestJobDirectoryDiscovery(unittest.TestCase):
             "if_output": False,
         }
 
-        for mode in ("each-subdir", "single-alloc"):
+        for mode in ("each_subdir", "single_alloc"):
             with self.subTest(mode=mode):
                 line = generate_slurm_script_sequential(**dict_args, mode=mode)
                 self.assertIn('cd "$subdir"', line)
@@ -144,16 +144,16 @@ class TestChunkParentLayout(unittest.TestCase):
         }
 
     def test_auto_layout_is_mode_sensitive(self):
-        self.assertEqual(check_chunk_parent_layout("auto", "each-subdir"), "shared")
-        self.assertEqual(check_chunk_parent_layout("auto", "single-alloc"), "per-chunk")
-        self.assertEqual(check_chunk_parent_layout("auto", "parallel"), "per-chunk")
+        self.assertEqual(check_chunk_parent_layout("auto", "each_subdir"), "shared")
+        self.assertEqual(check_chunk_parent_layout("auto", "single_alloc"), "per_chunk")
+        self.assertEqual(check_chunk_parent_layout("auto", "parallel"), "per_chunk")
 
     def test_shared_layout_is_rejected_for_single_alloc(self):
         with self.assertRaises(SystemExit):
-            check_chunk_parent_layout("shared", "single-alloc")
+            check_chunk_parent_layout("shared", "single_alloc")
 
     def test_each_subdir_auto_submits_one_shared_parent(self):
-        dict_mock = self.run_submit("each-subdir", chunks=3)
+        dict_mock = self.run_submit("each_subdir", chunks=3)
 
         self.assertEqual(dict_mock["base"].call_count, 3)
         self.assertEqual(dict_mock["worker"].call_count, 3)
@@ -166,7 +166,7 @@ class TestChunkParentLayout(unittest.TestCase):
 
     def test_each_subdir_per_chunk_keeps_historical_parent_count(self):
         dict_mock = self.run_submit(
-            "each-subdir", chunks=3, chunk_parent_layout="per-chunk"
+            "each_subdir", chunks=3, chunk_parent_layout="per_chunk"
         )
 
         self.assertEqual(dict_mock["worker"].call_count, 3)
@@ -174,7 +174,7 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["system"].call_count, 3)
 
     def test_single_alloc_chunks_remain_separate_parent_jobs(self):
-        dict_mock = self.run_submit("single-alloc", chunks=3)
+        dict_mock = self.run_submit("single_alloc", chunks=3)
 
         self.assertEqual(dict_mock["base"].call_count, 0)
         self.assertEqual(dict_mock["worker"].call_count, 3)
@@ -183,7 +183,7 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["worker"].call_args_list[0].args[1:3], (2, 16))
 
     def test_chunk_scripts_stay_in_path_root_slurm_directory(self):
-        for mode in ("each-subdir", "single-alloc"):
+        for mode in ("each_subdir", "single_alloc"):
             with self.subTest(mode=mode):
                 dict_mock = self.run_submit(mode, chunks=3)
                 for call_worker in dict_mock["worker"].call_args_list:
@@ -193,7 +193,7 @@ class TestChunkParentLayout(unittest.TestCase):
                     )
 
     def test_child_wall_time_only_reaches_calculation_child_jobs(self):
-        for mode in ("parallel", "each-subdir"):
+        for mode in ("parallel", "each_subdir"):
             with self.subTest(mode=mode):
                 dict_mock = self.run_submit(
                     mode, chunks=1, child_wall_time="2-00:00:00"
@@ -203,13 +203,13 @@ class TestChunkParentLayout(unittest.TestCase):
                     dict_mock["base"].call_args_list[0].kwargs["wall_time"],
                     "2-00:00:00",
                 )
-                if mode == "each-subdir":
+                if mode == "each_subdir":
                     self.assertIsNone(
                         dict_mock["worker"].call_args.kwargs["wall_time"]
                     )
 
         dict_mock = self.run_submit(
-            "single-alloc", chunks=1, child_wall_time="2-00:00:00"
+            "single_alloc", chunks=1, child_wall_time="2-00:00:00"
         )
         self.assertEqual(dict_mock["base"].call_count, 0)
 
@@ -240,7 +240,7 @@ class TestChunkParentLayout(unittest.TestCase):
 
     def test_parent_wall_time_only_reaches_parent_scripts(self):
         dict_mock = self.run_submit(
-            "each-subdir", chunks=3, parent_wall_time="7-00:00:00"
+            "each_subdir", chunks=3, parent_wall_time="7-00:00:00"
         )
         self.assertEqual(
             dict_mock["worker"].call_args_list[0].kwargs["wall_time"],
@@ -253,7 +253,7 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertIsNone(dict_mock["base"].call_args_list[0].kwargs["wall_time"])
 
         dict_mock = self.run_submit(
-            "single-alloc", chunks=1, parent_wall_time="7-00:00:00"
+            "single_alloc", chunks=1, parent_wall_time="7-00:00:00"
         )
         self.assertEqual(
             dict_mock["worker"].call_args.kwargs["wall_time"],
@@ -282,7 +282,7 @@ class TestChunkParentLayout(unittest.TestCase):
             cmd="run-one-case",
             if_use_my_launcher=False,
             group=[Path("/jobs/001")],
-            mode="each-subdir",
+            mode="each_subdir",
         )
         line_shared = generate_slurm_script_shared_parent(
             **dict_args,

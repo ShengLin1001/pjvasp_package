@@ -29,18 +29,18 @@ except Exception:
 
 # ================ 📋 常见用法预设（preset 注册表）
 # 把以前散落在文件底部、彼此用同名 args 反复覆盖且从不被调用的 dict，收敛成键控注册表。
-# --preset NAME 先用这里的值灌默认，命令行再显式覆盖个别字段（如 --ncores 64）。
+# -preset NAME 先用这里的值灌默认，命令行再显式覆盖个别字段（如 -ncores 64）。
 # 只放各场景的「区别性」字段；path_root / lsubdir 等沿用 CLI 默认，不在 import 期固化 cwd。
 MODULE_BLOCKS = {
                         "none": "# module-profile: none (no environment modules loaded)",
-                        "zcm6-vasp-0": (
-                            "# module-profile: zcm6-vasp  (VASP 5.4.4)\n"
+                        "zcm6_vasp_0": (
+                            "# module-profile: zcm6_vasp  (VASP 5.4.4)\n"
                             "source /public3/soft/modules/module.sh\n"
                             "module load mpi/intel/17.0.7-thc\n"
                             'export PATH="/public3/home/scg6928/mysoft/vasp/vasp/544-yin/vasp.5.4.4.pl2/bin:$PATH"\n'
                         ),
-                        "zcm6-lammps-0": (
-                            "# module-profile: zcm6-lammps  (LAMMPS)\n"
+                        "zcm6_lammps_0": (
+                            "# module-profile: zcm6_lammps  (LAMMPS)\n"
                             "source /public3/soft/modules/module.sh\n"
                             "module load cmake/3.24.1\n"
                             "module load gcc/12.2\n"
@@ -48,8 +48,8 @@ MODULE_BLOCKS = {
                             "module load fftw/3.3.8-mpi\n"
                             'export PATH="/public3/home/scg6928/mysoft/lammps/lammps/20240829/lammps-stable_29Aug2024_update2/build:$PATH"\n'
                         ),
-                        "zcm6-lammps-1": (
-                            "# module-profile: zcm6-lammps  (LAMMPS)\n"
+                        "zcm6_lammps_1": (
+                            "# module-profile: zcm6_lammps  (LAMMPS)\n"
                             "source /public3/soft/modules/module.sh\n"
                             "module load cmake/3.24.1\n"
                             "module load gcc/12.2\n"
@@ -57,8 +57,8 @@ MODULE_BLOCKS = {
                             "module load fftw/3.3.8-mpi\n"
                             'export PATH="/public3/home/scg6928/mysoft/lammps/lammps/lammps-nc/build:$PATH"\n'
                         ),
-                        "zcm6-n2p2-0": (
-                            "# module-profile: zcm6-n2p2  (n2p2)\n"
+                        "zcm6_n2p2_0": (
+                            "# module-profile: zcm6_n2p2  (n2p2)\n"
                             "source /public3/soft/modules/module.sh\n"
                             "module load eigen/3.8.8-cyc\n"
                             "module load gsl/2.5-cjj\n"
@@ -68,12 +68,12 @@ MODULE_BLOCKS = {
                     }
 
 PRESETS = {
-    # zcm6-vasp-0：每个子目录一个 VASP 作业，启动器经 MY_LAUNCHER 传递
-    "zcm6-vasp-0": {
-        "mode": "each-subdir",
+    # zcm6_vasp_0：每个子目录一个 VASP 作业，启动器经 MY_LAUNCHER 传递
+    "zcm6_vasp_0": {
+        "mode": "each_subdir",
         "dir_root": Path("."),
         "chunks": 5,
-        "module_profile_type": "zcm6-vasp-0",
+        "module_profile_type": "zcm6_vasp_0",
         "launcher_type": "srun",
         "cmd": "pei_vasp_univ_sbatch",
         "if_use_my_launcher": True,
@@ -81,12 +81,12 @@ PRESETS = {
         "nodes": 1,
         "ncores": 128,
     },
-    # zcm6-n2p2-scaling-0：nnp-scaling，单核估算并行扩展性
-    "zcm6-n2p2-scaling-0": {
-        "mode": "each-subdir",
+    # zcm6_n2p2_scaling_0：nnp-scaling，单核估算并行扩展性
+    "zcm6_n2p2_scaling_0": {
+        "mode": "each_subdir",
         "dir_root": Path("."),
         "chunks": 5,
-        "module_profile_type": "zcm6-n2p2-0",
+        "module_profile_type": "zcm6_n2p2_0",
         "launcher_type": "mpirun",
         "cmd": "nnp-scaling 10000",
         "if_use_my_launcher": False,
@@ -94,12 +94,12 @@ PRESETS = {
         "nodes": 1,
         "ncores": 1,
     },
-    # zcm6-n2p2-train-0：nnp-train，16–32 核是推荐区间
-    "zcm6-n2p2-train-0": {
-        "mode": "each-subdir",
+    # zcm6_n2p2_train_0：nnp-train，16–32 核是推荐区间
+    "zcm6_n2p2_train_0": {
+        "mode": "each_subdir",
         "dir_root": Path("."),
         "chunks": 5,
-        "module_profile_type": "zcm6-n2p2-0",
+        "module_profile_type": "zcm6_n2p2_0",
         "launcher_type": "mpirun",
         "cmd": "nnp-train",
         "if_use_my_launcher": False,
@@ -107,12 +107,12 @@ PRESETS = {
         "nodes": 1,
         "ncores": 24,
     },
-    # zcm6-lammps-0： 我自己编译的
-    "zcm6-lammps-0": {
-        "mode": "each-subdir",
+    # zcm6_lammps_0： 我自己编译的
+    "zcm6_lammps_0": {
+        "mode": "each_subdir",
         "dir_root": Path("."),
         "chunks": 5,
-        "module_profile_type": "zcm6-lammps-0",
+        "module_profile_type": "zcm6_lammps_0",
         "launcher_type": "srun",
         "cmd": "lmp -in lmp.in",
         "if_use_my_launcher": False,
@@ -121,11 +121,11 @@ PRESETS = {
         "ncores": 24,
     },
     # nc编译的
-    "zcm6-lammps-1": {
-        "mode": "each-subdir",
+    "zcm6_lammps_1": {
+        "mode": "each_subdir",
         "dir_root": Path("."),
         "chunks": 5,
-        "module_profile_type": "zcm6-lammps-1",
+        "module_profile_type": "zcm6_lammps_1",
         "launcher_type": "srun",
         "cmd": "lmp -in lmp.in",
         "if_use_my_launcher": False,
@@ -136,7 +136,7 @@ PRESETS = {
 }
 # to here ================
 
-# 受 preset / 命令行共同提供的「必填」字段。argparse 不再用 required=True 强制——否则 --preset
+# 受 preset / 命令行共同提供的「必填」字段。argparse 不再用 required=True 强制——否则 -preset
 # 经 set_defaults 灌进来的值满足不了 required 检查；改为合并后在 check_required 里统一兜底。
 REQUIRED_FIELDS = (
     "mode", "module_profile_type", "launcher_type",
@@ -158,8 +158,8 @@ def resolve_preset(name: str) -> dict:
 
 
 def print_presets():
-    # --list-presets：列出所有预设及关键字段，方便挑选。
-    print("📋 可用预设（--preset NAME）：")
+    # -list_presets：列出所有预设及关键字段，方便挑选。
+    print("📋 可用预设（-preset NAME）：")
     for name in sorted(PRESETS):
         p = PRESETS[name]
         print("  • " + name
@@ -171,7 +171,7 @@ def print_presets():
 
 
 def show_preset(name: str):
-    # --show-preset NAME：摊开单个预设的全部字段，核对后再 --preset 调用。
+    # -show_preset NAME：摊开单个预设的全部字段，核对后再 -preset 调用。
     preset = resolve_preset(name)
     print("📋 预设 " + name + "：")
     for key in sorted(preset):
@@ -182,12 +182,12 @@ def check_required(args):
     # 合并 preset + 命令行之后兜底：必填字段缺一不可（任一来源提供即可）。
     missing = [f for f in REQUIRED_FIELDS if getattr(args, f, None) is None]
     if missing:
-        fail("缺少必填参数：" + ", ".join("--" + m for m in missing)
-             + "；请在命令行直接指定，或用 --preset 提供（可用预设见 --list-presets）。")
+        fail("缺少必填参数：" + ", ".join("-" + m for m in missing)
+             + "；请在命令行直接指定，或用 -preset 提供（可用预设见 -list_presets）。")
 
 
 def parse_bool(value) -> bool:
-    # argparse 的 type 只在「显式传了值」时才被调用；裸写 --if_sbatch 走的是 const=True，
+    # argparse 的 type 只在「显式传了值」时才被调用；裸写 -if_sbatch 走的是 const=True，
     # 不会进这里。所以这里只管把 True/False（及常见同义词）字符串解析成 bool。
     if isinstance(value, bool):
         return value
@@ -210,115 +210,115 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent(
             """\
-            示例（三种模式与 each-subdir 兼容布局）：
+            示例（三种模式与 each_subdir 兼容布局）：
 
               # parallel：每个子目录一个独立作业，只提交不等待
-              pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
-                  --mode parallel --dir_root . --chunks 5 \\
-                  --module_profile_type zcm6-vasp-0 --launcher_type srun \\
-                  --cmd "echo Hello, World!" --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
+              pei_slurm_univ_submit -path_root /public3/home/scg6928/mywork/test \\
+                  -mode parallel -dir_root . -chunks 5 \\
+                  -module_profile_type zcm6_vasp_0 -launcher_type srun \\
+                  -cmd "echo Hello, World!" -partition amd_512 -nodes 2 -ncores 16 -if_sbatch
 
-              # each-subdir：编排作业里逐个 sbatch --wait 子作业
-              pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
-                  --mode each-subdir --dir_root . --chunks 5 \\
-                  --module_profile_type zcm6-vasp-0 --launcher_type srun \\
-                  --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 \\
-                  --child_wall_time 2-00:00:00 --parent_wall_time 7-00:00:00 --if_sbatch
+              # each_subdir：编排作业里逐个 sbatch --wait 子作业
+              pei_slurm_univ_submit -path_root /public3/home/scg6928/mywork/test \\
+                  -mode each_subdir -dir_root . -chunks 5 \\
+                  -module_profile_type zcm6_vasp_0 -launcher_type srun \\
+                  -cmd pei_vasp_univ_sbatch -partition amd_512 -nodes 2 -ncores 16 \\
+                  -child_wall_time 2-00:00:00 -parent_wall_time 7-00:00:00 -if_sbatch
 
-              # 恢复历史行为：each-subdir 的每个 chunk 各提交一个父作业
-              pei_slurm_univ_submit --preset zcm6-vasp-0 \\
-                  --chunk_parent_layout per-chunk --if_sbatch
+              # 恢复历史行为：each_subdir 的每个 chunk 各提交一个父作业
+              pei_slurm_univ_submit -preset zcm6_vasp_0 \\
+                  -chunk_parent_layout per_chunk -if_sbatch
 
-              # single-alloc：单次分配内顺序跑各子目录
-              pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
-                  --mode single-alloc --dir_root . --chunks 5 \\
-                  --module_profile_type zcm6-vasp-0 --launcher_type srun \\
-                  --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
+              # single_alloc：单次分配内顺序跑各子目录
+              pei_slurm_univ_submit -path_root /public3/home/scg6928/mywork/test \\
+                  -mode single_alloc -dir_root . -chunks 5 \\
+                  -module_profile_type zcm6_vasp_0 -launcher_type srun \\
+                  -cmd pei_vasp_univ_sbatch -partition amd_512 -nodes 2 -ncores 16 -if_sbatch
 
             预设（preset）：常见场景已封装在 PRESETS 里，可一行直呼，必填项由预设提供：
 
-              pei_slurm_univ_submit --preset zcm6-vasp-0                  # 直接用预设
-              pei_slurm_univ_submit --preset zcm6-vasp-0 --ncores 64      # 预设基础上覆盖个别项
-              pei_slurm_univ_submit --preset zcm6-n2p2-train-0 --if_sbatch True
-              pei_slurm_univ_submit --list-presets                      # 查看所有预设
-              pei_slurm_univ_submit --show-preset zcm6-vasp-0             # 查看某预设全部字段
+              pei_slurm_univ_submit -preset zcm6_vasp_0                  # 直接用预设
+              pei_slurm_univ_submit -preset zcm6_vasp_0 -ncores 64      # 预设基础上覆盖个别项
+              pei_slurm_univ_submit -preset zcm6_n2p2_train_0 -if_sbatch True
+              pei_slurm_univ_submit -list_presets                      # 查看所有预设
+              pei_slurm_univ_submit -show_preset zcm6_vasp_0             # 查看某预设全部字段
 
-            不加 --preset 时，--mode/--module_profile_type/--launcher_type/--cmd/
-            --partition/--nodes/--ncores 为必填；命令行显式值始终覆盖预设。
-            不加 --if_sbatch 时只生成脚本、不提交（dry）。
+            不加 -preset 时，-mode/-module_profile_type/-launcher_type/-cmd/
+            -partition/-nodes/-ncores 为必填；命令行显式值始终覆盖预设。
+            不加 -if_sbatch 时只生成脚本、不提交（dry）。
             """
         ),
     )
 
     # —— 预设 / 发现 ——
-    # --preset 先把某场景的默认值灌进来，命令行其余 flag 再覆盖；--list/--show 只读不跑。
-    parser.add_argument("--preset",
+    # -preset 先把某场景的默认值灌进来，命令行其余 flag 再覆盖；-list/-show 只读不跑。
+    parser.add_argument("-preset",
                         help="使用内置预设填充默认值（命令行可逐项覆盖）。可用：" + ", ".join(sorted(PRESETS)) + "。")
-    parser.add_argument("--list-presets", action="store_true",
+    parser.add_argument("-list_presets", action="store_true",
                         help="列出所有内置预设后退出。")
-    parser.add_argument("--show-preset", metavar="NAME",
+    parser.add_argument("-show_preset", metavar="NAME",
                         help="打印指定预设的全部字段后退出。")
 
     # —— 运行的基本模式 ——
-    parser.add_argument("--path_root", type=Path, default=Path.cwd(),
+    parser.add_argument("-path_root", type=Path, default=Path.cwd(),
                         help="根目录，必须是绝对路径；相对路径会被解析为绝对。默认当前目录。")
-    parser.add_argument("--mode",
-                        help="运行模式：parallel / each-subdir / single-alloc。无 --preset 时必填。")
-    parser.add_argument("--dir_root", type=Path, default=Path("."),
+    parser.add_argument("-mode",
+                        help="运行模式：parallel / each_subdir / single_alloc。无 -preset 时必填。")
+    parser.add_argument("-dir_root", type=Path, default=Path("."),
                         help=("递归搜索根，相对 path_root；自动查找其中任意深度的所有 y_dir，"
                               "并汇总其一级子目录。默认当前目录。"))
-    parser.add_argument("--lsubdir", nargs="*", default=None,
+    parser.add_argument("-lsubdir", nargs="*", default=None,
                         help=("计算子目录 basename 过滤列表；会在递归发现的所有 y_dir 中选择"
                               "同名目录。留空则处理全部。"))
-    parser.add_argument("--chunks", type=int, default=1,
-                        help="把作业目录分成多少条并发调度流（仅 each-subdir / single-alloc 生效）。默认 1。")
+    parser.add_argument("-chunks", type=int, default=1,
+                        help="把作业目录分成多少条并发调度流（仅 each_subdir / single_alloc 生效）。默认 1。")
     parser.add_argument(
-        "--chunk_parent_layout",
+        "-chunk_parent_layout",
         default="auto",
-        help=("chunk 父作业布局：auto / shared / per-chunk。auto 在 each-subdir 下用一个父作业"
-              "并发管理所有 chunk，在 single-alloc 下保持每个 chunk 一个父作业。"),
+        help=("chunk 父作业布局：auto / shared / per_chunk。auto 在 each_subdir 下用一个父作业"
+              "并发管理所有 chunk，在 single_alloc 下保持每个 chunk 一个父作业。"),
     )
 
     # —— script 相关参数 ——
-    parser.add_argument("--module_profile_type",
-                        help="环境 module profile：zcm6-vasp-0 / zcm6-lammps-0 / zcm6-n2p2-0。无 --preset 时必填。")
-    parser.add_argument("--launcher_type",
-                        help="并行启动器：srun / mpirun / none。无 --preset 时必填。")
-    parser.add_argument("--cmd",
-                        help="每个子目录里实际执行的命令。无 --preset 时必填。")
-    parser.add_argument("--if_use_my_launcher", type=parse_bool, nargs="?", const=True, default=False,
+    parser.add_argument("-module_profile_type",
+                        help="环境 module profile：zcm6_vasp_0 / zcm6_lammps_0 / zcm6_n2p2_0。无 -preset 时必填。")
+    parser.add_argument("-launcher_type",
+                        help="并行启动器：srun / mpirun / none。无 -preset 时必填。")
+    parser.add_argument("-cmd",
+                        help="每个子目录里实际执行的命令。无 -preset 时必填。")
+    parser.add_argument("-if_use_my_launcher", type=parse_bool, nargs="?", const=True, default=False,
                         help="通过 MY_LAUNCHER 环境变量传递启动器，而非在脚本里写死。")
 
     # —— 作业资源参数 ——
-    parser.add_argument("--partition", help="Slurm 分区（-p）。无 --preset 时必填。")
-    parser.add_argument("--nodes", type=int, help="节点数（-N）。无 --preset 时必填。")
-    parser.add_argument("--ncores", type=int, help="核数（-n）。无 --preset 时必填。")
+    parser.add_argument("-partition", help="Slurm 分区（-p）。无 -preset 时必填。")
+    parser.add_argument("-nodes", type=int, help="节点数（-N）。无 -preset 时必填。")
+    parser.add_argument("-ncores", type=int, help="核数（-n）。无 -preset 时必填。")
     parser.add_argument(
-        "--child_wall_time",
+        "-child_wall_time",
         help=("计算子作业的最大 wall time，例如 12:00:00 或 2-00:00:00；仅 parallel / "
-              "each-subdir 生效。默认不生成 #SBATCH --time 行。"),
+              "each_subdir 生效。默认不生成 #SBATCH --time 行。"),
     )
     parser.add_argument(
-        "--parent_wall_time",
-        help=("父/编排作业的最大 wall time，例如 24:00:00 或 7-00:00:00；仅 each-subdir / "
-              "single-alloc 生效。默认不生成 #SBATCH --time 行。"),
+        "-parent_wall_time",
+        help=("父/编排作业的最大 wall time，例如 24:00:00 或 7-00:00:00；仅 each_subdir / "
+              "single_alloc 生效。默认不生成 #SBATCH --time 行。"),
     )
 
     # —— 提交开关 ——
-    # 接收布尔值：--if_sbatch True / --if_sbatch False；裸写 --if_sbatch 等价于 True；
+    # 接收布尔值：-if_sbatch True / -if_sbatch False；裸写 -if_sbatch 等价于 True；
     # 完全不写则取默认 False（只生成脚本 dry run）。
-    parser.add_argument("--if_sbatch", type=parse_bool, nargs="?", const=True, default=False,
+    parser.add_argument("-if_sbatch", type=parse_bool, nargs="?", const=True, default=False,
                         help="是否真正 sbatch 提交：True/False（默认 False，只生成脚本 dry run）；"
-                             "裸写 --if_sbatch 等价于 True。")
+                             "裸写 -if_sbatch 等价于 True。")
 
     return parser
 
 
 def main():
     # ====== check ======
-    # 第一段只认 --preset：用 parse_known_args 容忍此刻其余必填项尚未给全。
+    # 第一段只认 -preset：用 parse_known_args 容忍此刻其余必填项尚未给全。
     pre = argparse.ArgumentParser(add_help=False)
-    pre.add_argument("--preset")
+    pre.add_argument("-preset")
     known, _ = pre.parse_known_args()
 
     parser = build_parser()
@@ -357,12 +357,12 @@ if __name__ == "__main__":
     main()
 
 ################################### ZCM6
-# 以下常见用法已收敛进顶部的 PRESETS 注册表，改用 --preset 一行直呼，例如：
-#   pei_slurm_univ_submit --preset zcm6-vasp-0
-#   pei_slurm_univ_submit --preset zcm6-n2p2-scaling-0
-#   pei_slurm_univ_submit --preset zcm6-n2p2-train-0 --ncores 32
-#   pei_slurm_univ_submit --preset zcm6-lammps-0
-# 发现 / 核对：--list-presets、--show-preset NAME。要新增场景就往 PRESETS 里加一项。
+# 以下常见用法已收敛进顶部的 PRESETS 注册表，改用 -preset 一行直呼，例如：
+#   pei_slurm_univ_submit -preset zcm6_vasp_0
+#   pei_slurm_univ_submit -preset zcm6_n2p2_scaling_0
+#   pei_slurm_univ_submit -preset zcm6_n2p2_train_0 -ncores 32
+#   pei_slurm_univ_submit -preset zcm6_lammps_0
+# 发现 / 核对：-list_presets、-show_preset NAME。要新增场景就往 PRESETS 里加一项。
 
 ###### python 通用 sbatch 包装（与本 CLI 无关，仅备忘）
 # python
