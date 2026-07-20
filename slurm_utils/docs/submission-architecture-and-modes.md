@@ -13,6 +13,11 @@
 切分、脚本生成与提交拓扑由 `mymetal.slurm.submit` 实现。父脚本和每目录 base 脚本均为
 运行时自动生成文件，不再依赖历史固定父 wrapper。
 
+目录发现以 `dir_root` 为递归搜索根：包含根本身在内，查找任意深度、名称严格等于
+`y_dir` 的目录，再把每个 `y_dir` 的一级子目录汇总为计算目录。因此从包含多个
+`mode/.../y_dir/<case>` 的顶层提交时，所有 mode 会进入同一次排序和 chunk 切分。
+显式传入 `--dir_root` 不会退回一级扫描；preset 默认使用当前目录 `.`。
+
 ```
 pei_slurm_univ_submit.py
   └─ mymetal.slurm.submit.pei_slurm_univ_submit
@@ -195,7 +200,8 @@ K 条调度流；父作业数量由 `--chunk_parent_layout` 决定：
 
 **通用旋钮：**
 
-- `--lsubdir a b c`：只跑这几个一级子目录（默认全部）。
+- `--dir_root PATH`：从该位置递归发现所有 `y_dir/<case>`；默认当前提交位置。
+- `--lsubdir a b c`：按 basename 过滤递归结果；多个 `y_dir` 中的同名目录会全部选中。
 - `--child_wall_time D-HH:MM:SS`：可选的计算子作业 wall time；不设置则不额外限制。
 - `--parent_wall_time D-HH:MM:SS`：可选的父作业 wall time；不设置则不额外限制。
 - 不传 `--if_sbatch`：只生成/覆盖脚本，不提交作业。

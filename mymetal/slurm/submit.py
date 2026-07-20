@@ -5,6 +5,7 @@ Functions:
     generate_slurm_script_base: Generate one calculation job script.
     generate_slurm_script_sequential: Generate one sequential chunk worker.
     generate_slurm_script_shared_parent: Generate one parent for chunk workers.
+    get_y_dir_lsubdir: Recursively discover jobs below every y_dir directory.
     split_chunks: Split calculation directories into balanced scheduling lanes.
     pei_slurm_univ_submit: Orchestrate script generation and optional submission.
 """
@@ -468,12 +469,67 @@ def generate_loop(group: list, mode: str, line_launcher: str):
 
 
 # prepare parts
+def get_y_dir_lsubdir(dir_root: Path) -> list[Path]:
+    """递归发现 ``dir_root`` 下所有 ``y_dir`` 的一级计算子目录。
+
+    搜索包含 ``dir_root`` 自身，因此既支持从工作流根目录统一发现多层 mode，
+    也支持把某个 ``y_dir`` 本身直接作为搜索根。只把每个 ``y_dir`` 的一级子目录
+    当作计算目录，不会把更深层的普通目录误当作独立作业。
+
+    Args:
+        dir_root: 递归搜索根目录，必须为绝对路径。
+
+    Returns:
+        按绝对路径排序的计算子目录列表。
+
+    Raises:
+        SystemExit: 当搜索根不存在、未发现 ``y_dir`` 或其中没有计算子目录时退出。
+    """
+    path_dir_root = Path(dir_root)
+    check_absolute_path(path_dir_root)
+    if not path_dir_root.is_dir():
+        fail(f"dir_root {path_dir_root} is not a directory")
+
+    ly_dir = []
+    if path_dir_root.name == "y_dir":
+        ly_dir.append(path_dir_root)
+    ly_dir.extend(
+        path_y_dir
+        for path_y_dir in path_dir_root.rglob("y_dir")
+        if path_y_dir.is_dir()
+    )
+    ly_dir = sorted(set(ly_dir))
+    if not ly_dir:
+        fail(
+            f"No y_dir directories found recursively under dir_root {path_dir_root}"
+        )
+
+    lsubdir = []
+    print(f"📁 Found {len(ly_dir)} y_dir directories under {path_dir_root}")
+    for path_y_dir in ly_dir:
+        ljob_dir = sorted(path_child for path_child in path_y_dir.iterdir()
+                          if path_child.is_dir())
+        print(f"  - {path_y_dir}: {len(ljob_dir)} job directories")
+        lsubdir.extend(ljob_dir)
+
+    lsubdir = sorted(set(lsubdir))
+    if not lsubdir:
+        fail(
+            "No job subdirectories found below y_dir directories under "
+            + str(path_dir_root)
+        )
+
+    print(f"📊 Discovered {len(lsubdir)} job directories in total")
+    return lsubdir
+
+
 def get_lsubdir(lsubdir: list[str] = None, dir_root: Path = None):
     """解析并检查计算子目录列表。
 
     Args:
-        lsubdir: 用户指定的子目录 basename 列表；为空时自动扫描 dir_root 下的子目录。
-        dir_root: 包含计算子目录的根目录。
+        lsubdir: 可选的计算子目录 basename 过滤列表；同名目录会在所有 ``y_dir``
+            中一并选中。为空时保留递归发现的全部计算目录。
+        dir_root: ``y_dir`` 的递归搜索根。
 
     Returns:
         经过检查的绝对子目录路径列表。
@@ -481,18 +537,29 @@ def get_lsubdir(lsubdir: list[str] = None, dir_root: Path = None):
     Raises:
         SystemExit: 当 dir_root 不存在、没有可用子目录，或子目录路径非法时退出。
     """
-    # 如果用户没指定
-    if lsubdir is None or len(lsubdir) == 0 :
-        if not dir_root.is_dir():
-            fail(f"dir_root {dir_root} is not a directory")
-        lsubdir = sorted([d for d in dir_root.iterdir() if d.is_dir()])
-        if len(lsubdir) == 0:
-            fail(f"No subdirectories found in dir_root {dir_root}")
-    # 如果用户指定了 list[str]，逐个检查 basename 后拼到 dir_root 下
+    path_dir_root = Path(dir_root)
+    check_absolute_path(path_dir_root)
+    ldiscovered = get_y_dir_lsubdir(path_dir_root)
+
+    # 显式 basename 是递归结果过滤器；多个 mode 中的同名 case 必须全部保留。
+    if lsubdir is None or len(lsubdir) == 0:
+        lsubdir = ldiscovered
     else:
         for subdir in lsubdir:
             check_basename(subdir)
-        lsubdir = [dir_root / Path(subdir) for subdir in lsubdir]
+        set_requested = set(lsubdir)
+        lsubdir = [
+            path_subdir for path_subdir in ldiscovered
+            if path_subdir.name in set_requested
+        ]
+        set_found = {path_subdir.name for path_subdir in lsubdir}
+        lmissing = sorted(set_requested - set_found)
+        if lmissing:
+            fail(
+                "Requested subdirectory basename(s) not found below any y_dir: "
+                + ", ".join(lmissing)
+            )
+        print(f"📊 Selected {len(lsubdir)} job directories by --lsubdir")
 
     # 检查是不是绝对路径，这很重要
     for subdir in lsubdir:
@@ -501,6 +568,7 @@ def get_lsubdir(lsubdir: list[str] = None, dir_root: Path = None):
         check_absolute_path(subdir)
 
     return lsubdir
+
 
 def split_chunks(chunks: int, lsubdir: list[Path]) -> list[list[Path]]:
     """将计算子目录均匀划分为若干组。
@@ -608,8 +676,8 @@ def pei_slurm_univ_submit(
     Args:
         path_root: 项目根目录，必须为绝对路径。
         mode: 运行模式，可选 "parallel"、"each-subdir" 或 "single-alloc"。
-        dir_root: path_root 下包含计算子目录的目录。
-        lsubdir: 用户指定的子目录 basename 列表；为空时自动扫描 dir_root。
+        dir_root: path_root 下的递归搜索根；为空列表时发现其中所有 ``y_dir``。
+        lsubdir: 可选的计算子目录 basename 过滤列表；为空时汇总所有 ``y_dir`` 的一级子目录。
         chunks: 在顺序编排模式下将子目录划分的组数。
         chunk_parent_layout: chunk worker 的父作业布局；auto 在 each-subdir 下使用
             shared，在 single-alloc 下保持 per-chunk。
@@ -747,8 +815,8 @@ def pei_slurm_univ_submit(
             warn(f"each-subdir 编排脚本无需多资源，已将 nodes={nodes}, ncores={ncores} 修正为 1")
             parent_nodes = 1
             parent_ncores = 1
-        # 编排脚本(chunk)及其 slurm-<jobid>.out 单独收进 path_root/slurm/ —— 否则会和
-        # dir_root(如 y_dir) 同级、直接堆在 path_root 里，与后处理产物(y_post_*.txt 等)混在一起。
+        # 编排脚本(chunk)及其 slurm-<jobid>.out 单独收进 path_root/slurm/ —— 否则会
+        # 直接堆在 path_root 里，与后处理产物(y_post_*.txt 等)混在一起。
         # 从 slurm_dir 里 sbatch，默认的 slurm-*.out 也就落在这里；子作业(base script)经
         # sbatch --wait 在各自 subdir 内提交，其输出仍留在对应 subdir，不受影响。
         slurm_dir = path_root / "slurm"

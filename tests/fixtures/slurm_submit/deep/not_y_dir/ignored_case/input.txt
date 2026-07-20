@@ -1,0 +1,1 @@
+non-y_dir fixture that must not be discovered

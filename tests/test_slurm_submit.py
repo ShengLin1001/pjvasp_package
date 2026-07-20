@@ -12,8 +12,78 @@ from mymetal.slurm.submit import (
     generate_slurm_script_base,
     generate_slurm_script_sequential,
     generate_slurm_script_shared_parent,
+    get_lsubdir,
+    get_y_dir_lsubdir,
     pei_slurm_univ_submit,
 )
+
+
+PATH_DISCOVERY_FIXTURE = (
+    Path(__file__).resolve().parent / "fixtures" / "slurm_submit"
+).resolve()
+
+
+class TestJobDirectoryDiscovery(unittest.TestCase):
+    """Verify recursive y_dir discovery independently of directory depth."""
+
+    def test_recursively_collects_immediate_children_of_every_y_dir(self):
+        lsubdir = get_y_dir_lsubdir(PATH_DISCOVERY_FIXTURE)
+
+        lexpected = sorted([
+            PATH_DISCOVERY_FIXTURE / "y_dir" / "root_case",
+            PATH_DISCOVERY_FIXTURE / "y_dir" / "shared_case",
+            PATH_DISCOVERY_FIXTURE / "mode_a" / "y_dir" / "mode_case",
+            PATH_DISCOVERY_FIXTURE / "mode_a" / "y_dir" / "shared_case",
+            PATH_DISCOVERY_FIXTURE / "deep" / "mode_b" / "y_dir" / "deep_case",
+        ])
+        self.assertEqual(lsubdir, lexpected)
+        self.assertNotIn(
+            PATH_DISCOVERY_FIXTURE / "deep" / "not_y_dir" / "ignored_case",
+            lsubdir,
+        )
+
+    def test_y_dir_itself_can_be_the_explicit_search_root(self):
+        path_y_dir = PATH_DISCOVERY_FIXTURE / "y_dir"
+
+        self.assertEqual(
+            get_lsubdir(None, path_y_dir),
+            [path_y_dir / "root_case", path_y_dir / "shared_case"],
+        )
+
+    def test_explicit_lsubdir_filters_all_discovered_y_dirs(self):
+        self.assertEqual(
+            get_lsubdir(["shared_case"], PATH_DISCOVERY_FIXTURE),
+            sorted([
+                PATH_DISCOVERY_FIXTURE / "y_dir" / "shared_case",
+                PATH_DISCOVERY_FIXTURE / "mode_a" / "y_dir" / "shared_case",
+            ]),
+        )
+
+    def test_search_root_without_y_dir_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            get_y_dir_lsubdir(PATH_DISCOVERY_FIXTURE / "deep" / "not_y_dir")
+
+    def test_parent_scripts_keep_recursive_job_paths_absolute(self):
+        lsubdir = get_y_dir_lsubdir(PATH_DISCOVERY_FIXTURE)
+        dict_args = {
+            "partition": "amd_512",
+            "nodes": 1,
+            "ncores": 1,
+            "module_profile_type": "none",
+            "MODULE_BLOCKS": {"none": "# no modules\n"},
+            "launcher": "srun",
+            "cmd": "run-one-case",
+            "if_use_my_launcher": False,
+            "group": lsubdir,
+            "if_output": False,
+        }
+
+        for mode in ("each-subdir", "single-alloc"):
+            with self.subTest(mode=mode):
+                line = generate_slurm_script_sequential(**dict_args, mode=mode)
+                self.assertIn('cd "$subdir"', line)
+                for path_subdir in lsubdir:
+                    self.assertIn(str(path_subdir), line)
 
 
 class TestChunkParentLayout(unittest.TestCase):
@@ -111,6 +181,16 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["shared"].call_count, 0)
         self.assertEqual(dict_mock["system"].call_count, 3)
         self.assertEqual(dict_mock["worker"].call_args_list[0].args[1:3], (2, 16))
+
+    def test_chunk_scripts_stay_in_path_root_slurm_directory(self):
+        for mode in ("each-subdir", "single-alloc"):
+            with self.subTest(mode=mode):
+                dict_mock = self.run_submit(mode, chunks=3)
+                for call_worker in dict_mock["worker"].call_args_list:
+                    self.assertEqual(
+                        call_worker.kwargs["path_save"].parent,
+                        Path("/work/slurm"),
+                    )
 
     def test_child_wall_time_only_reaches_calculation_child_jobs(self):
         for mode in ("parallel", "each-subdir"):

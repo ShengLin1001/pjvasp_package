@@ -71,7 +71,7 @@ PRESETS = {
     # zcm6-vasp-0：每个子目录一个 VASP 作业，启动器经 MY_LAUNCHER 传递
     "zcm6-vasp-0": {
         "mode": "each-subdir",
-        "dir_root": Path("./y_dir"),
+        "dir_root": Path("."),
         "chunks": 5,
         "module_profile_type": "zcm6-vasp-0",
         "launcher_type": "srun",
@@ -84,7 +84,7 @@ PRESETS = {
     # zcm6-n2p2-scaling-0：nnp-scaling，单核估算并行扩展性
     "zcm6-n2p2-scaling-0": {
         "mode": "each-subdir",
-        "dir_root": Path("./y_dir"),
+        "dir_root": Path("."),
         "chunks": 5,
         "module_profile_type": "zcm6-n2p2-0",
         "launcher_type": "mpirun",
@@ -97,7 +97,7 @@ PRESETS = {
     # zcm6-n2p2-train-0：nnp-train，16–32 核是推荐区间
     "zcm6-n2p2-train-0": {
         "mode": "each-subdir",
-        "dir_root": Path("./y_dir"),
+        "dir_root": Path("."),
         "chunks": 5,
         "module_profile_type": "zcm6-n2p2-0",
         "launcher_type": "mpirun",
@@ -110,7 +110,7 @@ PRESETS = {
     # zcm6-lammps-0： 我自己编译的
     "zcm6-lammps-0": {
         "mode": "each-subdir",
-        "dir_root": Path("./y_dir"),
+        "dir_root": Path("."),
         "chunks": 5,
         "module_profile_type": "zcm6-lammps-0",
         "launcher_type": "srun",
@@ -123,7 +123,7 @@ PRESETS = {
     # nc编译的
     "zcm6-lammps-1": {
         "mode": "each-subdir",
-        "dir_root": Path("./y_dir"),
+        "dir_root": Path("."),
         "chunks": 5,
         "module_profile_type": "zcm6-lammps-1",
         "launcher_type": "srun",
@@ -214,13 +214,13 @@ def build_parser() -> argparse.ArgumentParser:
 
               # parallel：每个子目录一个独立作业，只提交不等待
               pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
-                  --mode parallel --dir_root ./y_dir --chunks 5 \\
+                  --mode parallel --dir_root . --chunks 5 \\
                   --module_profile_type zcm6-vasp-0 --launcher_type srun \\
                   --cmd "echo Hello, World!" --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
 
               # each-subdir：编排作业里逐个 sbatch --wait 子作业
               pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
-                  --mode each-subdir --dir_root ./y_dir --chunks 5 \\
+                  --mode each-subdir --dir_root . --chunks 5 \\
                   --module_profile_type zcm6-vasp-0 --launcher_type srun \\
                   --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 \\
                   --child_wall_time 2-00:00:00 --parent_wall_time 7-00:00:00 --if_sbatch
@@ -231,7 +231,7 @@ def build_parser() -> argparse.ArgumentParser:
 
               # single-alloc：单次分配内顺序跑各子目录
               pei_slurm_univ_submit --path_root /public3/home/scg6928/mywork/test \\
-                  --mode single-alloc --dir_root ./y_dir --chunks 5 \\
+                  --mode single-alloc --dir_root . --chunks 5 \\
                   --module_profile_type zcm6-vasp-0 --launcher_type srun \\
                   --cmd pei_vasp_univ_sbatch --partition amd_512 --nodes 2 --ncores 16 --if_sbatch
 
@@ -264,10 +264,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="根目录，必须是绝对路径；相对路径会被解析为绝对。默认当前目录。")
     parser.add_argument("--mode",
                         help="运行模式：parallel / each-subdir / single-alloc。无 --preset 时必填。")
-    parser.add_argument("--dir_root", type=Path, default=Path("./dir"),
-                        help="作业子目录的父目录，相对 path_root。默认 ./dir。")
+    parser.add_argument("--dir_root", type=Path, default=Path("."),
+                        help=("递归搜索根，相对 path_root；自动查找其中任意深度的所有 y_dir，"
+                              "并汇总其一级子目录。默认当前目录。"))
     parser.add_argument("--lsubdir", nargs="*", default=None,
-                        help="子目录名列表（basename，需位于 dir_root 下）；留空则自动遍历 dir_root。")
+                        help=("计算子目录 basename 过滤列表；会在递归发现的所有 y_dir 中选择"
+                              "同名目录。留空则处理全部。"))
     parser.add_argument("--chunks", type=int, default=1,
                         help="把作业目录分成多少条并发调度流（仅 each-subdir / single-alloc 生效）。默认 1。")
     parser.add_argument(
