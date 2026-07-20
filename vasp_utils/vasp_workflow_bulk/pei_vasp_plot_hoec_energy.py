@@ -22,38 +22,38 @@
 #  >>> Example usage:
 #      pei_vasp_plot_hoec_energy.py                       # at the level of y_full_relax
 #      cd y_hoec_energy && pei_vasp_plot_hoec_energy.py   # from inside (as plot_all does)
-#      pei_vasp_plot_hoec_energy.py --fitmax 0.10 --skip-univ-post
+#      pei_vasp_plot_hoec_energy.py -fitmax 0.10 -skip_univ_post
 #
-#  --fitdeg/--fitmax are kept because the 4th-order constants must be checked for a
-#  plateau in the fit window (Wang-Li Fig. 6): re-fit with --fitmax 0.04 .. 0.15 and
-#  --skip-univ-post to avoid re-scraping ~475 OUTCARs each time.
+#  -fitdeg/-fitmax are kept because the 4th-order constants must be checked for a
+#  plateau in the fit window (Wang-Li Fig. 6): re-fit with -fitmax 0.04 .. 0.15 and
+#  -skip_univ_post to avoid re-scraping ~475 OUTCARs each time.
 #
-#  Read the "fit-window diagnostics" block of y_post_hoec.txt when scanning --fitmax, NOT
+#  Read the "fit-window diagnostics" block of y_post_hoec.txt when scanning -fitmax, NOT
 #  the per-mode fit rms: a polynomial reproduces u(xi) to <0.1 GPa well past the point where
 #  P2..P4 have stopped being Taylor coefficients, so a small rms proves nothing.
 #
 #  >>> Strategy knobs (compare their y_post_hoec_conv*.pdf plateaus side by side):
-#      --fitdeg 6                 fit a 6th-degree polynomial but still read only up to 4th
-#                                 order (--maxorder defaults to min(fitdeg,4)); the xi^5/xi^6
+#      -fitdeg 6                 fit a 6th-degree polynomial but still read only up to 4th
+#                                 order (-maxorder defaults to min(fitdeg,4)); the xi^5/xi^6
 #                                 terms absorb the higher response so P2..P4 stay Taylor
 #                                 coefficients over a wider window.
-#      --fitdeg 3                 fit a cubic and solve only 2nd/3rd order -- no P4 forced into
+#      -fitdeg 3                 fit a cubic and solve only 2nd/3rd order -- no P4 forced into
 #                                 the fit, to see whether P3 gets a cleaner plateau.
-#      --fix-soec <cij.txt>       import the 2nd-order constants from the Cij-energy workflow
+#      -fix_soec <cij.txt>       import the 2nd-order constants from the Cij-energy workflow
 #                                 (y_cij_energy_small/y_post_cij_energy.txt) and hold each
 #                                 mode's xi^2 coefficient fixed, fitting only the higher orders.
-#      --suffix _tag              write y_post_hoec_tag.* so comparison runs never overwrite.
+#      -suffix _tag              write y_post_hoec_tag.* so comparison runs never overwrite.
 #
 #  Each fitted order uses a minimal, full-rank 'typical' mode subset, NOT every mode; the
 #  remaining modes are an independent out-of-sample cross-check (resid_check in the report).
-#  --solve-modes / --solve-all-modes tune that selection.
+#  -solve_modes / -solve_all_modes tune that selection.
 #
 #  >>> hex HCP -- force the 19 primary-strain modes into the solve (pins the added M21-M23,
-#      which the auto/--solve-all-modes paths otherwise relegate to the check set, leaving the
+#      which the auto/-solve_all_modes paths otherwise relegate to the check set, leaving the
 #      normal FOEC block C1113/C1333 underdetermined):
-#      pei_vasp_plot_hoec_energy.py --fitdeg 5 --maxorder 4 --skip-univ-post \
-#        --suffix _solvemodes_deg5_o4_free \
-#        --solve-modes M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,M14,M15,M16
+#      pei_vasp_plot_hoec_energy.py -fitdeg 5 -maxorder 4 -skip_univ_post \
+#        -suffix _solvemodes_deg5_o4_free \
+#        -solve_modes M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,M14,M15,M16
 #      11 pure-normal (incl. M21-M23) + 8 shear; full rank 5/10/19 at order 2/3/4, order 4 exact.
 
 import argparse
@@ -70,29 +70,29 @@ most common:
   pei_vasp_plot_all -hoec_energy                      # every y_hoec_energy under the tree
 
 scanning the fit window (the usual real work -- check for a plateau, Wang-Li Fig. 6):
-  pei_vasp_plot_hoec_energy.py --fitmax 0.10 --skip-univ-post --suffix _f010
-  pei_vasp_plot_hoec_energy.py --fitmax 0.06 --skip-univ-post --suffix _f006
-    --skip-univ-post avoids re-scraping ~475 OUTCARs each pass; --suffix keeps the runs
+  pei_vasp_plot_hoec_energy.py -fitmax 0.10 -skip_univ_post -suffix _f010
+  pei_vasp_plot_hoec_energy.py -fitmax 0.06 -skip_univ_post -suffix _f006
+    -skip_univ_post avoids re-scraping ~475 OUTCARs each pass; -suffix keeps the runs
     side by side. Then compare the y_post_hoec_conv*.pdf plateaus.
 
 strategy knobs (compare their y_post_hoec_conv*.pdf side by side):
-  --fitdeg 6 --skip-univ-post --suffix _d6      # xi^5/xi^6 absorb the higher response
-  --fitdeg 3 --skip-univ-post --suffix _d3      # cubic fit, no P4 forced in
-  --fix-soec ../y_cij_energy_small/y_post_cij_energy.txt --suffix _fix
+  -fitdeg 6 -skip_univ_post -suffix _d6      # xi^5/xi^6 absorb the higher response
+  -fitdeg 3 -skip_univ_post -suffix _d3      # cubic fit, no P4 forced in
+  -fix_soec ../y_cij_energy_small/y_post_cij_energy.txt -suffix _fix
                                                 # import C2, fit only the higher orders
 
-hex HCP -- force the 19 primary-strain 'typical' modes into the solve (--solve-modes):
-  pei_vasp_plot_hoec_energy.py --fitdeg 5 --maxorder 4 --skip-univ-post \\
-    --suffix _solvemodes_deg5_o4_free \\
-    --solve-modes M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,M14,M15,M16
+hex HCP -- force the 19 primary-strain 'typical' modes into the solve (-solve_modes):
+  pei_vasp_plot_hoec_energy.py -fitdeg 5 -maxorder 4 -skip_univ_post \\
+    -suffix _solvemodes_deg5_o4_free \\
+    -solve_modes M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,M14,M15,M16
     primary-strain first: all 11 pure-normal modes (incl. the added M21/M22/M23) then 8 shear
     modes; full rank 5/10/19 at order 2/3/4, order 4 exactly determined. Pins M21-M23 into the
-    fit -- the auto and --solve-all-modes paths otherwise leave them in the check set, so the
+    fit -- the auto and -solve_all_modes paths otherwise leave them in the check set, so the
     normal fourth-order block (C1113/C1333) stays underdetermined. The other 4 shear-heavy
     modes {M06,M11,M17,M18} become the out-of-sample resid_check.
 
 notes:
-  read the "fit-window diagnostics" block of y_post_hoec.txt when scanning --fitmax,
+  read the "fit-window diagnostics" block of y_post_hoec.txt when scanning -fitmax,
   NOT the per-mode fit rms -- a small rms proves nothing about P2..P4 staying Taylor
   coefficients.
 """
@@ -100,43 +100,43 @@ notes:
 parser = argparse.ArgumentParser(
     description="Solve higher-order elastic constants from a finished y_hoec_energy tree.",
     epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument("--dir", default="y_hoec_energy", help="The y_hoec_energy directory.")
-parser.add_argument("--fitdeg", type=int, default=4,
-                    help="Polynomial fit degree (>=3). Wang-Li use 4. Set above --maxorder to "
+parser.add_argument("-dir", default="y_hoec_energy", help="The y_hoec_energy directory.")
+parser.add_argument("-fitdeg", type=int, default=4,
+                    help="Polynomial fit degree (>=3). Wang-Li use 4. Set above -maxorder to "
                          "let the extra terms absorb the xi^5.. response.")
-parser.add_argument("--maxorder", type=int, default=None,
+parser.add_argument("-maxorder", type=int, default=None,
                     help="Highest elastic-constant order to solve/report "
                          "(default min(fitdeg,4)). Use 3 to stop at the third order.")
-parser.add_argument("--fitmax", type=float, default=None,
+parser.add_argument("-fitmax", type=float, default=None,
                     help="Max |xi| used in the fit (default: the manifest's emax).")
-parser.add_argument("--fix-soec", default=None,
+parser.add_argument("-fix_soec", default=None,
                     help="Path to a y_post_cij_energy.txt; import the 2nd-order constants and "
                          "hold each mode's xi^2 coefficient fixed, fitting only higher orders. "
                          "Omit to solve the 2nd order from the fit in the original style.")
-parser.add_argument("--suffix", default="",
+parser.add_argument("-suffix", default="",
                     help="Appended to every output filename (y_post_hoec<suffix>.{txt,json,pdf}, "
                          "y_post_hoec_conv<suffix>.pdf) so comparison runs coexist.")
-parser.add_argument("--solve-modes", default=None,
+parser.add_argument("-solve_modes", default=None,
                     help="Comma-separated 'typical' mode names for every fitted order, "
                          "overriding the automatic full-rank selection (e.g. A,B,D,...). "
                          "hex HCP primary-strain set (11 pure-normal incl. M21-M23, then 8 "
                          "shear to close the order-4 rank): "
                          "M01,M02,M03,M04,M07,M08,M19,M20,M21,M22,M23,M05,M09,M10,M12,M13,"
                          "M14,M15,M16 .")
-parser.add_argument("--solve-all-modes", action="store_true",
+parser.add_argument("-solve_all_modes", action="store_true",
                     help="Revert to the original all-mode least squares for every order "
                          "(no typical subset, no out-of-sample check).")
-parser.add_argument("--refjson", default=str(REF_JSON_DEFAULT),
+parser.add_argument("-refjson", default=str(REF_JSON_DEFAULT),
                     help="Literature elastic_constants.txt for the cubic sanity check.")
-parser.add_argument("--skip-univ-post", action="store_true",
+parser.add_argument("-skip_univ_post", action="store_true",
                     help="Do not re-run pei_vasp_univ_post; re-fit the scraped y_post_data.txt.")
-parser.add_argument("--select", default="fixed", choices=["fixed", "plateau"],
-                    help="'fixed' (default): every coefficient at --fitmax. 'plateau': take "
+parser.add_argument("-select", default="fixed", choices=["fixed", "plateau"],
+                    help="'fixed' (default): every coefficient at -fitmax. 'plateau': take "
                          "each mode's P2/P3/P4 where it varies least across the window scan. "
                          "Plateau was WORSE than fixed on the 25-point/de=0.01 Au data "
                          "(cross-mode resid 2.2 vs 0.66 GPa); it needs a fine de to pay off. "
-                         "Forced to 'fixed' when --fix-soec is set.")
-parser.add_argument("--minpts", type=int, default=None,
+                         "Forced to 'fixed' when -fix_soec is set.")
+parser.add_argument("-minpts", type=int, default=None,
                     help="Points a mode needs before a scanned window is used "
                          "(default fitdeg+5). At fitdeg+1 the fit is an exact interpolation "
                          "and P4 is pure noise.")

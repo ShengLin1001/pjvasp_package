@@ -24,7 +24,7 @@ def confirm_prepare_outdir(path_out, force: bool = False) -> None:
     output, mirroring the bash ``rm -I`` prompt:
 
     - missing         -> return; the caller creates it.
-    - exists + force   -> delete without asking (automation / ``--force``).
+    - exists + force   -> delete without asking (automation / ``-force``).
     - exists + a tty   -> ask ``[y/N]`` (blank = No); delete on yes, abort on no.
     - exists + no tty  -> abort; there is no terminal to confirm (piped/sbatch).
 
@@ -43,7 +43,7 @@ def confirm_prepare_outdir(path_out, force: bool = False) -> None:
     # no terminal to ask on -> never delete data behind the user's back
     if not sys.stdin.isatty():
         fail("output already exists and there is no terminal to confirm "
-             "deletion: %s\n   re-run in a terminal, or pass --force to "
+             "deletion: %s\n   re-run in a terminal, or pass -force to "
              "overwrite" % path_out)
     answer = input("⚠️  %s already exists. Delete and recreate? [y/N] "
                    % path_out)

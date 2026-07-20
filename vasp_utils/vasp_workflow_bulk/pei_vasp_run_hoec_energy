@@ -15,39 +15,39 @@
 #  y_hoec_energy/*/y_dir/* with your usual flow, then post-process with
 #  pei_vasp_plot_hoec_energy.py.
 #
-#  --emax/--de apply to the UNIAXIAL reference mode (cubic A, hex M01). xi is a mode
+#  -emax/-de apply to the UNIAXIAL reference mode (cubic A, hex M01). xi is a mode
 #  amplitude, not a strain -- the Voigt directions carry shear entries of 2 and up to three
 #  nonzero components -- so by default every other mode is given its own, narrower window,
-#  shrunk until it deforms the cell as hard as the uniaxial mode does at --emax (largest
+#  shrunk until it deforms the cell as hard as the uniaxial mode does at -emax (largest
 #  principal stretch and volume change, whichever binds). The step shrinks by the same
 #  factor, so all modes keep the same number of points.
 #
 #  Without this, one shared window over-strains the mixed modes: for Au at xi=0.12 mode H
 #  reached -27.9% volume (4.1 eV/atom, above the cohesive energy) and returned
-#  C1266 = 1891 GPa where the literature says 9402. --no-scale-window restores that
+#  C1266 = 1891 GPa where the literature says 9402. -no_scale_window restores that
 #  (the literal Wang-Li reading) if you want to reproduce it.
 #
-#  --static (NSW=0, IBRION=-1) runs each strain as a single ionic step and returns clamped-ion
+#  -static (NSW=0, IBRION=-1) runs each strain as a single ionic step and returns clamped-ion
 #  constants. For HCP this is intentionally different from relaxed-ion constants and is the
 #  correct choice when the metastable HCP branch must be kept from following an internal
 #  shuffle into another stacking sequence. Use clamped-ion SOEC with it.
 #
-#  --small-shear (hex only) is the RELAXED-ion alternative to --static: it rescales the
-#  engineering shear entries of the target modes IN PLACE by --shear-scale (default 0.5, so the
+#  -small_shear (hex only) is the RELAXED-ion alternative to -static: it rescales the
+#  engineering shear entries of the target modes IN PLACE by -shear_scale (default 0.5, so the
 #  tensor shear becomes half the accompanying normal strain), keeping their names, and caps their
-#  window so the tensor shear stays below --shear-cap -- small enough that a relaxed run stays on
+#  window so the tensor shear stays below -shear_cap -- small enough that a relaxed run stays on
 #  the metastable HCP branch instead of shuffling into FCC. The target defaults to every
-#  shear-carrying mode; --small-shear-modes restricts it. No mode is added or renamed, so the
+#  shear-carrying mode; -small_shear_modes restricts it. No mode is added or renamed, so the
 #  post-processing reads each mode's (rescaled) direction from the run's manifest.
 #
 #  >>> Example usage:
 #      pei_vasp_run_hoec_energy                        # auto-detect symmetry
-#      pei_vasp_run_hoec_energy --symmetry hex
-#      pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025
-#      pei_vasp_run_hoec_energy --symmetry hex --static # HCP clamped-ion branch
-#      pei_vasp_run_hoec_energy --symmetry hex --small-shear   # relaxed HCP, sub-critical shear
-#      pei_vasp_run_hoec_energy --symmetry hex --small-shear --small-shear-modes M13,M14,M15
-#      pei_vasp_run_hoec_energy --no-scale-window      # one shared window (old behaviour)
+#      pei_vasp_run_hoec_energy -symmetry hex
+#      pei_vasp_run_hoec_energy -emax 0.15 -de 0.0025
+#      pei_vasp_run_hoec_energy -symmetry hex -static # HCP clamped-ion branch
+#      pei_vasp_run_hoec_energy -symmetry hex -small_shear   # relaxed HCP, sub-critical shear
+#      pei_vasp_run_hoec_energy -symmetry hex -small_shear -small_shear_modes M13,M14,M15
+#      pei_vasp_run_hoec_energy -no_scale_window      # one shared window (old behaviour)
 #
 #  Prerequisite: y_full_relax must be a CONVERGED conventional cell (dense k-points,
 #  high ENCUT, tight EDIFF ~1e-8). Fourth-order constants are very sensitive to these
@@ -64,11 +64,11 @@ from mymetal.calculate.calmechanics.hoec import SMALL_SHEAR_SCALE, SMALL_SHEAR_S
 EPILOG = """\
 most common:
   pei_vasp_run_hoec_energy                          # auto-detect symmetry, 11 cubic modes
-  pei_vasp_run_hoec_energy --symmetry hex           # force the 20 hexagonal modes
-  pei_vasp_run_hoec_energy --emax 0.15 --de 0.0025  # wider window, same step count
-  pei_vasp_run_hoec_energy --symmetry hex --static  # HCP clamped-ion branch
-  pei_vasp_run_hoec_energy --symmetry hex --small-shear   # relaxed HCP, shear rescaled in place
-  pei_vasp_run_hoec_energy --no-scale-window        # one shared window (literal Wang-Li)
+  pei_vasp_run_hoec_energy -symmetry hex           # force the 20 hexagonal modes
+  pei_vasp_run_hoec_energy -emax 0.15 -de 0.0025  # wider window, same step count
+  pei_vasp_run_hoec_energy -symmetry hex -static  # HCP clamped-ion branch
+  pei_vasp_run_hoec_energy -symmetry hex -small_shear   # relaxed HCP, shear rescaled in place
+  pei_vasp_run_hoec_energy -no_scale_window        # one shared window (literal Wang-Li)
 
 then:
   submit y_hoec_energy/*/y_dir/* with your usual flow, then
@@ -83,36 +83,36 @@ notes:
 parser = argparse.ArgumentParser(
     description="Generate higher-order elastic-constant VASP input directories from y_full_relax.",
     epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument("--symmetry", default="auto", choices=["auto", "cubic", "hex"],
+parser.add_argument("-symmetry", default="auto", choices=["auto", "cubic", "hex"],
                     help="Crystal symmetry; 'auto' detects it from the reference cell.")
-parser.add_argument("--emax", type=float, default=0.12,
+parser.add_argument("-emax", type=float, default=0.12,
                     help="Max |xi| for the uniaxial reference mode (default 0.12).")
-parser.add_argument("--de", type=float, default=0.0025,
+parser.add_argument("-de", type=float, default=0.0025,
                     help="xi step for the uniaxial reference mode (default 0.0025).")
-parser.add_argument("--no-scale-window", dest="scale_window", action="store_false",
+parser.add_argument("-no_scale_window", dest="scale_window", action="store_false",
                     help="Give every mode the same [-emax, emax] instead of an equally "
                          "severe window of its own (the old behaviour).")
-parser.add_argument("--static", "--no-relax-ions", dest="relax_ions", action="store_false",
+parser.add_argument("-static", "-no_relax_ions", dest="relax_ions", action="store_false",
                     help="Single ionic step (NSW=0, IBRION=-1) instead of relaxing the ions "
                          "at fixed cell shape; returns clamped-ion constants. Use clamped-ion "
                          "SOEC with this option for multi-sublattice structures such as HCP.")
-parser.add_argument("--small-shear", dest="small_shear", action="store_true",
+parser.add_argument("-small_shear", dest="small_shear", action="store_true",
                     help="Hex only: rescale the engineering shear of the target modes IN PLACE by "
-                         "--shear-scale (keeping names) and cap their window at --shear-cap, so a "
+                         "-shear_scale (keeping names) and cap their window at -shear_cap, so a "
                          "RELAXED-ion HCP run stays on the metastable branch. No mode is added or "
                          "renamed; the pure-normal modes are untouched.")
-parser.add_argument("--shear-scale", dest="shear_scale", type=float, default=SMALL_SHEAR_SCALE,
+parser.add_argument("-shear_scale", dest="shear_scale", type=float, default=SMALL_SHEAR_SCALE,
                     help="small-shear multiplier for the shear entries (default %.2f, i.e. shear "
                          "= half the normal strain)." % SMALL_SHEAR_SCALE)
-parser.add_argument("--small-shear-modes", dest="small_shear_modes", default=None,
+parser.add_argument("-small_shear_modes", dest="small_shear_modes", default=None,
                     help="Comma-separated modes to rescale (e.g. M13,M14,M15). Default: every "
                          "shear-carrying mode. The rest keep their original shear.")
-parser.add_argument("--shear-cap", dest="shear_cap", type=float, default=SMALL_SHEAR_SHEAR_CAP,
+parser.add_argument("-shear_cap", dest="shear_cap", type=float, default=SMALL_SHEAR_SHEAR_CAP,
                     help="Max tensor shear at a rescaled mode's window edge (default %.3f). "
                          "Keep it below the material's HCP->FCC critical shear." % SMALL_SHEAR_SHEAR_CAP)
-parser.add_argument("--srcdir", default="y_full_relax", help="Relaxed reference directory.")
-parser.add_argument("--outdir", default="y_hoec_energy", help="Output directory.")
-parser.add_argument("--force", action="store_true",
+parser.add_argument("-srcdir", default="y_full_relax", help="Relaxed reference directory.")
+parser.add_argument("-outdir", default="y_hoec_energy", help="Output directory.")
+parser.add_argument("-force", action="store_true",
                     help="Delete an existing output directory without prompting.")
 args = parser.parse_args()
 

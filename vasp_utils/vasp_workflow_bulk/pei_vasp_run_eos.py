@@ -17,15 +17,15 @@ from mymetal.universal.print.print import confirm_prepare_outdir
 # -final 1.06
 # -interval 0.02
 # -ratios None  , here is the volume change ratio
-# --init/--final/--interval are VOLUME ratios here (not strains as in pei_vasp_run_stretch.py),
+# -init/-final/-interval are VOLUME ratios here (not strains as in pei_vasp_run_stretch.py),
 # and the cell is scaled by ratio^(1/3) in all three directions.
 EPILOG = """\
 most common:
   pei_vasp_run_eos.py                             # default V/V0 = 0.94 .. 1.06, step 0.02 (7 pts)
-  pei_vasp_run_eos.py --init 0.90 --final 1.10 --interval 0.01
+  pei_vasp_run_eos.py -init 0.90 -final 1.10 -interval 0.01
                                                   # wider + denser, for a stiffer fit
-  pei_vasp_run_eos.py --isif 2                    # fixed cell shape (default 4 relaxes it)
-  pei_vasp_run_eos.py --ratios 0.94,0.96,0.98,1.0,1.02,1.04,1.06
+  pei_vasp_run_eos.py -isif 2                    # fixed cell shape (default 4 relaxes it)
+  pei_vasp_run_eos.py -ratios 0.94,0.96,0.98,1.0,1.02,1.04,1.06
                                                   # explicit list instead of init/final/interval
 
 then:
@@ -33,7 +33,7 @@ then:
 
 notes:
   run at the level of y_full_relax; values are VOLUME ratios (0.94 = 94% of V0), and each
-  cell is scaled by ratio^(1/3) along xyz. --ratios overrides --init/--final/--interval.
+  cell is scaled by ratio^(1/3) along xyz. -ratios overrides -init/-final/-interval.
   it only prepares dirs -- it never sbatches.
   TODO: pei_vasp_plot_all has no -eos option yet, so the fit is still manual.
 """
@@ -41,13 +41,13 @@ notes:
 parser = argparse.ArgumentParser(
     description="Run EOS calculations for stretched structures.",
     epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument("--isif", type = int, choices=[2,4], default = 4, help="ISIF tag in VASP calculations.")
-parser.add_argument("--init", type = float, default = 0.94,      help = "Initial volume ratio (e.g., 0.94 for 94%% of the original volume)")
-parser.add_argument("--final", type = float, default = 1.06,    help = "Final   volume ratio (e.g., 1.06 for 106%% of the original volume)")
-parser.add_argument("--interval", type = float, default = 0.02, help = "Volume ratio interval (e.g., 0.02 for 2%% change in volume)")
+parser.add_argument("-isif", type = int, choices=[2,4], default = 4, help="ISIF tag in VASP calculations.")
+parser.add_argument("-init", type = float, default = 0.94,      help = "Initial volume ratio (e.g., 0.94 for 94%% of the original volume)")
+parser.add_argument("-final", type = float, default = 1.06,    help = "Final   volume ratio (e.g., 1.06 for 106%% of the original volume)")
+parser.add_argument("-interval", type = float, default = 0.02, help = "Volume ratio interval (e.g., 0.02 for 2%% change in volume)")
 # other methods to set up stretch list
-parser.add_argument("--ratios", type = str, default = None, help = "Comma-separated volume ratio list (e.g., 0.94,0.96,0.98,1.0,1.02,1.04,1.06)")
-parser.add_argument("--deleteold", action = "store_true", help="Whether to delete existing directory automatically.")
+parser.add_argument("-ratios", type = str, default = None, help = "Comma-separated volume ratio list (e.g., 0.94,0.96,0.98,1.0,1.02,1.04,1.06)")
+parser.add_argument("-deleteold", action = "store_true", help="Whether to delete existing directory automatically.")
 args = parser.parse_args()
 
 print("ISIF                  :", args.isif)
@@ -66,7 +66,7 @@ if args.ratios is not None:
     ratio_list = [float(x) for x in args.ratios.split(",")]
 else:
     if args.init > args.final:
-        raise ValueError("Error: --init should be less than or equal to --final")
+        raise ValueError("Error: -init should be less than or equal to -final")
     ratio_list = []
     ratio = args.init
     while ratio <= args.final + 1e-8:
@@ -86,7 +86,7 @@ print("Volume ref   :", volume_ref)
 print(f"Total {len(films_stretch)} structures generated.\n")
 
 workdir = os.path.join(myroot, "y_eos")
-# existing output: ask before deleting (blank/No/no-tty aborts, --deleteold skips)
+# existing output: ask before deleting (blank/No/no-tty aborts, -deleteold skips)
 confirm_prepare_outdir(workdir, force=args.deleteold)
 os.makedirs(os.path.join(workdir, "y_dir"), exist_ok=True)
 

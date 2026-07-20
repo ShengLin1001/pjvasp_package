@@ -76,7 +76,7 @@ Change log:
           ``select_solve_modes`` picks the earliest simple modes that exactly determine each
           order; the modes left out become an independent out-of-sample check
           (``resid_check``), the honest cross-mode referee.
-        * ``--fix-soec``: the 2nd-order constants can be imported from the Cij-energy workflow
+        * ``-fix_soec``: the 2nd-order constants can be imported from the Cij-energy workflow
           (``read_fixed_soec``) and the per-mode xi^2 coefficient is then held fixed during the
           fit (``fit_P_fixed``), so only the higher-order terms are fitted.
         * every output takes a ``suffix`` so comparison runs sit side by side instead of
@@ -274,7 +274,7 @@ def fit_P_fixed(xi: np.ndarray = None, u: np.ndarray = None, p2_fixed: float = N
     Used when the 2nd-order constants are imported from the Cij-energy workflow: each mode's
     xi^2 coefficient is then not a free parameter but ``P2 = P_coeffs(2, d) @ SOEC``, so only
     the remaining (linear, cubic, quartic, ...) terms are fitted. Taking the strong xi^2 term
-    out of the fit is exactly the point of ``--fix-soec`` -- it lets the higher-order
+    out of the fit is exactly the point of ``-fix_soec`` -- it lets the higher-order
     coefficients settle instead of trading against a free P2.
 
     Args:
@@ -308,7 +308,7 @@ def read_fixed_soec(path_txt: str = None, model=None) -> np.ndarray:
 
     Reuses :func:`mymetal.post.Cij_energy.read_cij_energy` and reorders its ``C11..C44`` block
     onto this symmetry's independent SOEC names (cubic: 11/12/44; hex: 11/12/13/33/44). These
-    are the values ``--fix-soec`` holds fixed during the higher-order fit.
+    are the values ``-fix_soec`` holds fixed during the higher-order fit.
 
     Args:
         path_txt (str): Path to a ``y_post_cij_energy.txt`` (the Cij-energy workflow output).
@@ -364,7 +364,7 @@ def select_solve_modes(model=None, order: int = None, lname_avail: list = None,
     specifically to close the pure-normal fourth-order block; leaving them until the end lets
     shear-bearing M01--M20 rows reach full rank first and defeats their purpose.  A mode is kept
     only when it adds a new independent direction to the growing system, until nconst independent
-    rows are collected. Use ``loverride`` (``--solve-modes``) to name the set explicitly.
+    rows are collected. Use ``loverride`` (``-solve_modes``) to name the set explicitly.
 
     Args:
         model (HOECModel): The reduced model for this symmetry.
@@ -389,9 +389,9 @@ def select_solve_modes(model=None, order: int = None, lname_avail: list = None,
     if loverride:
         lbad = [n for n in loverride if n not in lname_avail]
         if lbad:
-            fail("--solve-modes lists modes without data: %s" % ", ".join(lbad))
+            fail("-solve_modes lists modes without data: %s" % ", ".join(lbad))
         if _rank(model.system(order, [dict_modes[n] for n in loverride])) < nconst:
-            fail("order %d: --solve-modes {%s} does not span the %d constants (rank-deficient)"
+            fail("order %d: -solve_modes {%s} does not span the %d constants (rank-deficient)"
                  % (order, ",".join(loverride), nconst))
         return list(loverride)
 
@@ -564,7 +564,7 @@ def check_fit_quality(model=None, dict_P: dict = None, dict_result: dict = None,
             lline.append(txt)
             if spread > tol_p2:
                 warn("symmetry-equivalent modes %s must share P2 but differ by %.2f GPa — "
-                     "shrink --fitmax until this closes" % ("/".join(lgrp), spread))
+                     "shrink -fitmax until this closes" % ("/".join(lgrp), spread))
 
     ### 3. typical solve set + out-of-sample cross-mode check per solved order ----
     for order in orders:
@@ -606,7 +606,7 @@ def scan_fit_windows(dict_data: dict = None, dict_manifest: dict = None, model=N
             P4 is pure noise (mode A returned 283 GPa against a converged ~690).
         orders (tuple): Orders passed through to :func:`solve_constants`.
         dict_p2fixed (dict): Mode name -> fixed P2. When given, every window is fitted with
-            :func:`fit_P_fixed` (the ``--fix-soec`` scan); otherwise :func:`fit_P` is used.
+            :func:`fit_P_fixed` (the ``-fix_soec`` scan); otherwise :func:`fit_P` is used.
         dict_solve_modes (dict): Order -> typical solve modes, passed to :func:`solve_constants`.
         dict_modes (dict): Mode name -> direction, forwarded to :func:`solve_constants`; defaults
             to the global ``MODES`` table.
@@ -681,7 +681,7 @@ def select_plateau_P(dict_scan: dict = None, nseg: int = 3) -> dict:
     lw = sorted(dict_scan)
     if len(lw) < nseg:
         raise ValueError("plateau selection needs >= %d scanned windows, got %d; "
-                         "lower --fitmax-min or use a finer de" % (nseg, len(lw)))
+                         "lower -fitmax_min or use a finer de" % (nseg, len(lw)))
     lname = list(dict_scan[lw[0]]['P'])
     dict_P = {}
     for n in lname:
@@ -735,7 +735,7 @@ def write_hoec_energy(path_out: Path = None, dict_manifest: dict = None,
         dict_manifest (dict): The manifest.
         dict_P (dict): Per-mode fit coefficients.
         dict_result (dict): Output of :func:`solve_constants` (plus an imported order-2 block
-            when ``--fix-soec`` is used, tagged ``source='imported'``).
+            when ``-fix_soec`` is used, tagged ``source='imported'``).
         element (str): Element symbol.
         dict_ref (dict): Literature constants, or None.
         fitdeg (int): Polynomial degree used.
@@ -931,11 +931,11 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
     dict_p2fixed, soec_imported, fix_soec_path = None, None, None
     if fix_soec:
         if select == 'plateau':
-            warn("--fix-soec is incompatible with select='plateau'; forcing select='fixed'")
+            warn("-fix_soec is incompatible with select='plateau'; forcing select='fixed'")
             select = 'fixed'
         fix_soec_path = str(Path(fix_soec).resolve())
         if not Path(fix_soec_path).is_file():
-            fail("--fix-soec file not found: %s" % fix_soec_path)
+            fail("-fix_soec file not found: %s" % fix_soec_path)
         soec_imported = read_fixed_soec(fix_soec_path, model)
         dict_p2fixed = fixed_p2_per_mode(model, soec_imported, dict_modes=dict_modes)
         orders_data = tuple(range(3, maxorder + 1))          # 2 is imported, not solved
@@ -976,7 +976,7 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
                                  orders=orders_data, dict_p2fixed=dict_p2fixed,
                                  dict_solve_modes=dict_solve_modes, dict_modes=dict_modes)
     if not dict_scan:
-        fail("no fit window has enough points; lower --minpts, lower fitdeg, or use a finer de")
+        fail("no fit window has enough points; lower -minpts, lower fitdeg, or use a finer de")
 
     ### fit at the reported window ----------------------------------------------
     dict_cut = {}

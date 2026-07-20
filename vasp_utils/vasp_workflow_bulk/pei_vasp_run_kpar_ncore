@@ -13,15 +13,15 @@
 #  It ONLY prepares input directories -- no sbatch. Submit y_kpar_ncore/y_dir/* with your
 #  usual flow, then post-process the elapsed times with pei_vasp_plot_kpar_ncore.
 #
-#  --pairs takes KPAR:NCORE tokens; the default is the requested 21-pair matrix that spans
+#  -pairs takes KPAR:NCORE tokens; the default is the requested 21-pair matrix that spans
 #  KPAR in {128,64,32,16,8,4}. Every pair must satisfy KPAR*NCORE | ntasks.
 #
 #  >>> Example usage (mirrored in EPILOG below, which is what --help prints):
 #      pei_vasp_run_kpar_ncore                              # default 21-pair matrix, 128 ranks
-#      pei_vasp_run_kpar_ncore --pairs 32:4 16:8            # only these two pairs
-#      pei_vasp_run_kpar_ncore --ntasks 64 --pairs 16:4 8:8 # benchmark a 64-rank job instead
-#          ^ --ntasks 64 ALONE aborts: the default matrix still holds 128-rank pairs, and
-#            KPAR*NCORE must divide ntasks -- narrow --pairs whenever you lower --ntasks.
+#      pei_vasp_run_kpar_ncore -pairs 32:4 16:8            # only these two pairs
+#      pei_vasp_run_kpar_ncore -ntasks 64 -pairs 16:4 8:8 # benchmark a 64-rank job instead
+#          ^ -ntasks 64 ALONE aborts: the default matrix still holds 128-rank pairs, and
+#            KPAR*NCORE must divide ntasks -- narrow -pairs whenever you lower -ntasks.
 #
 #  Prerequisite: y_full_relax must hold a usable INCAR, POTCAR and CONTCAR/POSCAR plus at
 #  least one sub.* Slurm script; pei_vasp_univ_find_and_change must be on PATH.
@@ -49,9 +49,9 @@ def parse_pair(value):
 EPILOG = """\
 most common:
   pei_vasp_run_kpar_ncore                              # default 21-pair matrix, 128 ranks
-  pei_vasp_run_kpar_ncore --pairs 32:4 16:8            # only these two pairs (32*4 = 16*8 = 128)
-  pei_vasp_run_kpar_ncore --ntasks 64 --pairs 16:4 8:8 # benchmark a 64-rank job instead
-  pei_vasp_run_kpar_ncore --pairs 16:4 --force         # re-generate one pair, no prompt
+  pei_vasp_run_kpar_ncore -pairs 32:4 16:8            # only these two pairs (32*4 = 16*8 = 128)
+  pei_vasp_run_kpar_ncore -ntasks 64 -pairs 16:4 8:8 # benchmark a 64-rank job instead
+  pei_vasp_run_kpar_ncore -pairs 16:4 -force         # re-generate one pair, no prompt
 
 then:
   submit y_kpar_ncore/y_dir/* with your usual flow, then
@@ -61,22 +61,22 @@ notes:
   run at the level of y_full_relax (needs INCAR, POTCAR, CONTCAR/POSCAR and a sub.* script).
   it only prepares dirs -- it never sbatches.
   KPAR*NCORE must DIVIDE ntasks, so the default matrix is 128-rank only: dropping to
-  --ntasks 64 without also narrowing --pairs aborts on the first 128-rank pair.
+  -ntasks 64 without also narrowing -pairs aborts on the first 128-rank pair.
 """
 
 parser = argparse.ArgumentParser(
     description="Generate static KPAR/NCORE VASP benchmarks from y_full_relax.",
     epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument("--pairs", nargs="+", type=parse_pair, default=None,
+parser.add_argument("-pairs", nargs="+", type=parse_pair, default=None,
                     metavar="KPAR:NCORE",
                     help="Pairs to test; default is the requested 21-pair matrix.")
-parser.add_argument("--ntasks", type=int, default=None,
+parser.add_argument("-ntasks", type=int, default=None,
                     help="Fixed MPI rank count used by every job (default 128).")
-parser.add_argument("--srcdir", default="y_full_relax",
+parser.add_argument("-srcdir", default="y_full_relax",
                     help="Source VASP directory (default y_full_relax).")
-parser.add_argument("--outdir", default="y_kpar_ncore",
+parser.add_argument("-outdir", default="y_kpar_ncore",
                     help="Output workflow directory (default y_kpar_ncore).")
-parser.add_argument("--force", action="store_true",
+parser.add_argument("-force", action="store_true",
                     help="Delete an existing output directory without prompting.")
 args = parser.parse_args()
 
@@ -88,7 +88,7 @@ if sys.version_info < (3, 10):
 
 from mymetal.build.workflow.kpar_ncore import generate_kpar_ncore_dirs, DEFAULT_NTASKS
 
-# --ntasks defaults to None so the parser needs no mymetal import; resolve the real default
+# -ntasks defaults to None so the parser needs no mymetal import; resolve the real default
 # now that the library is in.
 ntasks = DEFAULT_NTASKS if args.ntasks is None else args.ntasks
 

@@ -37,9 +37,9 @@ Change log:
       ``mymetal.calculate.calmechanics.hoec``, the CLI stayed in
       ``vasp_utils/vasp_workflow_bulk/pei_vasp_run_hoec_energy``.
     - Revised by J. P. on 2026-07-14: each mode now gets its own, equally severe xi window
-      (``scale_window=True``, the default; ``--no-scale-window`` restores the single shared
+      (``scale_window=True``, the default; ``-no_scale_window`` restores the single shared
       window). The manifest carries each mode's exact xi list, scale and step.
-    - Revised by J. P. on 2026-07-14: ``relax_ions=False`` (CLI ``--static``) runs every strain
+    - Revised by J. P. on 2026-07-14: ``relax_ions=False`` (CLI ``-static``) runs every strain
       as a single ionic step (NSW=0, IBRION=-1), returning clamped-ion constants.
 """
 
@@ -233,10 +233,10 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
             fail("small-shear controls must be finite positive numbers; got shear_scale=%r, "
                  "shear_cap=%r" % (shear_scale, shear_cap))
         if not np.isfinite(shear_scale) or shear_scale <= 0:
-            fail("shear_scale must be finite and positive with --small-shear, got %r"
+            fail("shear_scale must be finite and positive with -small_shear, got %r"
                  % shear_scale)
         if not np.isfinite(shear_cap) or shear_cap <= 0:
-            fail("shear_cap must be finite and positive with --small-shear, got %r" % shear_cap)
+            fail("shear_cap must be finite and positive with -small_shear, got %r" % shear_cap)
     try:
         lxi = get_strain_list(emax, de)
     except ValueError as e:
@@ -257,7 +257,7 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     except ValueError as e:
         fail(str(e))
     if small_shear and symmetry != 'hex':
-        warn("--small-shear is a hexagonal-only option; ignored for a '%s' cell." % symmetry)
+        warn("-small_shear is a hexagonal-only option; ignored for a '%s' cell." % symmetry)
         small_shear = False
     # resolve which modes get the in-place shear rescale (default: every shear-carrying mode)
     dict_core = get_hoec_modes(symmetry)                     # original directions, for the report
@@ -267,7 +267,7 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
                    else get_shear_modes(symmetry))
         lbad = [n for n in lscaled if n not in dict_core]
         if lbad:
-            fail("--small-shear-modes lists unknown mode(s): %s" % ", ".join(lbad))
+            fail("-small_shear_modes lists unknown mode(s): %s" % ", ".join(lbad))
     try:
         # ``[]`` means "rescale no modes" and must not collapse to None, whose meaning is
         # "rescale every shear mode".
@@ -314,15 +314,15 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
         warn("relax_ions=False on a '%s' cell: generating CLAMPED-ION constants. Keep SOEC "
              "and every higher order on this same response definition." % symmetry)
     if relax_ions and symmetry == 'hex' and not small_shear:
-        warn("relax_ions=True on an HCP cell WITHOUT --small-shear: the full-shear modes can "
-             "relax off the metastable HCP branch into FCC. Use --static, or --small-shear.")
+        warn("relax_ions=True on an HCP cell WITHOUT -small_shear: the full-shear modes can "
+             "relax off the metastable HCP branch into FCC. Use -static, or -small_shear.")
     print("📊 total calcs  : %d modes × %d strains = %d %s"
           % (len(dict_modes), len(lxi), len(dict_modes) * len(lxi),
              "ionic relaxations" if relax_ions else "single-point energies"))
     warn("higher-order constants need CONVERGED dense k-points and ENCUT in "
          "%s (see Wang-Li Fig. 1,2). This does NOT change them." % srcdir)
 
-    # existing output: ask before deleting (blank/No/no-tty aborts, --force skips)
+    # existing output: ask before deleting (blank/No/no-tty aborts, -force skips)
     confirm_prepare_outdir(path_out, force=force)
     path_out.mkdir()
 

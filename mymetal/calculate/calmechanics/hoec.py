@@ -584,7 +584,7 @@ MODES_HEX = {
     'M22': (0, 1, 2, 0, 0, 0),    # a2 + 2c   (8 -> 9)
     'M23': (2, 1, 1, 0, 0, 0),    # anisotropic 1-2-3 mix, breaks eta1=eta2 (9 -> 10)
 }
-# Small-shear HCP option (opt-in, --small-shear). NOT a separate mode table.
+# Small-shear HCP option (opt-in, -small_shear). NOT a separate mode table.
 #
 # A metastable HCP branch survives a *static* (clamped-ion) scan at any strain, but once the
 # ions are allowed to relax the basal shear opens an internal downhill channel and the cell
@@ -641,7 +641,7 @@ def scale_mode_shear(d_dir: tuple = None, factor: float = None) -> tuple:
 def get_shear_modes(symmetry: str = None) -> list:
     """Names of the core modes that carry an engineering shear entry (d4/d5/d6 != 0).
 
-    This is the default target of ``--small-shear``: rescaling every shear-carrying mode leaves
+    This is the default target of ``-small_shear``: rescaling every shear-carrying mode leaves
     the pure-normal modes exactly as they were.
 
     Args:
@@ -1149,7 +1149,7 @@ def selftest_hoec() -> bool:
           % (', '.join(lremovable) if lremovable else 'none'))
 
     ### hex small-shear: in-place shear rescale, shear cap, rank preserved --------
-    print('\n================ ✅ hexagonal small-shear (--small-shear, in-place rescale)')
+    print('\n================ ✅ hexagonal small-shear (-small_shear, in-place rescale)')
     dict_small = get_hoec_modes('hex', small_shear=True)      # default: every shear mode, x0.5
     target_hex = get_mode_severity(MODES_HEX['M01'], 0.12)
     small_ok = True

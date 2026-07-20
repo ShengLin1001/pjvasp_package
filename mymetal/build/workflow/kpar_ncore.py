@@ -298,7 +298,7 @@ def generate_kpar_ncore_dirs(path_root: str = None,
     path_source = path_root / srcdir
     path_structure, lsubmit = check_source_inputs(path_source)
     path_out = path_root / outdir
-    # existing output: ask before deleting (blank/No/no-tty aborts, --force skips)
+    # existing output: ask before deleting (blank/No/no-tty aborts, -force skips)
     confirm_prepare_outdir(path_out, force=force)
     # to here: every structural prerequisite has been checked without writing
 

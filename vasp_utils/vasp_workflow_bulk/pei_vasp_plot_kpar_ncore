@@ -18,7 +18,7 @@
 #  >>> Example usage:
 #      pei_vasp_plot_kpar_ncore                        # at the level of y_full_relax
 #      cd y_kpar_ncore && pei_vasp_plot_kpar_ncore     # from inside (as plot_all does)
-#      pei_vasp_plot_kpar_ncore --skip-univ-post       # reuse y_post_time/data.txt
+#      pei_vasp_plot_kpar_ncore -skip_univ_post       # reuse y_post_time/data.txt
 
 import argparse
 import sys
@@ -30,7 +30,7 @@ EPILOG = """\
 most common:
   pei_vasp_plot_kpar_ncore                          # at the level of y_full_relax
   cd y_kpar_ncore && pei_vasp_plot_kpar_ncore       # from inside (as plot_all does)
-  pei_vasp_plot_kpar_ncore --skip-univ-post         # reuse scraped y_post_time/data.txt
+  pei_vasp_plot_kpar_ncore -skip_univ_post         # reuse scraped y_post_time/data.txt
   pei_vasp_plot_all -kpar_nocre                     # every y_kpar_ncore under the tree
 
 writes into y_kpar_ncore/:
@@ -38,20 +38,20 @@ writes into y_kpar_ncore/:
   p_post_kpar_ncore.pdf   time and relative energy vs NCORE, one curve per KPAR
 
 notes:
-  run it only once the benchmark jobs have finished; --skip-univ-post skips re-scraping
+  run it only once the benchmark jobs have finished; -skip_univ_post skips re-scraping
   the OUTCARs, so use it whenever you are only restyling the figure.
 """
 
 parser = argparse.ArgumentParser(
     description="Plot KPAR/NCORE times and relative energies from a finished tree.",
     epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument("--dir", default="y_kpar_ncore",
+parser.add_argument("-dir", default="y_kpar_ncore",
                     help="Workflow directory (default y_kpar_ncore).")
-parser.add_argument("--skip-univ-post", action="store_true",
+parser.add_argument("-skip_univ_post", action="store_true",
                     help="Reuse existing y_post_time.txt and y_post_data.txt "
                          "instead of running pei_vasp_univ_post.")
-parser.add_argument("--fig", default=None, help="Optional output figure path.")
-parser.add_argument("--txt", default=None, help="Optional output table path.")
+parser.add_argument("-fig", default=None, help="Optional output figure path.")
+parser.add_argument("-txt", default=None, help="Optional output table path.")
 args = parser.parse_args()
 
 # Guard AFTER parse_args, so --help still answers under a stale interpreter: the shebang is
