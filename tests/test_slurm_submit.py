@@ -9,6 +9,8 @@ from unittest.mock import patch
 
 from mymetal.slurm.submit import (
     check_chunk_parent_layout,
+    generate_slurm_script_base,
+    generate_slurm_script_sequential,
     generate_slurm_script_shared_parent,
     pei_slurm_univ_submit,
 )
@@ -17,7 +19,13 @@ from mymetal.slurm.submit import (
 class TestChunkParentLayout(unittest.TestCase):
     """Verify that chunks remain lanes while parent-job topology is selectable."""
 
-    def run_submit(self, mode: str, chunks: int, chunk_parent_layout: str = "auto"):
+    def run_submit(
+            self,
+            mode: str,
+            chunks: int,
+            chunk_parent_layout: str = "auto",
+            child_wall_time: str = None,
+            parent_wall_time: str = None):
         """Run the orchestration branch with filesystem and Slurm calls mocked."""
         lsubdir = [Path("/jobs/" + name) for name in ("001", "002", "003")]
         with ExitStack() as stack:
@@ -50,6 +58,8 @@ class TestChunkParentLayout(unittest.TestCase):
                 nodes=2,
                 ncores=16,
                 if_sbatch=True,
+                child_wall_time=child_wall_time,
+                parent_wall_time=parent_wall_time,
                 MODULE_BLOCKS={"none": "# no modules\n"},
             )
 
@@ -102,6 +112,106 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["system"].call_count, 3)
         self.assertEqual(dict_mock["worker"].call_args_list[0].args[1:3], (2, 16))
 
+    def test_child_wall_time_only_reaches_calculation_child_jobs(self):
+        for mode in ("parallel", "each-subdir"):
+            with self.subTest(mode=mode):
+                dict_mock = self.run_submit(
+                    mode, chunks=1, child_wall_time="2-00:00:00"
+                )
+                self.assertEqual(dict_mock["base"].call_count, 3)
+                self.assertEqual(
+                    dict_mock["base"].call_args_list[0].kwargs["wall_time"],
+                    "2-00:00:00",
+                )
+                if mode == "each-subdir":
+                    self.assertIsNone(
+                        dict_mock["worker"].call_args.kwargs["wall_time"]
+                    )
+
+        dict_mock = self.run_submit(
+            "single-alloc", chunks=1, child_wall_time="2-00:00:00"
+        )
+        self.assertEqual(dict_mock["base"].call_count, 0)
+
+    def test_base_script_wall_time_is_optional_and_validated(self):
+        dict_args = {
+            "partition": "amd_512",
+            "nodes": 1,
+            "ncores": 16,
+            "module_profile_type": "none",
+            "MODULE_BLOCKS": {"none": "# no modules\n"},
+            "launcher": "srun",
+            "cmd": "run-one-case",
+            "if_use_my_launcher": False,
+            "if_output": False,
+        }
+
+        line_default = generate_slurm_script_base(**dict_args)
+        line_limited = generate_slurm_script_base(
+            **dict_args, wall_time="2-00:00:00"
+        )
+
+        self.assertNotIn("#SBATCH --time=", line_default)
+        self.assertIn("#SBATCH --time=2-00:00:00\n", line_limited)
+        with self.assertRaises(SystemExit):
+            generate_slurm_script_base(
+                **dict_args, wall_time="01:00:00\n#SBATCH -p injected"
+            )
+
+    def test_parent_wall_time_only_reaches_parent_scripts(self):
+        dict_mock = self.run_submit(
+            "each-subdir", chunks=3, parent_wall_time="7-00:00:00"
+        )
+        self.assertEqual(
+            dict_mock["worker"].call_args_list[0].kwargs["wall_time"],
+            "7-00:00:00",
+        )
+        self.assertEqual(
+            dict_mock["shared"].call_args.kwargs["wall_time"],
+            "7-00:00:00",
+        )
+        self.assertIsNone(dict_mock["base"].call_args_list[0].kwargs["wall_time"])
+
+        dict_mock = self.run_submit(
+            "single-alloc", chunks=1, parent_wall_time="7-00:00:00"
+        )
+        self.assertEqual(
+            dict_mock["worker"].call_args.kwargs["wall_time"],
+            "7-00:00:00",
+        )
+
+        dict_mock = self.run_submit(
+            "parallel", chunks=1, parent_wall_time="7-00:00:00"
+        )
+        self.assertEqual(dict_mock["worker"].call_count, 0)
+        self.assertEqual(dict_mock["shared"].call_count, 0)
+
+    def test_parent_scripts_emit_parent_wall_time(self):
+        dict_args = {
+            "partition": "amd_512",
+            "module_profile_type": "none",
+            "MODULE_BLOCKS": {"none": "# no modules\n"},
+            "wall_time": "7-00:00:00",
+            "if_output": False,
+        }
+        line_worker = generate_slurm_script_sequential(
+            **dict_args,
+            nodes=1,
+            ncores=1,
+            launcher="srun",
+            cmd="run-one-case",
+            if_use_my_launcher=False,
+            group=[Path("/jobs/001")],
+            mode="each-subdir",
+        )
+        line_shared = generate_slurm_script_shared_parent(
+            **dict_args,
+            lpath_worker=[Path("/work/slurm/chunk001.sh")],
+        )
+
+        self.assertIn("#SBATCH --time=7-00:00:00\n", line_worker)
+        self.assertIn("#SBATCH --time=7-00:00:00\n", line_shared)
+
     def test_generated_shared_parent_is_valid_bash_and_quotes_paths(self):
         line = generate_slurm_script_shared_parent(
             partition="amd_512",
@@ -123,6 +233,7 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertIn('bash "$path_worker"', line)
         self.assertIn('if wait "$pid"', line)
         self.assertIn("worker_failed", line)
+        self.assertNotIn("#SBATCH --time=", line)
 
     def test_shared_parent_waits_all_workers_and_aggregates_failure(self):
         job_tag = "codex-shared-parent-" + str(os.getpid())
