@@ -33,6 +33,12 @@ WALL_TIME_PATTERN = re.compile(r"^[0-9]+(?:-[0-9]+)?(?::[0-9]+){0,2}$")
 
 # generate_script
 
+
+def _write_slurm_script(path_save: Path, content: str) -> None:
+    """Write a generated Bash script as deterministic UTF-8 text."""
+    Path(path_save).write_text(content, encoding="utf-8", newline="\n")
+
+
 def check_wall_time(wall_time: str = None) -> str | None:
     """检查可选的 Slurm wall time 是否可安全写入 ``#SBATCH --time``。
 
@@ -189,8 +195,7 @@ def generate_slurm_script_base(partition: str, nodes: int, ncores: int, module_p
     line = line_header + "\n\n" + line_myheader + "\n\n" + line_launcher + "\n"
 
     if if_output:
-        with open(path_save, 'w') as f:
-            f.write(line)
+        _write_slurm_script(path_save, line)
 
     return line
 
@@ -233,8 +238,7 @@ def generate_slurm_script_sequential(partition: str, nodes: int, ncores: int, mo
     line = line_header + "\n\n" + line_myheader + "\n\n" + line_loop
 
     if if_output:
-        with open(path_save, 'w') as f:
-            f.write(line)
+        _write_slurm_script(path_save, line)
 
     return line
 
@@ -357,8 +361,7 @@ def generate_slurm_script_shared_parent(
     line = line_header + "\n\n" + line_myheader + "\n\n" + line_worker_array + "\n" + line_parent
 
     if if_output:
-        with open(path_save, "w") as file_out:
-            file_out.write(line)
+        _write_slurm_script(path_save, line)
 
     return line
 

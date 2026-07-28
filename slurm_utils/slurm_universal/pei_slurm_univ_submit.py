@@ -281,7 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # —— script 相关参数 ——
     parser.add_argument("-module_profile_type",
-                        help="环境 module profile：zcm6_vasp_0 / zcm6_lammps_0 / zcm6_n2p2_0。无 -preset 时必填。")
+                        help="环境 module profile：none / zcm6_vasp_0 / zcm6_lammps_0 / zcm6_n2p2_0。无 -preset 时必填。")
     parser.add_argument("-launcher_type",
                         help="并行启动器：srun / mpirun / none。无 -preset 时必填。")
     parser.add_argument("-cmd",

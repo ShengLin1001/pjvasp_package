@@ -89,6 +89,27 @@ class TestJobDirectoryDiscovery(unittest.TestCase):
 class TestChunkParentLayout(unittest.TestCase):
     """Verify that chunks remain lanes while parent-job topology is selectable."""
 
+    def test_sequential_script_is_written_as_utf8_with_unix_newlines(self):
+        path_output = Path("/work/slurm/chunk001.sh")
+        with patch.object(Path, "write_text") as mock_write:
+            line = generate_slurm_script_sequential(
+                partition="debug",
+                nodes=1,
+                ncores=1,
+                module_profile_type="none",
+                MODULE_BLOCKS={"none": "# no modules\n"},
+                launcher="none",
+                cmd="echo dry-run",
+                if_use_my_launcher=False,
+                group=[Path("/work/y_dir/001")],
+                mode="each_subdir",
+                path_save=path_output,
+            )
+
+        mock_write.assert_called_once_with(
+            line, encoding="utf-8", newline="\n"
+        )
+
     def run_submit(
             self,
             mode: str,
