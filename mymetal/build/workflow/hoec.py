@@ -201,7 +201,7 @@ def generate_hoec_dirs(path_root: str = None, symmetry: str = 'auto',
     Args:
         path_root (str): Directory containing ``srcdir``. Defaults to the cwd.
         symmetry (str): 'auto', 'cubic' or 'hex'.
-        emax (float): Maximum |xi| for the uniaxial reference mode.
+        emax (float): Maximum ``|xi|`` for the uniaxial reference mode.
         de (float): Step in xi for the uniaxial reference mode.
         scale_window (bool): Give each mode an equally severe window of its own.
         relax_ions (bool): Relax the ions at fixed cell shape (ISIF=2). ``False`` forces a

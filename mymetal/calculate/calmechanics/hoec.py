@@ -46,8 +46,8 @@ Functions:
     - get_strain_list: symmetric list of xi values including 0.
     - get_deformation_gradient: symmetric F with Green-Lagrange strain xi * d.
     - get_mode_severity: how hard a mode has actually deformed the cell at amplitude xi.
-    - get_mode_window: largest |xi| a mode may take within a severity budget.
-    - get_shear_window: largest |xi| keeping a mode's tensor shear within a cap.
+    - get_mode_window: largest ``|xi|`` a mode may take within a severity budget.
+    - get_shear_window: largest ``|xi|`` keeping a mode's tensor shear within a cap.
     - scale_mode_shear: multiply a mode's engineering shear entries by a factor (small-shear).
     - get_shear_modes: names of the shear-carrying core modes (small-shear default target).
     - get_hoec_modes: core mode table, optionally shear-rescaled and/or with extra normal modes.
@@ -793,7 +793,7 @@ def get_strain_list(emax: float = 0.12, de: float = 0.01) -> list:
     """Symmetric list of xi in [-emax, emax] including 0.0, sorted ascending.
 
     Args:
-        emax (float): Maximum |xi|.
+        emax (float): Maximum ``|xi|``.
         de (float): Step in xi.
 
     Returns:
@@ -877,9 +877,9 @@ def get_mode_severity(d_dir: tuple = None, xi: float = None) -> float:
 
 def get_mode_window(d_dir: tuple = None, target: float = None,
                     hi: float = 0.5, tol: float = 1e-6) -> float:
-    """Largest |xi| at which a mode's severity still stays within ``target``.
+    """Largest ``|xi|`` at which a mode's severity still stays within ``target``.
 
-    Severity increases monotonically with |xi|, so a bisection is exact.
+    Severity increases monotonically with ``|xi|``, so a bisection is exact.
 
     Args:
         d_dir (tuple): Length-6 engineering-Voigt mode direction.
@@ -888,7 +888,7 @@ def get_mode_window(d_dir: tuple = None, target: float = None,
         tol (float): Bracket width at which to stop.
 
     Returns:
-        float: The mode's own maximum |xi|.
+        float: The mode's own maximum ``|xi|``.
 
     Raises:
         ValueError: If ``target`` is not positive.
@@ -910,9 +910,9 @@ def get_mode_window(d_dir: tuple = None, target: float = None,
 
 
 def get_shear_window(d_dir: tuple = None, shear_cap: float = None) -> float:
-    """Largest |xi| at which a mode's tensor shear strain still stays within ``shear_cap``.
+    """Largest ``|xi|`` at which a mode's tensor shear strain still stays within ``shear_cap``.
 
-    The tensor shear grows linearly with |xi| (the engineering shear entry d4/d5/d6 carries the
+    The tensor shear grows linearly with ``|xi|`` (the engineering shear entry d4/d5/d6 carries the
     tensor value xi*d/2), so the bound is exact: ``|xi| <= shear_cap / (max|d4,d5,d6|/2)``. A mode
     with no shear entry is unbounded and returns +inf. This is the extra cap the small-shear
     modes take on top of the severity budget, because equal-severity scaling alone does not
@@ -924,7 +924,7 @@ def get_shear_window(d_dir: tuple = None, shear_cap: float = None) -> float:
         shear_cap (float): Maximum allowed tensor shear strain.
 
     Returns:
-        float: The mode's own maximum |xi|, or ``float('inf')`` when the mode carries no shear.
+        float: The mode's own maximum ``|xi|``, or ``float('inf')`` when the mode carries no shear.
 
     Raises:
         ValueError: If ``shear_cap`` is not finite and positive.
@@ -941,7 +941,7 @@ def get_mode_strain_lists(symmetry: str = None, emax: float = 0.12, de: float = 
     """Per-mode xi lists, each mode confined to an equally severe deformation.
 
     The uniaxial mode A sets the budget: it keeps ``emax`` and ``de`` exactly as given, and
-    every other mode is shrunk to the |xi| at which it deforms the crystal as hard as A does
+    every other mode is shrunk to the ``|xi|`` at which it deforms the crystal as hard as A does
     at ``emax`` (:func:`get_mode_severity`). The step is shrunk by the same factor, so every
     mode keeps the *same number of points* -- the fits stay equally conditioned, and the
     heavily-scaled modes automatically get the fine xi increment Wang-Li call for.
@@ -956,7 +956,7 @@ def get_mode_strain_lists(symmetry: str = None, emax: float = 0.12, de: float = 
 
     Args:
         symmetry (str): 'cubic' or 'hex'.
-        emax (float): Maximum |xi| for the reference mode.
+        emax (float): Maximum ``|xi|`` for the reference mode.
         de (float): xi step for the reference mode.
         scale_window (bool): Scale each mode's window by its severity.
         dict_modes (dict): Mode subset to build (name -> direction); defaults to the core set

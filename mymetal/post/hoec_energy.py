@@ -183,7 +183,7 @@ def collect_mode_data(path_out: Path = None, dict_manifest: dict = None,
     Args:
         path_out (Path): The ``y_hoec_energy`` directory.
         dict_manifest (dict): The manifest.
-        fitmax (float): Max |xi| in reference-mode units; scaled per mode (see above).
+        fitmax (float): Max ``|xi|`` in reference-mode units; scaled per mode (see above).
         run_post (bool): Re-run ``pei_vasp_univ_post`` before reading. Set False to
             re-fit an already-scraped tree (e.g. when scanning ``fitmax``).
 
@@ -868,7 +868,7 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
     """Solve the higher-order elastic constants from a finished ``y_hoec_energy`` tree.
 
     A single ``fitmax`` is applied to every mode, as Wang-Li do. Note that xi is a mode
-    amplitude, not a strain: |d| runs from 1 (mode A) to 3.6 (mode J), so one xi is a very
+    amplitude, not a strain: ``|d|`` runs from 1 (mode A) to 3.6 (mode J), so one xi is a very
     different deformation from mode to mode, and the largest modes leave the Taylor regime
     first. Pick ``fitmax`` by scanning it (Wang-Li Fig. 6) and watching
     :func:`check_fit_quality`, not the fit rms.
@@ -881,7 +881,7 @@ def post_hoec_energy(dir: str = 'y_hoec_energy', fitdeg: int = 4,
         dir (str): The ``y_hoec_energy`` directory.
         fitdeg (int): Polynomial fit degree (>=3). Wang-Li use 4. A degree above ``maxorder``
             lets the extra terms absorb the xi^5.. response while only the lower orders are read.
-        fitmax (float): Max |xi| used in the fit; defaults to the manifest's ``emax``.
+        fitmax (float): Max ``|xi|`` used in the fit; defaults to the manifest's ``emax``.
         refjson (str): Literature json for the cubic sanity check; defaults to
             :data:`REF_JSON_DEFAULT`.
         run_post (bool): Re-run ``pei_vasp_univ_post`` before reading the energies.
