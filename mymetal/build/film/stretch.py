@@ -83,9 +83,11 @@ def generate_film(   symbols: str = None,                 # str
     oriented along a Miller plane, optionally with vacuum padding and atom translations.
 
     The function supports two main modes:
-      * Build a conventional bulk cell internally from `symbols` + `structure` ('fcc' or 'hcp'),
-        then slice it.
-      * Use an externally supplied `bulk_atoms` ASE Atoms object.
+
+    * Build a conventional bulk cell internally from `symbols` + `structure` ('fcc' or 'hcp'),
+      then slice it.
+    * Use an externally supplied `bulk_atoms` ASE Atoms object.
+
     It also supports generating a bulk cell that is aligned with an arbitrary (h,k,l)
     plane by setting `vacuum=None`, `my_periodic=True`, `if_fix_c=True` (i.e., produce a periodic
     bulk rather than a non-periodic slab with vacuum).
@@ -232,7 +234,7 @@ def generate_film(   symbols: str = None,                 # str
     elif replic_z:
         num_rep_z = replic_z
     else:
-        raise ValueError('%s or %s is an invalid value' % num_layers % num_rep_z)
+        raise ValueError(f"{num_layers} or {replic_z} is an invalid layer count")
 
     print('num_rep_z: %s' %num_rep_z)
     my_slab = surface(my_bulk, slice_plane , num_rep_z, vacuum = my_vacuum, tol=my_tol, periodic=my_periodic)

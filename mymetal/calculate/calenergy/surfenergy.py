@@ -18,24 +18,32 @@ def cal_surface_energy(bulk_energy: float = None,
                        area: float = None,
                        energy_unit: str = 'eV',
                        factor: int = 2) -> float:
-    """
-    Calculate surface energy based on bulk and relaxed surface energy data.
+    """Calculate surface energy from bulk and relaxed-slab energies.
+
+    The implemented expression is
+
+    ``(E_slab - E_bulk / N_bulk * N_slab) / (factor * area)``.
+    Energy inputs are interpreted as eV and ``area`` as Å². ``energy_unit``
+    selects the return unit; it does not change the input-energy unit.
     
     Args:
-        bulk_energy (float): Total bulk energy in the specified unit.
-        bulk_atoms_number (int): Number of atoms in the bulk structure (must be a positive integer).
-        relaxed_surface_energy (float): Total relaxed surface energy in the specified unit.
-        surface_atoms_number (int): Number of atoms in the surface structure (must be a positive integer).
-        area (float): Surface area in Å² (must be a non-negative float).
-        energy_unit (str): Unit of energy, either 'eV' (electron volts) or 'J' (joules). Default is 'eV'.
+        bulk_energy: Total bulk-reference energy in eV.
+        bulk_atoms_number: Number of atoms in the bulk reference.
+        relaxed_surface_energy: Total relaxed-slab energy in eV.
+        surface_atoms_number: Number of atoms in the slab.
+        area: Area of one surface in Å².
+        energy_unit: Return ``"eV"`` for eV/Å² or ``"J"`` for J/m².
+        factor: Number of equivalent surfaces represented by the excess
+            energy. A symmetric slab normally uses 2; verify this assumption
+            for the model being analysed.
         
     Returns:
-        float: Surface energy in eV/Å² or J/m², depending on the selected energy unit.
+        Surface energy in eV/Å² when ``energy_unit="eV"`` or J/m² when
+        ``energy_unit="J"``.
 
     Raises:
-        ValueError: If the specified energy unit is not 'eV' or 'J'.
-        ValueError: If bulk_atoms_number or surface_atoms_number is not a positive integer.
-        ValueError: If area is not a non-negative float.
+        ValueError: If an atom count, ``area``, or ``factor`` is not positive,
+            or if ``energy_unit`` is neither ``"eV"`` nor ``"J"``.
     """
     
     # 检查 bulk_atoms_number 和 surface_atoms_number 是否是正整数
@@ -44,9 +52,11 @@ def cal_surface_energy(bulk_energy: float = None,
     if not isinstance(surface_atoms_number, int) or surface_atoms_number <= 0:
         raise ValueError(f"surface_atoms_number must be a positive integer. Got: {surface_atoms_number}")
     
-    # 检查 area 是否为非负数
-    if not isinstance(area, (int, float)) or area < 0:
-        raise ValueError(f"area must be a non-negative number. Got: {area}")
+    # 面积和表面数进入分母；在这里拒绝 0，避免把输入错误拖成除零错误。
+    if not isinstance(area, (int, float)) or area <= 0:
+        raise ValueError(f"area must be a positive number. Got: {area}")
+    if not isinstance(factor, int) or factor <= 0:
+        raise ValueError(f"factor must be a positive integer. Got: {factor}")
     
     # 能量转换系数: 1 eV/Å² = 16.021766 J/m²
     conversion_factor = 1.0

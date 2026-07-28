@@ -68,6 +68,18 @@ def my_extr_etot(filename: str = None,
 
 # calculate the surface area in xy plane
 def cal_area(atoms: Atoms = None) -> float:
+    """Return the cell-face area projected onto the xy plane in Å².
+
+    The implementation returns ``abs((a × b)[2])`` for the first two cell
+    vectors. It equals the full parallelogram area when both vectors lie in
+    the xy plane, as they do in the documented surface-energy fixture.
+
+    Args:
+        atoms: ASE structure whose first two cell vectors define the surface.
+
+    Returns:
+        Projected area in Å².
+    """
     lattice = array(atoms.get_cell())
     a = lattice[0,:]
     b = lattice[1,:]
