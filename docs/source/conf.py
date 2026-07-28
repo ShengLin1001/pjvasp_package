@@ -10,7 +10,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath('../..'))
 
-project = 'mymetal'
+project = 'pjvasp_package'
 copyright = '2024-2026, J. Pei'
 author = 'J. Pei'
 release = '1.0.0'
@@ -25,7 +25,6 @@ extensions = [
     'sphinx.ext.todo',
 ]
 
-templates_path = ['_templates']
 exclude_patterns = [
     'modules.rst',
     'mymetal.rst',
@@ -60,9 +59,11 @@ autodoc_typehints = 'description'
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = "sphinx_rtd_theme"
-html_title = 'mymetal Documentation'
+html_title = 'pjvasp_package Documentation'
 html_theme_options = {
     'navigation_depth': 4,
     'collapse_navigation': False,
     'sticky_navigation': True,
 }
+html_static_path = ['_static']
+html_css_files = ['css/custom.css']

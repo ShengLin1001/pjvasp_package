@@ -1,0 +1,77 @@
+/* Small, content-focused additions for the existing Read the Docs theme. */
+.wy-nav-content {
+  max-width: 1120px;
+}
+
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.task-card {
+  border: 1px solid #d9e2e8;
+  border-left: 4px solid #2980b9;
+  border-radius: 0.25rem;
+  padding: 1rem;
+  background: #f8fafb;
+}
+
+.task-card p:last-child {
+  margin-bottom: 0;
+}
+
+.rst-content figure {
+  margin: 1.5rem auto;
+}
+
+.rst-content figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.wy-table-responsive {
+  overflow-x: auto;
+}
+
+.wy-table-responsive table {
+  width: max-content;
+  min-width: 100%;
+}
+
+@media screen and (max-width: 600px) {
+  .task-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wy-nav-content {
+    padding: 1.25rem;
+  }
+
+  .rst-content pre {
+    overflow-x: auto;
+  }
+
+  .rst-content code.literal {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  html.writer-html5 .rst-content dl.field-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  html.writer-html5 .rst-content dl.field-list > dt {
+    padding-left: 0;
+  }
+
+  html.writer-html5 .rst-content dl.field-list > dd {
+    min-width: 0;
+    margin-left: 0;
+    padding-left: 1rem;
+    overflow-wrap: anywhere;
+  }
+}

@@ -12,5 +12,6 @@ install their real runtime dependencies before calling the relevant functions.
    api/calculate
    api/io
    api/post
+   api/slurm
    api/universal
    api/ml

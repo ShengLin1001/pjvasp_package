@@ -2,14 +2,16 @@
 
 ## 项目结构与模块组织
 
-本仓库是一个以 `mymetal` Python 包为核心的计算材料学工具包。核心代码位于 `mymetal/` 目录下，其中包含用于结构构建的子包 `build/`、用于计算流程的 `calculate/`、用于 VASP 输入/输出的 `io/`、用于后处理的 `post/`、用于机器学习工具的 `ml/`，以及通用辅助函数 `universal/`。工作流脚本和模板单独存放：`vasp_utils/` 和 `myvasp/` 用于 VASP，`slurm_utils/` 用于调度器脚本，`lmp_utils/` 用于 LAMMPS 模板，`matlab_code/` 用于 MATLAB 分析。Sphinx 文档源文件位于 `docs/source/`；生成的 HTML 文档位于 `docs/build/`。
+本仓库是一个以 `mymetal` Python 包为核心的计算材料学工具包。核心代码位于 `mymetal/` 目录下，其中包含用于结构构建的子包 `build/`、用于计算流程的 `calculate/`、用于 VASP 输入/输出的 `io/`、用于后处理的 `post/`、用于机器学习工具的 `ml/`，以及通用辅助函数 `universal/`。工作流脚本和模板单独存放：`vasp_utils/` 和 `myvasp/` 用于 VASP，`slurm_utils/` 用于调度器脚本，`lmp_utils/` 用于 LAMMPS 模板，`matlab_code/` 用于 MATLAB 分析。Sphinx 文档源文件位于 `docs/source/`，可运行示例位于 `docs/examples/`，本地 HTML 输出到 `docs/_build/html/`。GitHub Pages 从 `.github/workflows/docs.yml` 生成的 artifact 部署；`docs/build/` 只是旧的跟踪产物，不再作为构建或部署源。
 
 ## 构建、测试与开发命令
 
 - `python -m pip install -e .`：以可编辑模式安装该包。
-- `python -m pip install -r requirements.txt`：安装较完整的运行时和文档依赖。
-- `python -m pip install -r setup/strict-requirements.txt`：安装固定版本依赖，用于构建可复现环境。
-- `cd docs && make html`：构建 Sphinx 文档，并输出到 `docs/build/html/`。
+- `python -m pip install -r requirements.txt`：安装较完整的运行时和历史工作流依赖。
+- `python -m pip install -r docs/requirements.txt`：安装文档构建和示例依赖。
+- `python docs/examples/getting_started_au111.py --output docs/_build/example-au111`：运行无需 VASP 的文档 smoke test。
+- `python -m sphinx -E -b html -W --keep-going docs/source docs/_build/html`：严格构建 Sphinx 文档。
+- `python -m sphinx -b linkcheck -W --keep-going docs/source docs/_build/linkcheck`：检查文档链接。
 - `python -m compileall mymetal`：对主包进行快速语法检查。
 
 在当前 CentOS HPC 平台上，如果所需命令缺失或版本过旧，在手动安装前应先检查 `module avail`。
@@ -20,7 +22,7 @@
 
 ## 测试指南
 
-目前尚无专门的测试套件。对于 Python 代码修改，至少应运行 `python -m compileall mymetal`；在实际可行时，应在受影响的工作流附近添加小型可执行示例。未来测试文件应命名为 `test_*.py`，并放置在 `tests/` 中，或放在需要 VASP/LAMMPS 固定输入文件的示例旁边。
+回归测试位于 `tests/`，测试文件使用 `test_*.py` 命名。对于 Python 代码修改，至少应运行 `python -m compileall mymetal` 和受影响的测试文件；文档/API 变更还应运行对应的 `docs/examples/` 脚本及严格 Sphinx 构建。需要 VASP/LAMMPS 固定输入的检查可以放在受影响工作流旁，但默认测试不得调用真实 VASP、LAMMPS、n2p2 training 或 `sbatch`。
 
 ## Commit 与 Pull Request 指南
 
