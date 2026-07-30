@@ -1,7 +1,23 @@
+import sys
+from pathlib import Path
+
 from setuptools import setup, find_packages
 
-with open('requirements.txt') as f:
-    required_packages = f.read().splitlines()
+
+def load_requirements(path):
+    requirements = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        package = line.split("#", 1)[0].strip()
+        if not package:
+            continue
+        if package.lower() == "pyside2" and sys.version_info >= (3, 11):
+            continue
+        if package not in requirements:
+            requirements.append(package)
+    return requirements
+
+
+required_packages = load_requirements("requirements.txt")
 
 setup(
     name='mymetal-pkg',
