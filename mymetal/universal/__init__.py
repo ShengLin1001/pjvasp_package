@@ -13,7 +13,7 @@ Modules:
     - search: Module for searching and extracting data from files.
     - print: Module for printing messages and warnings.
     - matrix: Module for matrix adjustments and transformations.
-    - index: Module for indexing transformations and adjustments.
+    - math: Module for mathematical operations on matrices.
     - plot: Module for plotting data and results.
 """
 

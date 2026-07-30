@@ -63,7 +63,7 @@ python docs/examples/getting_started_au111.py --output docs/_build/example-au111
 
 | 路径 | 责任 |
 | --- | --- |
-| `mymetal/` | 结构构建、计算辅助、I/O、后处理、绘图与 ML 数据 |
+| `mymetal/` | 结构构建、计算辅助、I/O、后处理、绘图、ML 势、CR 分析与 Slurm 提交 |
 | `vasp_utils/`、`myvasp/` | VASP workflow 与历史辅助脚本 |
 | `slurm_utils/` | 软件无关的 SLURM 生成/提交入口与 runner |
 | `lmp_utils/` | LAMMPS 模板和 workflow 脚本 |

@@ -2,7 +2,7 @@
 
 ## 项目结构与模块组织
 
-本仓库是一个以 `mymetal` Python 包为核心的计算材料学工具包。核心代码位于 `mymetal/` 目录下，其中包含用于结构构建的子包 `build/`、用于计算流程的 `calculate/`、用于 VASP 输入/输出的 `io/`、用于后处理的 `post/`、用于机器学习工具的 `ml/`，以及通用辅助函数 `universal/`。工作流脚本和模板单独存放：`vasp_utils/` 和 `myvasp/` 用于 VASP，`slurm_utils/` 用于调度器脚本，`lmp_utils/` 用于 LAMMPS 模板，`matlab_code/` 用于 MATLAB 分析。Sphinx 文档源文件位于 `docs/source/`，可运行示例位于 `docs/examples/`，本地 HTML 输出到 `docs/_build/html/`。GitHub Pages 从 `.github/workflows/docs.yml` 生成的 artifact 部署；`docs/build/` 只是旧的跟踪产物，不再作为构建或部署源。
+本仓库是一个以 `mymetal` Python 包为核心的计算材料学工具包。核心代码位于 `mymetal/` 目录下，其中包含用于结构构建的子包 `build/`、用于计算流程的 `calculate/`、用于 VASP 输入/输出的 `io/`、用于后处理的 `post/`、用于机器学习工具的 `ml/`、用于接触共振分析的 `cr/`、用于 Slurm 作业生成与提交的 `slurm/`，以及通用辅助函数 `universal/`。工作流脚本和模板单独存放：`vasp_utils/` 和 `myvasp/` 用于 VASP，`slurm_utils/` 用于调度器脚本，`lmp_utils/` 用于 LAMMPS 模板，`n2p2_utils/` 用于 n2p2 辅助脚本，`matlab_code/` 用于 MATLAB 分析。Sphinx 文档源文件位于 `docs/source/`，可运行示例位于 `docs/examples/`，本地 HTML 输出到 `docs/_build/html/`。GitHub Pages 从 `.github/workflows/docs.yml` 生成的 artifact 部署；`docs/build/` 只是旧的跟踪产物，不再作为构建或部署源。
 
 ## 构建、测试与开发命令
 

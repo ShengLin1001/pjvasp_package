@@ -1,14 +1,18 @@
 """
 mymetal.build
 
-This subpackage provides functions for building structures, including
-creating surfaces, adding atoms, and stretching structures. The subpackage
-is organized into several modules that focus on different aspects of
-building structures.
+This subpackage provides functions for building structures, including bulk
+cells, thin films (surfaces, heterostructures, GSFE models), and VASP workflow
+input generators. It is organized into subpackages that focus on different
+aspects of structure building.
 
-Modules:
-    - film: Contains functions for building thin films, including adding
-        hydroxyl groups, stretching films, and finding the primitive cell.
+Subpackages:
+    - bulk: (hkl)-oriented crystal cells and generalized stacking fault energy
+      (GSFE) models for FCC and HCP structures.
+    - film: Thin-film/slab construction, primitive-cell and cubic-cell finding,
+      heterostructure building, hydroxyl passivation, and film stretching.
+    - workflow: Directory/input generators that drive the VASP workflow scripts
+      in ``vasp_utils`` (higher-order elastic constants, KPAR/NCORE timing).
 """
 
 

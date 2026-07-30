@@ -21,5 +21,6 @@ Modules:
     - electronic_structure: Contains functions for plotting electronic structure
       data and other universal electronic structure-related functions.
     - material_science: Contains functions for material science calculations,
+      such as Schmid factors for FCC slip systems.
 """
 

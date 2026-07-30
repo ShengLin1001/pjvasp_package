@@ -8,7 +8,9 @@ It includes functions for reading and writing VASP input/output files, as well
 as creating and writing content to files for post-processing tasks.
 
 Modules:
-    - vasp: Module for reading and writing VASP files.
-    - post: Module for post-processing tasks.
-    - general: Module for general file reading utilities.
+    - vasp: Reads and writes VASP POSCAR/CONTCAR files (adapted from ase.io.vasp).
+    - extxyz: Converts Extended XYZ trajectory files into a list of ASE Atoms.
+    - general: Reads delimited files into a DataFrame and writes DataFrames to
+      formatted plain text.
+    - post: Constructs and writes post-processing content to files.
 """

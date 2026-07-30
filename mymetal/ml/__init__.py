@@ -10,4 +10,9 @@ Modules:
     plot: Module for data visualization, including functions for displaying images and plots.
     model: Module for training and visualizing machine learning models.
     confusionmatrix: Module for creating confusion matrices.
+
+Subpackages:
+    n2p2: Wrapper for the N2P2 neural-network potential, including dataset
+      generation from VASP OUTCAR, the PeiN2p2 training orchestrator,
+      symmetry-function parameter generation, and CUR-based feature selection.
 """
