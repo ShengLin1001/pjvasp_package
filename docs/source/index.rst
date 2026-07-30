@@ -27,14 +27,17 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
       **Getting Started**
 
       :doc:`生成、写出并验证 12-layer Au(111) slab
-      <getting_started/au111_slab>`。
+      <getting_started/au111_slab>`，或一次对比 :doc:`Cu(100)/(110)/(111)
+      <getting_started/fcc_surfaces>` 与 :doc:`HCP Mg 多表面
+      <getting_started/hcp_surfaces>`。
 
    .. container:: task-card
 
       **Tutorials**
 
       :doc:`按真实 fixture 学习 surface energy 与 OUTCAR 汇总
-      <tutorials/index>`。
+      <tutorials/index>`，或用合成数据走通 :doc:`EOS 拟合
+      <tutorials/eos_curve>` 与 :doc:`单轴/双轴应变 <tutorials/biaxial_stretch>`。
 
    .. container:: task-card
 
@@ -60,6 +63,21 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    Getting Started 生成的真实 Au(111) 结构。左图以六个面内重复单元显示
    12 个原子层和 z 方向真空，右图显示 (111) 面内排列。图片由
    ``docs/scripts/generate_structure_images.py`` 从教程脚本确定性生成。
+
+.. figure:: /_static/images/generated/fcc_surfaces.png
+   :width: 960px
+   :alt: Side and top views of Cu(100), Cu(110) and Cu(111) 12-layer slabs
+
+   FCC 多表面教程同时构建 Cu(100)/(110)/(111) 三个 12-layer slab。上排为
+   侧视图，下排为俯视图。三个 slab 共享同一 ``a_fcc = 3.61 Å``，但面内
+   排列和层间距完全不同。
+
+.. figure:: /_static/images/generated/eos_curve.png
+   :width: 960px
+   :alt: Murnaghan and Birch-Murnaghan EOS fits to synthetic Cu-like data
+
+   EOS 教程用 Cu-like 合成数据演示 Murnaghan 与 Birch-Murnaghan 拟合。
+   左图为拟合曲线，右图为残差。
 
 .. toctree::
    :maxdepth: 2

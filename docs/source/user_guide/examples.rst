@@ -8,8 +8,12 @@
 ------------
 
 * :doc:`../getting_started/au111_slab`：生成、写出、读回并绘制 Au(111) slab。
+* :doc:`../getting_started/fcc_surfaces`：一次构建并对比 Cu(100)/(110)/(111) 三个 FCC 表面。
+* :doc:`../getting_started/hcp_surfaces`：构建并对比 Mg(0001)/(10-10)/(10-11) 四个 HCP 表面。
 * :doc:`../tutorials/surface_energy`：用仓库已有结构和能量计算表面能。
 * :doc:`../tutorials/outcar_batch`：批量解析两个真实 ``OUTCAR``。
+* :doc:`../tutorials/eos_curve`：用 ASE + scipy 拟合 Murnaghan / Birch-Murnaghan EOS。
+* :doc:`../tutorials/biaxial_stretch`：对 Cu(111) slab 施加单轴/双轴应变并合成能量。
 
 HPC workflow
 ------------
