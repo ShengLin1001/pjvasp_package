@@ -64,6 +64,64 @@ def main() -> None:
     )
     print("generated: " + str(PATH_IMAGES / "biaxial_stretch.png"))
 
+    # Bulk structures comparison (FCC / BCC / HCP / diamond).
+    from bulk_structures import build_bulk_cells, render_comparison
+    render_comparison(build_bulk_cells(), PATH_IMAGES / "bulk_structures.png")
+    print("generated: " + str(PATH_IMAGES / "bulk_structures.png"))
+
+    # k-point sampling figure (Monkhorst-Pack vs Gamma + RK scan).
+    from kpoints_sampling import build_slab as build_kp_slab, get_mp_and_gamma, rk_scan, compare_reciprocal, render_figure as render_kp
+    slab = build_kp_slab()
+    mpk, gk = get_mp_and_gamma()
+    rk_result = rk_scan(slab, [20, 40, 60, 80, 100, 120])
+    render_kp(mpk, gk, rk_result, PATH_IMAGES / "kpoints_sampling.png")
+    print("generated: " + str(PATH_IMAGES / "kpoints_sampling.png"))
+
+    # FCC Schmid factor figure.
+    from schmid_factor import compute_reference_table, compute_scan_table, compute_polar_grid, render_figure as render_schmid
+    render_schmid(
+        compute_reference_table(),
+        compute_scan_table(),
+        compute_polar_grid(),
+        PATH_IMAGES / "schmid_factor.png",
+    )
+    print("generated: " + str(PATH_IMAGES / "schmid_factor.png"))
+
+    # Neighbor distance / RDF figure.
+    from neighbor_distances import build_structures, collect_distances, build_rdf, render_figure as render_neighbor
+    structures = build_structures()
+    rdfs = [build_rdf(collect_distances(atoms)) for atoms in structures]
+    render_neighbor(rdfs, PATH_IMAGES / "neighbor_distances.png")
+    print("generated: " + str(PATH_IMAGES / "neighbor_distances.png"))
+
+    # Atom manipulation (move + fix + selective dynamics) figure.
+    from atom_manipulation import build_slab as build_am_slab, fix_bottom_half, shift_top_layer, render_figure as render_am
+    slab = build_am_slab()
+    z_min = float(slab.positions[:, 2].min())
+    z_max = float(slab.positions[:, 2].max())
+    z_mid = 0.5 * (z_min + z_max)
+    mask = [atom.position[2] < z_mid for atom in slab]
+    slab_constrained = fix_bottom_half(slab)
+    slab_shifted = shift_top_layer(slab_constrained)
+    render_am(slab, slab_constrained, slab_shifted, mask, PATH_IMAGES / "atom_manipulation.png")
+    print("generated: " + str(PATH_IMAGES / "atom_manipulation.png"))
+
+    # Strain / deformation matrix figure.
+    from strain_deformation import build_reference_cell, make_uniaxial_x_strain, make_biaxial_xy_strain, make_simple_shear_xy, compute_strain_pack, render_figure as render_strain
+    cell_ref = build_reference_cell()
+    packs = [
+        compute_strain_pack(cell_ref, make_uniaxial_x_strain(cell_ref, 0.05)),
+        compute_strain_pack(cell_ref, make_biaxial_xy_strain(cell_ref, 0.05)),
+        compute_strain_pack(cell_ref, make_simple_shear_xy(cell_ref, 0.10)),
+    ]
+    titles = [
+        "Uniaxial x\nstrain = +0.05",
+        "Biaxial xy\nstrain = +0.05",
+        "Simple shear xy\ngamma = +0.10",
+    ]
+    render_strain(packs, titles, PATH_IMAGES / "strain_deformation.png")
+    print("generated: " + str(PATH_IMAGES / "strain_deformation.png"))
+
 
 if __name__ == "__main__":
     main()

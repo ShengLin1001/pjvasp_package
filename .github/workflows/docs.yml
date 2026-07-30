@@ -55,8 +55,14 @@ jobs:
           python docs/examples/getting_started_au111.py --output docs/_build/example-au111
           python docs/examples/fcc_surfaces.py --output docs/_build/example-fcc-surfaces
           python docs/examples/hcp_surfaces.py --output docs/_build/example-hcp-surfaces
+          python docs/examples/bulk_structures.py --output docs/_build/example-bulk
           python docs/examples/eos_curve.py --output docs/_build/example-eos
           python docs/examples/biaxial_stretch.py --output docs/_build/example-biaxial
+          python docs/examples/kpoints_sampling.py --output docs/_build/example-kpoints
+          python docs/examples/schmid_factor.py --output docs/_build/example-schmid
+          python docs/examples/neighbor_distances.py --output docs/_build/example-neighbor
+          python docs/examples/atom_manipulation.py --output docs/_build/example-manipulation
+          python docs/examples/strain_deformation.py --output docs/_build/example-strain
           python docs/examples/surface_energy.py
           python docs/examples/outcar_summary.py mymetal/example/test-post/y_dir -cases 0.997 1.000 -output docs/_build/outcar-summary.csv
           python docs/scripts/generate_structure_images.py

@@ -11,6 +11,11 @@ Tutorials
    outcar_batch
    eos_curve
    biaxial_stretch
+   kpoints_sampling
+   schmid_factor
+   neighbor_distances
+   atom_manipulation
+   strain_deformation
 
 后续案例
 --------
