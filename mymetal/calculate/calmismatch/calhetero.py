@@ -82,8 +82,11 @@ def compare_atoms(atoms1: Atoms = None, atoms2: Atoms = None, tolerance: float=1
 def cal_mismatch(bottom: Atoms = None, top: Atoms = None, hetero: Atoms = None) -> float:
     """
     For calculating the max mismatch.
-    ------
-    return a list\n
+
+    Returns
+    -------
+    a list
+
         >> `[a_mismatch, b_mismatch, gamma_mismatch]`
     """
     a_bottom, b_bottom, c_bottom, alpha_bottom, beta_bottom, gamma_bottom = bottom.cell.cellpar()

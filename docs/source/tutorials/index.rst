@@ -18,6 +18,8 @@ Tutorials
    strain_deformation
    gsfe_models
    cubic_cell_and_stretch
+   deformation_and_hnf
+   reciprocal_lattice
 
 后续案例
 --------

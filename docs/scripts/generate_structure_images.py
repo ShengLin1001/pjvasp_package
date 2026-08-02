@@ -138,6 +138,20 @@ def main() -> None:
     render_cubic(prim, ortho, stretched, PATH_IMAGES / "cubic_cell_and_stretch.png")
     print("generated: " + str(PATH_IMAGES / "cubic_cell_and_stretch.png"))
 
+    # Deformation matrix + Hermite Normal Form.
+    from deformation_and_hnf import build_deformation_pair, build_hnf_table, render_figure as render_deform
+    render_deform(PATH_IMAGES / "deformation_and_hnf.png", build_deformation_pair(), build_hnf_table())
+    print("generated: " + str(PATH_IMAGES / "deformation_and_hnf.png"))
+
+    # Reciprocal lattice vectors + RK-based k-point mesh.
+    from reciprocal_lattice import build_bulk_cells, reciprocal_pair, summarize_cell, render_figure as render_recip
+    recip_rows = []
+    for idx, atoms in enumerate(build_bulk_cells()):
+        info = summarize_cell(idx, atoms)
+        recip_rows.append(info)
+    render_recip(recip_rows, PATH_IMAGES / "reciprocal_lattice.png")
+    print("generated: " + str(PATH_IMAGES / "reciprocal_lattice.png"))
+
 
 if __name__ == "__main__":
     main()

@@ -69,15 +69,140 @@ Mechanics and mismatch
    :members:
    :show-inheritance:
 
+``cal_stretch`` / ``cal_relative_stretch``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.calculate.calmechanics.stretch.cal_stretch
+
+.. autofunction:: mymetal.calculate.calmechanics.stretch.cal_relative_stretch
+
+用途
+   基于 ``hetbuilder.Interface`` 的超胞匹配结果，计算 bottom/top 层相对于
+   heterostructure stack 的主应变方向拉伸因子。``cal_relative_stretch``
+   返回 ``[factor - 1, direction]``，``cal_stretch`` 返回绝对值。
+
+.. note::
+
+   这两个函数依赖可选的 ``hetbuilder`` 包。
+
+Linear algebra (calmath)
+------------------------
+
+``hermite_normal_form``
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.calculate.calmath.matrix.hermite_normal_form
+
+用途
+   计算整数矩阵的 Hermite Normal Form (HNF)，用于分析超胞变换矩阵、
+   寻找 commensurate cell。使用纯整数算术保证结果为整数矩阵。
+
+参数
+   ``matrix`` 为 ``np.ndarray``（会被转为 ``int64``）。
+
+返回
+   HNF 矩阵（``np.ndarray``，``int64``）。
+
+最小示例
+   .. code-block:: python
+
+      import numpy as np
+      from mymetal.calculate.calmath.matrix import hermite_normal_form
+
+      m = np.array([[2, 1, 0], [0, 2, 1], [0, 0, 3]])
+      hnf = hermite_normal_form(m)
+
+Related tutorials
+   :doc:`../tutorials/deformation_and_hnf`
+
+Mismatch analysis (calmismatch)
+-------------------------------
+
 .. automodule:: mymetal.calculate.calmismatch.calhetero
 
-Principal entry point: ``mymetal.calculate.calmismatch.calhetero.cal_mismatch``.
+Principal entry point: ``mymetal.calculate.calmismatch.calhetero.cal_mismatch``。
+
+``cal_mismatch``
+~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.calculate.calmismatch.calhetero.cal_mismatch
+
+用途
+   计算 bottom、top 与 heterostructure stack 三者之间的最大 mismatch，
+   返回 ``[a_mismatch, b_mismatch, gamma_mismatch]``。每个分量为
+   ``max(|bottom-hetero|/bottom, |top-hetero|/top)``。
+
+.. note::
+
+   ``calhetero`` 模块依赖可选的 ``hetbuilder`` 包（``Interface`` 类）。
+   ``cal_mismatch`` 本身只依赖 ASE，可独立使用。
+
+``compare_atoms``
+~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.calculate.calmismatch.calhetero.compare_atoms
+
+用途
+   逐项比较两个 ``ase.Atoms`` 的 cell 长度、角度、笛卡尔坐标和 fractional
+   坐标，返回 4 个 bool 的列表。
+
+``cal_stretch_lattice``
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.calculate.calmismatch.calhetero.cal_stretch_lattice
+
+用途
+   根据 bottom/top 参考层和 heterostructure stack 的 cell 参数，计算
+   两层各自的 ``[a, b, gamma]`` 拉伸量 ``(hetero - ref) / ref``。
 
 Electronic and materials analysis
 ---------------------------------
+
+``cal_reciprocal_matrix`` / ``cal_reciprocal_matrix2``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.calculate.calqm.kpoints.cal_reciprocal_matrix
+   :no-index:
+
+.. autofunction:: mymetal.calculate.calqm.kpoints.cal_reciprocal_matrix2
+   :no-index:
+
+用途
+   两种方法计算倒格子矢量：``cal_reciprocal_matrix`` 用叉积公式，
+   ``cal_reciprocal_matrix2`` 用矩阵求逆。两者结果一致（在数值精度内）。
+
+Related tutorials
+   :doc:`../tutorials/reciprocal_lattice`、 :doc:`../tutorials/kpoints_sampling`
+
+``get_size_by_distance``
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.calculate.calqm.kpoints.get_size_by_distance
+   :no-index:
+
+用途
+   根据 RK 乘积或 KSPACING 计算 VASP 自动 k 点网格。RK 法用
+   ``round``，KSPACING 法用 ``ceil``。返回 ``(old_auto_kpoints, new_kspacing_kpoints)``。
+
+Related tutorials
+   :doc:`../tutorials/reciprocal_lattice`、 :doc:`../tutorials/kpoints_sampling`
 
 .. automodule:: mymetal.calculate.calqm.kpoints
    :members:
    :show-inheritance:
 
 .. automodule:: mymetal.calculate.material_science.schmid
+
+Electronic structure
+--------------------
+
+.. automodule:: mymetal.calculate.electronic_structure.universal
+   :members:
+   :show-inheritance:
+
+.. note::
+
+   ``electronic_structure`` 模块依赖可选的 ``pymatgen`` 包。
+   ``plotter.py`` 提供布里渊区可视化（``plot_brillouin_zone_from_kpath``
+   等），``universal.py`` 提供能带数据提取（``get_n_band``、
+   ``summarize_band_structure_info``、``get_n_kpoints_band``）。
