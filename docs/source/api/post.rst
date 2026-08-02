@@ -83,5 +83,63 @@ documentation build:
 * ``mymetal.post.Cij_energy``
 * ``mymetal.post.convergence``
 
+Elastic constants (Cij_energy)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.post.Cij_energy
+   :members:
+   :show-inheritance:
+
+Principal entry point: ``mymetal.post.Cij_energy.fit_cij_energy``。
+
+用途
+   用 energy-strain 方法拟合二阶弹性常数 ``Cij``。从 ``y_dir/<strain>``
+   目录读取变形能量，对 ``U/V0`` vs ``eta²`` 做二次多项式拟合，提取
+   ``Cij`` 分量。配套 ``read_cij_energy``/``write_cij_energy`` 读写结果，
+   ``read_deform_data``/``calc_strain`` 处理变形数据。
+
+.. note::
+
+   这些函数依赖可选的 ``myvasp`` 包和 VASP 输出目录结构。文档构建时
+   ``myvasp`` 被 mock。
+
+Related tutorials
+   :doc:`../tutorials/cij_energy_fitting`
+
+Convergence post-processing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.post.convergence
+   :members:
+   :show-inheritance:
+
+用途
+   后处理 ENCUT/k-point 收敛测试。``post_convergence`` 扫描
+   ``y_convergence_encuts``/``y_convergence_kpoints`` 目录，提取能量，
+   排序后绘制收敛曲线并写摘要文件。``my_write_convergence``/
+   ``my_read_convergence`` 读写结果。
+
+Stretch post-processing
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.post.stretch
+   :members:
+   :show-inheritance:
+
+用途
+   后处理 VASP/LAMMPS 拉伸计算。``post_stretch``/``post_lammps_stretch``
+   从 ``y_dir/<strain>`` 提取能量-应变数据，``my_write_stretch``/
+   ``my_read_stretch`` 读写结果。
+
+GSFE / NEB post-processing
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   ``mymetal.post.gsfe`` 和 ``mymetal.post.neb`` 提供 GSFE 和 NEB 后处理
+   （曲线绘制、spline 拟合、摘要文件）。它们的 docstring 当前包含 RST
+   格式问题，暂不自动渲染完整 API；函数签名和用法请直接查看源码或
+   :doc:`../manual/workflows` 中的 Advanced Workflow 概览。
+
 .. automodule:: mymetal.post.kpar_ncore
    :members:

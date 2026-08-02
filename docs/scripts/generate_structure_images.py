@@ -152,6 +152,31 @@ def main() -> None:
     render_recip(recip_rows, PATH_IMAGES / "reciprocal_lattice.png")
     print("generated: " + str(PATH_IMAGES / "reciprocal_lattice.png"))
 
+    # Extended XYZ trajectory + general_read/general_write I/O.
+    from io_extxyz_and_general import (
+        build_trajectory, write_trajectory, read_trajectory,
+        build_convergence_table, write_table, read_table,
+        render_figure as render_io,
+    )
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpd:
+        tmpp = Path(tmpd)
+        frames = build_trajectory()
+        write_trajectory(frames, tmpp / "trajectory.xyz")
+        frames_back = read_trajectory(tmpp / "trajectory.xyz")
+        df = build_convergence_table()
+        write_table(df, tmpp / "data.txt")
+        df_read = read_table(tmpp / "data.txt")
+        render_io(frames, df_read, PATH_IMAGES / "io_extxyz_and_general.png")
+    print("generated: " + str(PATH_IMAGES / "io_extxyz_and_general.png"))
+
+    # Cij elastic constant energy-strain fitting (synthetic data).
+    from cij_energy_fitting import build_synthetic_data, fit_cij_from_modes, render_figure as render_cij
+    modes = build_synthetic_data()
+    fitted = fit_cij_from_modes(modes)
+    render_cij(modes, fitted, PATH_IMAGES / "cij_energy_fitting.png")
+    print("generated: " + str(PATH_IMAGES / "cij_energy_fitting.png"))
+
 
 if __name__ == "__main__":
     main()

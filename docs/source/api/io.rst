@@ -64,9 +64,60 @@ See :doc:`../getting_started/au111_slab`.
 其他 I/O 模块
 -------------
 
-.. automodule:: mymetal.io.general
+``extxyz_to_atomlist``
+~~~~~~~~~~~~~~~~~~~~~~
 
-.. automodule:: mymetal.io.extxyz
+.. autofunction:: mymetal.io.extxyz.extxyz_to_atomlist
+
+用途
+   把 Extended XYZ 轨迹文件读成 ``ase.Atoms`` 列表，每帧执行 ``wrap()``。
+   底层用 ``ase.io.read(file, index=':', format='extxyz')``。
+
+参数/返回
+   ``file`` 为文件路径；返回 ``list[Atoms]``，每帧一个 ``Atoms``。
+
+最小示例
+   .. code-block:: python
+
+      from mymetal.io.extxyz import extxyz_to_atomlist
+
+      atomlist = extxyz_to_atomlist('trajectory.xyz')
+      print(len(atomlist), atomlist[0].get_chemical_formula())
+
+Related tutorials
+   :doc:`../tutorials/io_extxyz_and_general`
+
+``general_read`` / ``general_write``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.io.general.general_read
+
+.. autofunction:: mymetal.io.general.general_write
+
+用途
+   ``general_read`` 把分隔符文件读成 ``pandas.DataFrame``，支持自定义
+   header、分隔符、注释符、index 列。``general_write`` 把 DataFrame 按
+   列类型（int/float/bool/str）格式化写出为纯文本。
+
+参数
+   ``general_read``: ``filepath``、``has_header``、``header_names``、
+   ``sep``（默认 ``r"\s+"``）、``comment_char``（默认 ``#``）、
+   ``index_col``、``header_row``。
+   ``general_write``: ``filename``、``dfc``、``int_format``/``float_format``/
+   ``str_format``/``bool_format``、``if_write_col_num``、``if_write_row_num``。
+
+最小示例
+   .. code-block:: python
+
+      import pandas as pd
+      from mymetal.io.general import general_read, general_write
+
+      df = pd.DataFrame({'encut': [300, 400, 500], 'energy': [-8.1, -8.2, -8.21]})
+      general_write('data.txt', dfc=df, if_write_col_num=True)
+      df_read = general_read('data.txt', has_header=True)
+
+Related tutorials
+   :doc:`../tutorials/io_extxyz_and_general`
 
 .. automodule:: mymetal.io.post.construct
    :members:

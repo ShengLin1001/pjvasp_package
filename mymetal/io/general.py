@@ -23,35 +23,25 @@ def general_read(filepath: str = None, has_header: bool = True, header_names: Op
 
     Args:
         filepath: Path to the input file. If None, may trigger default behavior.
-        has_header: If True, uses first line as column names. Defaults to True. header_row specifies which row to use as header.
+        has_header: If True, uses first line as column names. Defaults to True.
+            header_row specifies which row to use as header.
         header_names: Custom column names when has_header=False. Ignored if has_header=True.
-        sep: Delimiter regex pattern. Defaults to any whitespace (r"\s+").
+        sep: Delimiter regex pattern. Defaults to any whitespace.
         comment_char: Lines starting with this character are skipped. Defaults to '#'.
         index_col: Column to set as index. Defaults to None (no index).
         header_row: Row number to use as header when has_header=True. Defaults to 0 (first line).
         **kwargs: Additional keyword arguments passed to pandas.read_csv().
-            Common useful arguments:
-            - skiprows: int or list-like, rows to skip (0-indexed)
-            - na_values: scalar, str, list-like, or dict, additional strings to recognize as NA/NaN
-            - skip_blank_lines: bool, whether to skip blank lines (default True)
-            - nrows: int, number of rows of file to read
-            - dtype: Type name or dict of column -> type, data type for data or columns
-            - encoding: str, encoding to use for UTF when reading/writing
-            - usecols: list-like or callable, subset of columns to read
-            - skipfooter: int, number of lines at bottom of file to skip
-            - memory_map: bool, use memory mapping for file reading (default False)
-            - delim_whitespace: bool, alternative to sep='\\s+' (default False)
-            - converters: dict, functions for converting values in certain columns
+            Common useful arguments include skiprows, na_values, nrows,
+            dtype, encoding, usecols, skipfooter, memory_map, converters.
 
     Returns:
         pd.DataFrame: Parsed data with appropriate column headers.
 
-    Examples:
-    ```python
+    Examples::
+
         df = general_read('data.txt')
         df = general_read('data.txt', has_header=False, header_names=['x', 'y', 'z'])
-        df = general_read('data.txt', has_header=False, header_names=['x', 'y', 'z'], skiprows=0) # Jump first line
-    ```
+        df = general_read('data.txt', has_header=False, header_names=['x', 'y', 'z'], skiprows=0)
 
     Note:
         - Uses Python engine for regex separator support. For large files, consider specifying engine='c'.

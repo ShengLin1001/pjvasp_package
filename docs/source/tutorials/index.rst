@@ -20,6 +20,8 @@ Tutorials
    cubic_cell_and_stretch
    deformation_and_hnf
    reciprocal_lattice
+   io_extxyz_and_general
+   cij_energy_fitting
 
 后续案例
 --------

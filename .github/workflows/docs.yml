@@ -69,6 +69,8 @@ jobs:
           python docs/examples/cubic_cell_and_stretch.py --output docs/_build/example-cubic-stretch
           python docs/examples/deformation_and_hnf.py --output docs/_build/example-deform-hnf
           python docs/examples/reciprocal_lattice.py --output docs/_build/example-reciprocal
+          python docs/examples/io_extxyz_and_general.py --output docs/_build/example-io
+          python docs/examples/cij_energy_fitting.py --output docs/_build/example-cij
           python docs/scripts/generate_structure_images.py
 
       - name: Configure Pages

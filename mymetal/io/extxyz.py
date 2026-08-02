@@ -27,19 +27,18 @@ def extxyz_to_atomlist(file: str = None) -> list:
         >>> atoms_list = extxyz_to_atomlist('trajectory.xyz')  # Get all frames
         >>> len(atoms_list)  # Number of frames
         10
-        
-        Alternative low-level implementation:
-        ```python
+
+    Alternative low-level implementation::
+
         from io import StringIO
         from ase.io.extxyz import read_extxyz
 
         with open('movie_CONTCAR.xyz', 'r') as f:
             content = f.read()
 
-        atomlist = read_extxyz(StringIO(content), index = -1)  # cant read all frames directly like ':'
+        atomlist = read_extxyz(StringIO(content), index=-1)
         for i, atoms in enumerate(atomlist):
             print(atoms)
-        ```
     """
     atomgenerator = read(file, index=':', format='extxyz')
     atomlist = []
