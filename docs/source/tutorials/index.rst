@@ -16,6 +16,8 @@ Tutorials
    neighbor_distances
    atom_manipulation
    strain_deformation
+   gsfe_models
+   cubic_cell_and_stretch
 
 后续案例
 --------

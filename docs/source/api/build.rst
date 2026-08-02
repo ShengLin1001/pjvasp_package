@@ -71,9 +71,159 @@ Related tutorials
 其他结构入口
 ------------
 
-``mymetal.build.bulk.create`` 还包含 ``create_fcc_111`` 与
-``create_hcp_basal``。heterostructure 入口依赖可选 ``hetbuilder``，本轮未把
-无法在当前环境实测的路径包装成正式教程。
+``mymetal.build.bulk.create`` 提供 ``(hkl)`` 取向的 FCC/HCP 晶胞构造器，
+``mymetal.build.bulk.gsfe`` 在此基础上生成 GSFE（广义层错能）模型，
+``mymetal.build.film.findcubic`` 把 primitive 薄膜 cell 转成正交 cell，
+``mymetal.build.film.stretch`` 还提供沿指定方向的拉伸函数。
+
+``create_fcc_111``
+~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.build.bulk.create.create_fcc_111
+
+用途
+   构造 FCC(111) 取向晶胞，使用 ASE ``FaceCenteredCubic`` + direction/miller
+   方式，并做微小 in-plane 平移避免原子落在倾斜 cell 的 xlo/ylo 面上。
+
+关键参数
+   ``a`` 为晶格常数（Å，``None`` 时用 ASE 默认值）；``size`` 为
+   ``(nx, ny, nz)`` 超胞重复；``symbol`` 为元素符号；``pbc`` 为三方向
+   周期性。层间距约为 ``a/sqrt(3)``。
+
+返回
+   一个 ``ase.Atoms``，已 ``wrap()``。
+
+最小示例
+   .. code-block:: python
+
+      from mymetal.build.bulk.create import create_fcc_111
+
+      atoms = create_fcc_111(a=4.08, size=(1, 1, 7), symbol='Au')
+      assert len(atoms) > 0
+
+Related tutorials
+   :doc:`../tutorials/gsfe_models`
+
+``create_hcp_basal``
+~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.build.bulk.create.create_hcp_basal
+
+用途
+   构造 HCP(0001) 基面晶胞，使用 ASE ``HexagonalClosedPacked``。
+   层间距为 ``c/2``。同样做 in-plane 微平移避免角原子在 LAMMPS
+   minimize 时被推出 box。
+
+关键参数
+   ``a``、``c`` 为 HCP 晶格常数（Å）；``size``、``symbol``、``pbc``
+   同上。
+
+Related tutorials
+   :doc:`../tutorials/gsfe_models`
+
+``create_hcp_prism1``
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.build.bulk.create.create_hcp_prism1
+
+用途
+   构造 HCP(10-10) prism I 晶胞，支持 ``mode='wide'``（宽层，间距
+   ``a/sqrt(3)``）和 ``mode='narrow'``（窄层，间距 ``a/(2*sqrt(3))``）。
+
+``create_gsfe_model``
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.build.bulk.gsfe.create_gsfe_model
+
+用途
+   根据 ``gsfe_type`` 选择晶体取向，生成用于 GSFE 计算的超胞。
+   支持的类型：``"FCC_111"``、``"FCC_100"``、``"HCP_basal"``、
+   ``"HCP_prism1w"``、``"HCP_pyr1w"``、``"HCP_pyr2"``。
+
+关键参数
+   ``a``、``c``（Å）为晶格常数；``size`` 为超胞尺寸。未给 ``size``
+   时使用各类型的内置默认值。
+
+.. note::
+
+   ``"HCP_pyr1w"``、``"HCP_pyr2"``、``"FCC_100"`` 路径调用
+   ``vasp_create_*`` 系列函数，依赖可选的 ``myvasp`` 包。
+   ``"FCC_111"``、``"HCP_basal"``、``"HCP_prism1w"`` 路径仅依赖 ASE。
+
+最小示例
+   .. code-block:: python
+
+      from mymetal.build.bulk.gsfe import create_gsfe_model
+
+      atoms = create_gsfe_model(gsfe_type="FCC_111", a=4.08, c=None, size=[1, 1, 7])
+      assert len(atoms) > 0
+
+Related tutorials
+   :doc:`../tutorials/gsfe_models`
+
+``find_cubic``
+~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.build.film.findcubic.find_cubic
+
+用途
+   把 primitive hcp/fcc 薄膜 cell（输入 ``[a,b,c,any,any,90]``）
+   转成 xy 面正交 cell：``cell[0,0] = sqrt(area/sqrt(3))``，
+   ``cell[1,1] = sqrt(3)*cell[0,0]``，并清零 off-diagonal xy 分量。
+
+参数
+   ``prim`` 为输入 ``ase.Atoms``；``type`` 目前仅支持 ``'hcp'``/``'fcc'``。
+
+返回
+   正交化后的 ``ase.Atoms`` （深拷贝，不修改输入）。
+
+最小示例
+   .. code-block:: python
+
+      from mymetal.build.film.findcubic import find_cubic
+      from mymetal.build.film.stretch import generate_film
+
+      film = generate_film(symbols='Mg', structure='hcp', num_layers=4,
+                           my_vacuum=10.0, slice_plane=(0,0,1), a_hcp=3.21)
+      ortho = find_cubic(film, type='hcp')
+
+Related tutorials
+   :doc:`../tutorials/cubic_cell_and_stretch`
+
+``find_optimal_cell_shape``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.build.film.findcubic.find_optimal_cell_shape
+
+用途
+   搜索整数变换矩阵 ``P``，使 ``P @ cell`` 最接近目标形状（``'sc'``
+   简单立方或 ``'fcc'`` 面心立方）。基于 ASE 实现，加入 ``doped`` 包
+   的旋转不变改进。
+
+``stretch_along_direction_to_cell``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: mymetal.build.film.stretch.stretch_along_direction_to_cell
+
+用途
+   沿 ``x`` / ``y`` / ``z`` 方向按给定拉伸因子列表拉伸 cell，原子 fractional
+   坐标不变。返回拉伸后的 ``ase.Atoms`` （单个因子）或列表。
+
+关键参数
+   ``stretch_direction_list`` 如 ``['x']``；``stretch_factor_list``
+   如 ``[0.99, 1.00, 1.01]``。
+
+最小示例
+   .. code-block:: python
+
+      from mymetal.build.film.stretch import stretch_along_direction_to_cell
+
+      stretched = stretch_along_direction_to_cell(
+          film, stretch_direction_list=['x'], stretch_factor_list=[1.01])
+
+Related tutorials
+   :doc:`../tutorials/cubic_cell_and_stretch`、
+   :doc:`../tutorials/biaxial_stretch`
 
 .. automodule:: mymetal.build.workflow.hoec
    :members:

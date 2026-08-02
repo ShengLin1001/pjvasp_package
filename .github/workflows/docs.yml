@@ -65,6 +65,8 @@ jobs:
           python docs/examples/strain_deformation.py --output docs/_build/example-strain
           python docs/examples/surface_energy.py
           python docs/examples/outcar_summary.py mymetal/example/test-post/y_dir -cases 0.997 1.000 -output docs/_build/outcar-summary.csv
+          python docs/examples/gsfe_models.py --output docs/_build/example-gsfe
+          python docs/examples/cubic_cell_and_stretch.py --output docs/_build/example-cubic-stretch
           python docs/scripts/generate_structure_images.py
 
       - name: Configure Pages

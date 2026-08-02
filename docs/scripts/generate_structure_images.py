@@ -122,6 +122,22 @@ def main() -> None:
     render_strain(packs, titles, PATH_IMAGES / "strain_deformation.png")
     print("generated: " + str(PATH_IMAGES / "strain_deformation.png"))
 
+    # GSFE model comparison (FCC_111 / HCP_basal / HCP_prism1w).
+    from gsfe_models import build_gsfe_models, render_comparison as render_gsfe
+    render_gsfe(build_gsfe_models(), PATH_IMAGES / "gsfe_models.png")
+    print("generated: " + str(PATH_IMAGES / "gsfe_models.png"))
+
+    # Cubic cell finding + uniaxial stretch.
+    from cubic_cell_and_stretch import (
+        build_primitive_film, build_orthorhombic_film, build_stretched_films,
+        render_figure as render_cubic,
+    )
+    prim = build_primitive_film()
+    ortho = build_orthorhombic_film(prim)
+    stretched = build_stretched_films(ortho)
+    render_cubic(prim, ortho, stretched, PATH_IMAGES / "cubic_cell_and_stretch.png")
+    print("generated: " + str(PATH_IMAGES / "cubic_cell_and_stretch.png"))
+
 
 if __name__ == "__main__":
     main()

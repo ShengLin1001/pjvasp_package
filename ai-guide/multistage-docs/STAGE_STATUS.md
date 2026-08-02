@@ -6,16 +6,16 @@
 ## 当前状态
 
 - **工作分支**: `docs/mymetal-website-upgrade`
-- **当前阶段**: Stage 1（待开始）
-- **上一阶段完成时间**: Stage 0 — 2026-08-02
-- **最后更新**: 2026-08-02 stage-0-complete
+- **当前阶段**: Stage 2（待开始）
+- **上一阶段完成时间**: Stage 1 — 2026-08-02
+- **最后更新**: 2026-08-02 stage-1-complete
 
 ## 阶段进度
 
 | 阶段 | 状态 | 开始时间 | 完成时间 | commit | 说明 |
 |------|------|----------|----------|--------|------|
 | Stage 0 | completed | 2026-08-02 | 2026-08-02 | 见下 | 主题/CSS 升级 + 基线构建 |
-| Stage 1 | pending | - | - | - | build 子包 |
+| Stage 1 | completed | 2026-08-02 | 2026-08-02 | 见下 | build 子包 |
 | Stage 2 | pending | - | - | - | calculate 子包 |
 | Stage 3 | pending | - | - | - | io + post 子包 |
 | Stage 4 | pending | - | - | - | universal 子包 |
