@@ -73,6 +73,30 @@ Contract
 副作用只限于 ``<case>/sub_slurm_univ.sh`` 和 ``path_root/slurm/`` 下的生成
 脚本；此例不会调用 ``sbatch``、VASP、LAMMPS 或 n2p2。
 
+脚本生成构建块
+~~~~~~~~~~~~~~
+
+``generate_script_header``
+   生成 ``#SBATCH`` header 行（partition、nodes、ncores、wall-time 等）。
+
+``generate_launcher_command``
+   生成 launcher 命令（``srun``、``mpirun`` 或 ``none``）。
+
+``generate_slurm_script_base``
+   组装一个完整的单作业 Slurm 脚本（header + module + launcher + cmd）。
+
+``generate_slurm_script_sequential``
+   生成 sequential chunk worker 脚本。
+
+``generate_slurm_script_shared_parent``
+   生成 chunk workers 的 parent 脚本。
+
+``check_wall_time``
+   校验 wall-time 字符串格式（``HH:MM:SS`` 或 ``D-HH:MM:SS`` 或分钟数）。
+
+Related tutorials
+   :doc:`../tutorials/slurm_script_generation`
+
 Related guides
 ~~~~~~~~~~~~~~
 

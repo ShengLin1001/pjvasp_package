@@ -15,3 +15,4 @@ install their real runtime dependencies before calling the relevant functions.
    api/slurm
    api/universal
    api/ml
+   api/cr

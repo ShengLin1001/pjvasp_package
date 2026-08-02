@@ -197,6 +197,12 @@ def main() -> None:
     render_arkel_triangle(build_arkel_materials(), PATH_IMAGES / "van_arkel_triangle.png")
     print("generated: " + str(PATH_IMAGES / "van_arkel_triangle.png"))
 
+    # Slurm script generation (dry-run, no sbatch).
+    from slurm_script_generation import build_header, build_base_script, render_figure as render_slurm
+    render_slurm(build_header(), build_base_script(PATH_IMAGES / "dummy.sh"),
+                 PATH_IMAGES / "slurm_script_generation.png")
+    print("generated: " + str(PATH_IMAGES / "slurm_script_generation.png"))
+
 
 if __name__ == "__main__":
     main()

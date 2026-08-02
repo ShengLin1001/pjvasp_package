@@ -11,9 +11,11 @@ Tags are NOT parsed here: the structure ``tag=`` labels come from
 ``mymetal.ml.n2p2.dataset.nnpdata`` (single source of truth for input.data).
 Plotting lives in ``mymetal.universal.plot.n2p2``.
 
-Unit conversion (n2p2 normalization):
+Unit conversion (n2p2 normalization)::
+
     E_pu/atom = E_iu/atom / conv_energy + mean_energy
     F_pu      = F_iu * conv_length / conv_energy
+
 RMSE-type quantities only need the conv factors (mean_energy cancels in
 differences); absolute energies need the full formula.
 """

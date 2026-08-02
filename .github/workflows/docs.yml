@@ -73,6 +73,7 @@ jobs:
           python docs/examples/cij_energy_fitting.py --output docs/_build/example-cij
           python docs/examples/miller_index_and_density.py --output docs/_build/example-miller-density
           python docs/examples/periodic_table_and_arkel.py --output docs/_build/example-periodic-arkel
+          python docs/examples/slurm_script_generation.py --output docs/_build/example-slurm
           python docs/scripts/generate_structure_images.py
 
       - name: Configure Pages

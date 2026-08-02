@@ -24,6 +24,7 @@ Tutorials
    cij_energy_fitting
    miller_index_and_density
    periodic_table_and_arkel
+   slurm_script_generation
 
 后续案例
 --------
