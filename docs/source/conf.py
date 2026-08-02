@@ -23,7 +23,17 @@ extensions = [
     'sphinx.ext.napoleon',
     'sphinx.ext.mathjax',
     'sphinx.ext.todo',
+    'sphinx.ext.viewcode',
+    'sphinx.ext.intersphinx',
+    'sphinx_copybutton',
 ]
+
+# Cross-link to ASE, Python and NumPy documentation.
+intersphinx_mapping = {
+    'ase': ('https://docs.ase-lib.org/', None),
+    'python': ('https://docs.python.org/3', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+}
 
 exclude_patterns = [
     'modules.rst',

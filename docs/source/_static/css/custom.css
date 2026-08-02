@@ -1,29 +1,110 @@
-/* Small, content-focused additions for the existing Read the Docs theme. */
+/* ==========================================================================
+   mymetal documentation — ASE-inspired aesthetic
+   See ai-guide/multistage-docs/ASE_AESTHETIC_STUDY.md for the design source.
+   Palette: white background, rgb(34,40,50) text, #f3f4f5 code bg, orange accent.
+   ========================================================================== */
+
+/* --- Page width and base typography --------------------------------------- */
+
 .wy-nav-content {
   max-width: 1120px;
 }
 
-.task-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 1rem 0 1.5rem;
+body {
+  background-color: #ffffff;
+  color: rgb(34, 40, 50);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  font-size: 16px;
+  line-height: 1.65;
 }
 
-.task-card {
-  border: 1px solid #d9e2e8;
-  border-left: 4px solid #2980b9;
-  border-radius: 0.25rem;
-  padding: 1rem;
-  background: #f8fafb;
+/* --- Headings ------------------------------------------------------------- */
+
+.rst-content h1,
+.rst-content h2,
+.rst-content h3,
+.rst-content h4 {
+  color: rgb(41, 49, 61);
+  font-weight: 600;
 }
 
-.task-card p:last-child {
-  margin-bottom: 0;
+.rst-content h1 {
+  font-size: 2.0em;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.3em;
+  margin-top: 0;
 }
+
+.rst-content h2 {
+  font-size: 1.55em;
+  border-bottom: 1px solid #f0f1f3;
+  padding-bottom: 0.2em;
+}
+
+.rst-content h3 {
+  font-size: 1.25em;
+}
+
+/* --- Links ---------------------------------------------------------------- */
+
+.rst-content a,
+.wy-nav-side a {
+  color: rgb(11, 92, 173);
+}
+
+.rst-content a:hover,
+.wy-nav-side a:hover {
+  color: rgb(8, 70, 133);
+}
+
+.rst-content a:visited {
+  color: rgb(11, 92, 173);
+}
+
+/* --- Code blocks (block-level) -------------------------------------------- */
+
+.rst-content pre {
+  background-color: rgb(243, 244, 245);
+  border: 1px solid rgb(209, 213, 218);
+  border-radius: 4px;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo,
+    Consolas, "DejaVu Sans Mono", monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 12px 16px;
+  overflow-x: auto;
+}
+
+.rst-content pre code {
+  color: rgb(34, 40, 50);
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* --- Inline code ---------------------------------------------------------- */
+
+.rst-content code.literal,
+.rst-content tt.literal {
+  background-color: rgb(243, 244, 245);
+  color: rgb(72, 86, 107);
+  border: 1px solid rgb(209, 213, 218);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo,
+    Consolas, "DejaVu Sans Mono", monospace;
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+/* --- Figures -------------------------------------------------------------- */
 
 .rst-content figure {
-  margin: 1.5rem auto;
+  margin: 1.75rem auto;
+  text-align: center;
 }
 
 .rst-content figure img {
@@ -31,7 +112,19 @@
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+  border: 1px solid #f0f1f3;
+  border-radius: 4px;
 }
+
+.rst-content figcaption {
+  color: rgb(90, 96, 107);
+  font-size: 0.9em;
+  margin-top: 0.5rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* --- Tables --------------------------------------------------------------- */
 
 .wy-table-responsive {
   overflow-x: auto;
@@ -40,7 +133,136 @@
 .wy-table-responsive table {
   width: max-content;
   min-width: 100%;
+  border-collapse: collapse;
 }
+
+.rst-content table.docutils,
+.rst-content table.field-list {
+  border: 1px solid rgb(209, 213, 218);
+}
+
+.rst-content table.docutils td,
+.rst-content table.docutils th {
+  border: 1px solid rgb(229, 231, 235);
+  padding: 6px 10px;
+}
+
+.rst-content table.docutils thead {
+  background-color: rgb(243, 244, 245);
+}
+
+/* --- Admonitions (note, warning, important) ------------------------------- */
+
+.rst-content .admonition {
+  border-radius: 4px;
+  border-left: 4px solid;
+  background: rgb(248, 249, 250);
+  box-shadow: none;
+}
+
+.rst-content .admonition .admonition-title {
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+  font-weight: 600;
+}
+
+.rst-content .admonition.note {
+  border-left-color: rgb(11, 92, 173);
+}
+
+.rst-content .admonition.note .admonition-title {
+  background: rgba(11, 92, 173, 0.08);
+  color: rgb(8, 70, 133);
+}
+
+.rst-content .admonition.warning {
+  border-left-color: rgb(197, 48, 48);
+}
+
+.rst-content .admonition.warning .admonition-title {
+  background: rgba(197, 48, 48, 0.08);
+  color: rgb(150, 30, 30);
+}
+
+.rst-content .admonition.important {
+  border-left-color: rgb(232, 146, 23);
+}
+
+.rst-content .admonition.important .admonition-title {
+  background: rgba(232, 146, 23, 0.08);
+  color: rgb(160, 100, 16);
+}
+
+/* --- Task cards (homepage grid) ------------------------------------------- */
+
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+.task-card {
+  border: 1px solid rgb(209, 213, 218);
+  border-left: 4px solid rgb(11, 92, 173);
+  border-radius: 4px;
+  padding: 1rem 1.25rem;
+  background: rgb(248, 249, 250);
+}
+
+.task-card p:last-child {
+  margin-bottom: 0;
+}
+
+/* --- Sidebar (left nav) --------------------------------------------------- */
+
+.wy-nav-side {
+  background-color: rgb(248, 249, 250);
+  border-right: 1px solid rgb(229, 231, 235);
+}
+
+.wy-nav-side .wy-menu-vertical a {
+  color: rgb(52, 58, 68);
+}
+
+.wy-nav-side .wy-menu-vertical a:hover {
+  background-color: rgba(11, 92, 173, 0.06);
+  color: rgb(8, 70, 133);
+}
+
+.wy-nav-side .wy-menu-vertical .current > a,
+.wy-nav-side .wy-menu-vertical .current a {
+  background-color: rgba(11, 92, 173, 0.10);
+  color: rgb(8, 70, 133);
+  border-right: 3px solid rgb(11, 92, 173);
+}
+
+/* --- Search --------------------------------------------------------------- */
+
+.wy-nav-top {
+  background: rgb(11, 92, 173);
+}
+
+/* --- Orange accent for download/badge elements ---------------------------- */
+
+.rst-content .guilabel,
+.rst-content .menuselection {
+  background-color: rgba(232, 146, 23, 0.12);
+  border: 1px solid rgba(232, 146, 23, 0.3);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 0.9em;
+  color: rgb(160, 100, 16);
+}
+
+/* --- Math ----------------------------------------------------------------- */
+
+.rst-content .math,
+.rst-content span.math {
+  color: rgb(41, 49, 61);
+}
+
+/* --- Mobile responsive ---------------------------------------------------- */
 
 @media screen and (max-width: 600px) {
   .task-grid {
@@ -53,6 +275,7 @@
 
   .rst-content pre {
     overflow-x: auto;
+    font-size: 13px;
   }
 
   .rst-content code.literal {
