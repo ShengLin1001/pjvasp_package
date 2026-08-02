@@ -177,6 +177,26 @@ def main() -> None:
     render_cij(modes, fitted, PATH_IMAGES / "cij_energy_fitting.png")
     print("generated: " + str(PATH_IMAGES / "cij_energy_fitting.png"))
 
+    # HCP Miller index 3<->4 conversion + density calculation.
+    from miller_index_and_density import (
+        build_miller_examples, build_bulk_cells, summarize_density,
+        render_figure as render_miller,
+    )
+    miller_ex = build_miller_examples()
+    density_rows = [summarize_density(idx, c) for idx, c in enumerate(build_bulk_cells())]
+    render_miller(miller_ex, density_rows, PATH_IMAGES / "miller_index_and_density.png")
+    print("generated: " + str(PATH_IMAGES / "miller_index_and_density.png"))
+
+    # Periodic table heatmap + van Arkel triangle.
+    from periodic_table_and_arkel import (
+        build_formula_dict, build_arkel_materials,
+        render_periodic_heatmap, render_arkel_triangle,
+    )
+    render_periodic_heatmap(build_formula_dict(), PATH_IMAGES / "periodic_table_heatmap.png")
+    print("generated: " + str(PATH_IMAGES / "periodic_table_heatmap.png"))
+    render_arkel_triangle(build_arkel_materials(), PATH_IMAGES / "van_arkel_triangle.png")
+    print("generated: " + str(PATH_IMAGES / "van_arkel_triangle.png"))
+
 
 if __name__ == "__main__":
     main()

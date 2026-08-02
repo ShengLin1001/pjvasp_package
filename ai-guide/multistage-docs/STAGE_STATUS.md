@@ -6,9 +6,9 @@
 ## 当前状态
 
 - **工作分支**: `docs/mymetal-website-upgrade`
-- **当前阶段**: Stage 4（待开始）
-- **上一阶段完成时间**: Stage 3 — 2026-08-02
-- **最后更新**: 2026-08-02 stage-3-complete
+- **当前阶段**: Stage 5（待开始）
+- **上一阶段完成时间**: Stage 4 — 2026-08-02
+- **最后更新**: 2026-08-02 stage-4-complete
 
 ## 阶段进度
 
@@ -18,7 +18,7 @@
 | Stage 1 | completed | 2026-08-02 | 2026-08-02 | 见下 | build 子包 |
 | Stage 2 | completed | 2026-08-02 | 2026-08-02 | 见下 | calculate 子包 |
 | Stage 3 | completed | 2026-08-02 | 2026-08-02 | 见下 | io + post 子包 |
-| Stage 4 | pending | - | - | - | universal 子包 |
+| Stage 4 | completed | 2026-08-02 | 2026-08-02 | 见下 | universal 子包 |
 | Stage 5 | pending | - | - | - | ml + slurm + cr 子包 |
 | Stage 6 | pending | - | - | - | 审查收尾 + 部署 |
 

@@ -71,6 +71,8 @@ jobs:
           python docs/examples/reciprocal_lattice.py --output docs/_build/example-reciprocal
           python docs/examples/io_extxyz_and_general.py --output docs/_build/example-io
           python docs/examples/cij_energy_fitting.py --output docs/_build/example-cij
+          python docs/examples/miller_index_and_density.py --output docs/_build/example-miller-density
+          python docs/examples/periodic_table_and_arkel.py --output docs/_build/example-periodic-arkel
           python docs/scripts/generate_structure_images.py
 
       - name: Configure Pages

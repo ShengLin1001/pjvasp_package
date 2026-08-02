@@ -22,6 +22,8 @@ Tutorials
    reciprocal_lattice
    io_extxyz_and_general
    cij_energy_fitting
+   miller_index_and_density
+   periodic_table_and_arkel
 
 后续案例
 --------
