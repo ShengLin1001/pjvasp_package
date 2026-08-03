@@ -35,6 +35,14 @@ lmp_utils LAMMPS 工作流
 runner 带有 ``srun`` step 创建失败的自动重试机制（``LMP_MAX_TRY`` 次，
 默认 99 次，每次间隔 ``LMP_RETRY_SLEEP`` 秒，默认 5s），只重试瞬时调度错误。
 
+.. figure:: /_static/images/generated/lmp_utils_overview.png
+   :alt: lmp_utils 工作流总览：runner 流程、模板对比、mod 依赖、GSFE 滑移系、sed 替换
+   :width: 100%
+
+   ``lmp_utils`` 子包总览图。上图展示 ``pei_lmp_run_properties`` runner 的三阶段
+   流程（stretch → Cij → gsfe）、模板与 ``.mod`` 文件的依赖关系、以及 ``sed``
+   占位符替换机制。完整脚本见 :doc:`../tutorials/index` 中的相关教程。
+
 lmp_universal
 -------------
 
