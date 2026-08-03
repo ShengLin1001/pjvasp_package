@@ -40,4 +40,22 @@
 
 ---
 
+## [utils-stage2] neb_utils.rst 无独立 figure 图片
+
+- 严重度: minor（可选改进，非阻塞）
+- 文件: `docs/source/manual/neb_utils.rst`
+- 发现时间: 2026-08-03 utils 审阅
+- 状态: open
+
+### 描述
+MASTER_PLAN 要求每阶段产出图片，但 neb_utils.rst 是唯一缺 figure 的页面。
+overview 图（vasp_workflow_bulk_overview.png）已覆盖 NEB 内容，但 neb_utils 页面
+本身无图片引用。
+
+### 修复建议
+可选方案：(a) 在 neb_utils.rst 复用 vasp_workflow_bulk_overview.png 中的 NEB 面板；
+(b) 为 neb_utils 单独生成一张 NEB 数据流图。低优先级，不影响正确性。
+
+---
+
 <!-- 后续 blocker 按此格式追加 -->
