@@ -96,11 +96,11 @@ git commit -m "docs(utils): Stage N — <子包名> 文档升级"
 
 不要 push（除非是 Stage 6 最终阶段）。
 
-### 8. 链式触发下一阶段（关键）
+### 8. 链式触发下一阶段 + 审阅（关键）
 
-完成当前 stage 的 commit 后，**立即用 cronjob 工具创建下一个一次性 cron**，
-触发下一 stage 的执行。不等固定间隔。
+完成当前 stage 的 commit 后，**立即用 cronjob 工具创建两个一次性 cron**：
 
+**cron A：触发下一 stage 执行**（如果当前不是最后一个 stage）
 ```json
 cronjob action='create':
   name: "utils-stage-N+1-runner"
@@ -108,14 +108,26 @@ cronjob action='create':
   repeat: 1
   workdir: "F:\\BaiduSyncdisk\\version20240608\\main_code_space\\pjvasp_package"
   enabled_toolsets: ["web", "terminal", "file", "delegation"]
-  prompt: <本文件内容（ai-guide/utils-website-upgrade/CRON_PROMPT.md 的完整内容）>
+  prompt: <用 read_file 读取 ai-guide/utils-website-upgrade/CRON_PROMPT.md 完整内容>
 ```
 
-注意：prompt 内容就是本文件的完整文本。你可以用 read_file 读取本文件然后传给 cronjob。
+**cron B：触发当前 stage 审阅**
+```json
+cronjob action='create':
+  name: "utils-stage-N-reviewer"
+  schedule: "3m"   // 3 分钟后触发（一次性，比执行晚 2 分钟避免 git index 冲突）
+  repeat: 1
+  workdir: "F:\\BaiduSyncdisk\\version20240608\\main_code_space\\pjvasp_package"
+  enabled_toolsets: ["terminal", "file", "delegation", "web"]
+  prompt: <用 read_file 读取 ai-guide/audit/CRON_PROMPT.md 完整内容>
+```
 
-如果当前 stage 是最后一个（Stage 6），则不创建下一 cron，改为：
+注意：两个 cron 的 prompt 分别读取各自的 CRON_PROMPT.md 文件全文传入。
+
+如果当前 stage 是最后一个（Stage 6），则不创建执行 cron A，改为：
 - git push origin docs/utils-website-upgrade
 - 输出"所有阶段已完成，已 push 到远程"
+- 仍然创建审阅 cron B 审阅 Stage 6
 
 ## 安全约束（绝对不可违反）
 
