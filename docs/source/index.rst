@@ -122,6 +122,62 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    :doc:`tutorials/strain_deformation` 把三种参考变形转换为 deformation
    gradient ``F`` 与 Lagrangian 应变 ``E``，并以热图标注每个分量。
 
+.. figure:: /_static/images/generated/gsfe_models.png
+   :width: 960px
+   :alt: Side views of FCC(111), HCP(0001) basal and HCP(10-10) prism I GSFE supercells
+
+   :doc:`tutorials/gsfe_models` 一次性构建 FCC(111)、HCP(0001) 基面和
+   HCP(10-10) prism I 三种 GSFE 超胞。
+
+.. figure:: /_static/images/generated/cubic_cell_and_stretch.png
+   :width: 960px
+   :alt: Hexagonal primitive cell, orthorhombic cell, and three uniaxially stretched cells
+
+   :doc:`tutorials/cubic_cell_and_stretch` 把 primitive 六角 cell 转成正交
+   cell（面积守恒），再沿 x 方向施加拉伸扫描。
+
+.. figure:: /_static/images/generated/deformation_and_hnf.png
+   :width: 960px
+   :alt: Deformation gradient schematic and Hermite Normal Form heatmaps
+
+   :doc:`tutorials/deformation_and_hnf` 计算变形梯度 ``F`` 和整数矩阵的
+   Hermite Normal Form。
+
+.. figure:: /_static/images/generated/reciprocal_lattice.png
+   :width: 960px
+   :alt: Reciprocal lattice vector lengths and RK-based k-point meshes for FCC/BCC/HCP
+
+   :doc:`tutorials/reciprocal_lattice` 对比叉积法和矩阵求逆法计算倒格子
+   矢量，并展示 RK → k 点网格映射。
+
+.. figure:: /_static/images/generated/cij_energy_fitting.png
+   :width: 960px
+   :alt: Strain-energy curves and input vs fitted Cij bar chart for synthetic Cu
+
+   :doc:`tutorials/cij_energy_fitting` 用合成 Cu-like 数据演示 energy-strain
+   法拟合二阶弹性常数 C11/C12/C44。
+
+.. figure:: /_static/images/generated/periodic_table_heatmap.png
+   :width: 960px
+   :alt: Periodic table heatmap of bulk moduli for selected pure elements
+
+   :doc:`tutorials/periodic_table_and_arkel` 在周期表上按元素值着色，
+   并把二元化合物绘制在 van Arkel 三角图上。
+
+.. figure:: /_static/images/generated/miller_index_and_density.png
+   :width: 960px
+   :alt: HCP Miller index conversion table and density bar chart
+
+   :doc:`tutorials/miller_index_and_density` 演示 HCP 方向 3↔4 指数转换
+   和 FCC/BCC/HCP/diamond 密度计算。
+
+.. figure:: /_static/images/generated/slurm_script_generation.png
+   :width: 960px
+   :alt: Slurm script generation pipeline flowchart and rendered script text
+
+   :doc:`tutorials/slurm_script_generation` 以 dry-run 模式生成 Slurm
+   作业脚本，不调用 ``sbatch``。
+
 .. toctree::
    :maxdepth: 2
    :caption: Start

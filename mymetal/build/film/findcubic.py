@@ -56,8 +56,8 @@ def find_optimal_cell_shape(
     performance.
 
     Please note that the function is based on the ASE implementation.
-    https://wiki.fysik.dtu.dk/ase/ase/build/tools.html#ase.build.find_optimal_cell_shape
-    https://wiki.fysik.dtu.dk/ase/tutorials/defects/defects.html#supercell-creation
+    https://docs.ase-lib.org/ase/build/tools.html#ase.build.find_optimal_cell_shape
+    https://docs.ase-lib.org/ase/tutorials/defects/defects.html#supercell-creation
 
     Parameters:
 
