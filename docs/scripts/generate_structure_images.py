@@ -221,6 +221,12 @@ def main() -> None:
     render_slurm(PATH_IMAGES / "slurm_utils_overview.png")
     print("generated: " + str(PATH_IMAGES / "slurm_utils_overview.png"))
 
+    # lmp_utils overview: runner flow, template comparison, .mod dependencies,
+    # GSFE slip systems, sed template substitution.
+    from lmp_utils_overview import render_overview as render_lmp
+    render_lmp(PATH_IMAGES / "lmp_utils_overview.png")
+    print("generated: " + str(PATH_IMAGES / "lmp_utils_overview.png"))
+
 
 if __name__ == "__main__":
     main()
