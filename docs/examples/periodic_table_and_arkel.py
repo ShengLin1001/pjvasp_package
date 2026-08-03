@@ -68,7 +68,8 @@ BULK_MODULUS_GPA: dict[str, int] = {
 # ---------------------------------------------------------------------------
 # Eight binary/ternary materials, represented as element-symbol pairs. The
 # van_arkel_triangle helper only needs the two constituent elements per
-# compound (it derives chi from pymatgen Element.X), so ternaries are reduced
+# compound (it derives chi from a Pauling electronegativity lookup table),
+# so ternaries are reduced
 # to their two distinct element types. Order: (less electronegative, more).
 ARKEL_MATERIALS: list[list[str]] = [
     ["Na", "Cl"],  # NaCl  - rock-salt, strongly ionic
@@ -97,12 +98,20 @@ def build_arkel_materials() -> list[list[str]]:
     return [list(pair) for pair in ARKEL_MATERIALS]
 
 
+# Pauling electronegativity values (same data source as pymatgen
+# ``Element.X``).  Inlined here so the example does not pull in the heavy
+# ``pymatgen`` dependency just to read 14 static reference numbers.
+_PAULING_CHI: dict[str, float] = {
+    "Na": 0.93, "Cl": 3.16, "Mg": 1.31, "O": 3.44, "Al": 1.61,
+    "Si": 1.90, "Ga": 1.81, "As": 2.18, "Zn": 1.65, "S": 2.58,
+    "Cu": 1.90, "Br": 2.96, "In": 1.78, "P": 2.19,
+}
+
+
 def summarize_arkel_row(idx: int, pair: list[str]) -> dict[str, object]:
     """Deterministic summary row: reduced formula + chi mean / difference."""
-    from pymatgen.core import Element
-
-    chi_a = float(Element(pair[0]).X)
-    chi_b = float(Element(pair[1]).X)
+    chi_a = _PAULING_CHI[pair[0]]
+    chi_b = _PAULING_CHI[pair[1]]
     return {
         "label": ARKEL_LABELS[idx],
         "pair": "-".join(pair),
