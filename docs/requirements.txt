@@ -10,3 +10,4 @@ spglib>=2.0
 typing_extensions>=4.8
 brokenaxes>=0.6
 adjustText>=1.3
+palettable>=3.0
