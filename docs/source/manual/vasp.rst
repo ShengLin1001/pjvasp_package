@@ -64,7 +64,10 @@ Advanced workflow 概览
 ``OUTCAR`` 交给 :mod:`mymetal.post`。surface energy 的单位和等价表面数见
 :doc:`../tutorials/surface_energy`。
 
-``vasp_universal`` 的完整脚本说明见 :doc:`vasp_universal`。
+.. seealso::
 
-``vasp_workflow_bulk`` 和 ``neb_utils`` 的完整 workflow 说明见
-:doc:`vasp_workflow_bulk`。
+   - :doc:`vasp_universal` — 单目录 runner/post/清理工具
+   - :doc:`vasp_workflow_bulk` — bulk 目录型 workflow（EOS、stretch、NEB、
+     convergence、Cij、cohesive、DOS/band、surface energy、HOEC、KPAR/NCORE）
+   - :doc:`neb_utils` — NEB 后处理工具集（``nebbarrier``、``nebef``、
+     ``nebmovie``、``neb_plot``）

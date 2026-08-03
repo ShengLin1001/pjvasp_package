@@ -15,6 +15,13 @@ VTST 兼容性，Python 版本用 ASE 读 ``CONTCAR`` 并输出更完整的数�
    :local:
    :depth: 2
 
+.. figure:: /_static/images/generated/vasp_workflow_bulk_overview.png
+   :alt: neb_utils 工具集与 vasp_workflow_bulk NEB 面板总览
+
+   ``vasp_utils/neb_utils`` 工具集功能总览：VTST 原版 perl 脚本与 Python 重写版
+   并存，从 ``00..NN/OUTCAR`` 提取距离、力、能量，经 ``neb_plot.py`` 绘制迁移
+   能垒曲线（NEB 面板见 :doc:`vasp_workflow_bulk` 的总览图）。
+
 数据流
 ------
 
