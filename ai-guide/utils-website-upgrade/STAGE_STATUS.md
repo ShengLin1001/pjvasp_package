@@ -6,16 +6,16 @@
 ## 当前状态
 
 - **工作分支**: `docs/utils-website-upgrade`
-- **当前阶段**: Stage 1 pending（等待 cron 执行）
-- **上一阶段完成时间**: Stage 0 — 2026-08-03
-- **最后更新**: 2026-08-03 stage-0-complete
+- **当前阶段**: Stage 2 pending（等待 cron 执行）
+- **上一阶段完成时间**: Stage 1 — 2026-08-03
+- **最后更新**: 2026-08-03 stage-1-complete
 
 ## 阶段进度
 
 | 阶段 | 状态 | 开始时间 | 完成时间 | commit | 说明 |
 |------|------|----------|----------|--------|------|
 | Stage 0 | completed | 2026-08-03 | 2026-08-03 | — | 分支创建 + 计划 + 基线构建 + cron |
-| Stage 1 | pending | — | — | — | vasp_utils/vasp_universal |
+| Stage 1 | completed | 2026-08-03 | 2026-08-03 | — | vasp_utils/vasp_universal (22个脚本) |
 | Stage 2 | pending | — | — | — | vasp_utils/vasp_workflow_bulk + neb_utils |
 | Stage 3 | pending | — | — | — | slurm_utils |
 | Stage 4 | pending | — | — | — | lmp_utils |

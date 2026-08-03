@@ -63,3 +63,5 @@ Advanced workflow 概览
 ``pei_vasp_univ_post`` 区分完成、未收敛、缺失与运行中，再将确认完成的
 ``OUTCAR`` 交给 :mod:`mymetal.post`。surface energy 的单位和等价表面数见
 :doc:`../tutorials/surface_energy`。
+
+``vasp_universal`` 的完整脚本说明见 :doc:`vasp_universal`。

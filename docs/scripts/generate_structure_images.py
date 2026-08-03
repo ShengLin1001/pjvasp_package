@@ -203,6 +203,12 @@ def main() -> None:
                  PATH_IMAGES / "slurm_script_generation.png")
     print("generated: " + str(PATH_IMAGES / "slurm_script_generation.png"))
 
+    # vasp_universal overview: runner flow, directory scan, clean-up comparison,
+    # INCAR operations, exit-code convention.
+    from vasp_universal_overview import render_overview as render_vasp_univ
+    render_vasp_univ(PATH_IMAGES / "vasp_universal_overview.png")
+    print("generated: " + str(PATH_IMAGES / "vasp_universal_overview.png"))
+
 
 if __name__ == "__main__":
     main()
