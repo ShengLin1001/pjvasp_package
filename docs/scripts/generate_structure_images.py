@@ -227,6 +227,12 @@ def main() -> None:
     render_lmp(PATH_IMAGES / "lmp_utils_overview.png")
     print("generated: " + str(PATH_IMAGES / "lmp_utils_overview.png"))
 
+    # n2p2_utils overview: full workflow, active learning SF selection,
+    # SF generation params, pipeline runner, clean_train strategy.
+    from n2p2_utils_overview import render_overview as render_n2p2
+    render_n2p2(PATH_IMAGES / "n2p2_utils_overview.png")
+    print("generated: " + str(PATH_IMAGES / "n2p2_utils_overview.png"))
+
 
 if __name__ == "__main__":
     main()

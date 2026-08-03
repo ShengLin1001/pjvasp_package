@@ -200,6 +200,7 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    manual/lammps
    manual/lmp_utils
    manual/n2p2
+   manual/n2p2_utils
    user_guide/examples
    user_guide/troubleshooting
 
