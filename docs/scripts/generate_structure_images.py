@@ -209,6 +209,12 @@ def main() -> None:
     render_vasp_univ(PATH_IMAGES / "vasp_universal_overview.png")
     print("generated: " + str(PATH_IMAGES / "vasp_universal_overview.png"))
 
+    # vasp_workflow_bulk + neb_utils overview: workflow classification,
+    # lifecycle, plot_all dispatcher, NEB toolchain, strain types.
+    from vasp_workflow_bulk_overview import render_overview as render_vasp_wf
+    render_vasp_wf(PATH_IMAGES / "vasp_workflow_bulk_overview.png")
+    print("generated: " + str(PATH_IMAGES / "vasp_workflow_bulk_overview.png"))
+
 
 if __name__ == "__main__":
     main()

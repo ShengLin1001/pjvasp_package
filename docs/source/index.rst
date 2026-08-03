@@ -193,6 +193,8 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    manual/workflows
    manual/vasp
    manual/vasp_universal
+   manual/vasp_workflow_bulk
+   manual/neb_utils
    manual/slurm
    manual/lammps
    manual/n2p2

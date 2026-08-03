@@ -65,3 +65,6 @@ Advanced workflow 概览
 :doc:`../tutorials/surface_energy`。
 
 ``vasp_universal`` 的完整脚本说明见 :doc:`vasp_universal`。
+
+``vasp_workflow_bulk`` 和 ``neb_utils`` 的完整 workflow 说明见
+:doc:`vasp_workflow_bulk`。
