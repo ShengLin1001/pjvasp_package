@@ -75,7 +75,8 @@ jobs:
           python docs/examples/periodic_table_and_arkel.py --output docs/_build/example-periodic-arkel
           python docs/examples/slurm_script_generation.py --output docs/_build/example-slurm
           python docs/examples/vasp_universal_overview.py --output docs/_build/example-vasp-universal
-          python docs/examples/vasp_workflow_bulk_overview.py --output docs/_build/example-vasp-workflow-bulk
+          python docs/examples/vasp_workflow_bulk_overview.py --output docs/_build/example-vasp-workflow
+          python docs/examples/slurm_utils_overview.py --output docs/_build/example-slurm-utils
           python docs/scripts/generate_structure_images.py
 
       - name: Configure Pages

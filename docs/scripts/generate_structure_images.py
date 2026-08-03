@@ -215,6 +215,12 @@ def main() -> None:
     render_vasp_wf(PATH_IMAGES / "vasp_workflow_bulk_overview.png")
     print("generated: " + str(PATH_IMAGES / "vasp_workflow_bulk_overview.png"))
 
+    # slurm_utils overview: three modes, directory discovery, retry strategy,
+    # preset registry, monitor & useful commands.
+    from slurm_utils_overview import render_overview as render_slurm
+    render_slurm(PATH_IMAGES / "slurm_utils_overview.png")
+    print("generated: " + str(PATH_IMAGES / "slurm_utils_overview.png"))
+
 
 if __name__ == "__main__":
     main()
