@@ -410,42 +410,7 @@ def my_plot_colorbar(original_figsize: tuple=(10.72, 8.205),
         Tuple[Figure, Tuple[Axes, Axes]]: The figure and a tuple containing the main and colorbar axes.
 
     Usage:
-        ```python
-        import numpy as np
-        import matplotlib.pyplot as plt
-        import matplotlib.colors as mcolors
-
-        fig, axes = my_plot_colorbar(original_figsize = [10.72, 10.72], axsize = [7.31, 7.31], colorbar_size=[0.5, 7.31],
-                                    grid = False)
-                                    
-        fig, axes = my_plot_colorbar(layout="none", grid= False)
-        ax = axes[0]   # Main axis for plotting
-        ax2 = axes[1]  # Colorbar axis
-
-        # main plot
-        keys = np.arange(2.70, 2.91, 0.01).tolist()
-        keys = [round(key, 2) for key in keys]
-        gradient_colors = generate_gradient_colors(if_cmap_color=True, num_colors=len(keys))
-        x = [0, 1/3, 0.5, 5/6, 1]
-        labels = ['FCC', r'$\dfrac{1}{3}$', 'DHCP' , r'$\dfrac{5}{6}$','HCP']
-
-        # 创建ScalarMappable，用于颜色条
-        norm = mcolors.Normalize(vmin=min(keys), vmax=max(keys))  # 范围对应keys
-        sm = plt.cm.ScalarMappable(cmap='coolwarm', norm=norm)  # 使用自定义的颜色映射（如 coolwarm）
-        sm.set_array([])  # 空的数组，用于colorbar
-
-        for key, color in zip(keys, gradient_colors):
-            y = transition_path_dict[key]["energy"]/transition_path_dict[key]["atoms_number"] # eV/atom
-            y = (y-y[0])*1e3 # meV/atom
-            ax.plot(x, y, label=f'{key:.2f} Å', marker='o', linestyle=':',
-                    color=color)#, markerfacecolor='none')
-            ax.set_xlabel(r'Hexagonality $i$')
-            ax.set_ylabel(r'$E^{i}-E^{0}$ (meV/atom)')
-
-        # 添加 colorbar
-        cbar = fig.colorbar(sm, cax = ax2)
-        cbar.set_label('In-plane lattice constant (Å)', rotation=270, labelpad=45)
-        ```
+        See :doc:`../tutorials/plot_gallery_plot` for a complete example.
     """
     left = left
     axes_width = axsize[0]

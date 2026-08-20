@@ -368,19 +368,19 @@ def add_arrow(ax: plt.Axes = None, text: str = '', start: list = None, end: list
         matplotlib.text.Annotation: The created annotation object.
 
     Example:
-    ```python
+    .. code-block:: python
+        
         import matplotlib.pyplot as plt
-
+        
         fig, ax = my_plot()
-
+        
         # Add an arrow from (0.2, 0.2) to (0.8, 0.8) with high z-order
         add_arrow(ax=ax, start=[0.2, 0.2], end=[0.8, 0.8], zorder=10)
-
+        
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         plt.show()
-    ```
-    
+        
     See Also:
         matplotlib.axes.Axes.annotate : Underlying annotation function.
         matplotlib.patches.FancyArrowPatch : Arrow drawing object.
@@ -428,42 +428,7 @@ def general_adjust_text(texts: list = None, ax=None, x: list = None, y: list = N
         Requires the adjustText package (https://github.com/Phlya/adjustText).
 
     Example:
-        ```python
-        from mymetal.universal.plot.general import general_adjust_text
-        import numpy as np
-        from mymetal.universal.plot.plot import my_plot
-
-        # Typical usage in a plotting function to avoid label overlaps
-        fig, ax = my_plot() 
-        texts = []
-        positions = np.random.rand(10, 2)  # Example data points
-        ax.plot(positions[:, 0], positions[:, 1], 'o')  
-
-        # Create some text labels
-        for i, (x, y) in enumerate(positions):
-            texts.append(ax.text(x, y, f'Label {i+1}', ha='center', va='center'))
-        
-        # Adjust text positions to avoid overlaps
-        general_adjust_text(
-            texts=texts,
-            ax=ax,
-            x=positions[:, 0],
-            y=positions[:, 1],
-            ensure_inside_axes=True,
-            if_avoid_markers=True,
-            # Optional parameters with defaults:
-            # expand=(1.0, 1.0),
-            # force_static=(0.1, 0.2),
-            # force_text=(0.1, 0.2),
-            # if_strict_ensure_inside_axes=True,
-            # density=50,
-            # markersize=20.0,
-            # ratio_markers=1.0,
-            # num_points_per_marker=20
-        )
-        
-        ```
-
+        See :doc:`../tutorials/plot_gallery_general` for a complete example.
     """
     # markers & check
     if x is not None and y is not None:

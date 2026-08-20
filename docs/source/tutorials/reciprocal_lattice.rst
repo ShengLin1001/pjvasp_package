@@ -54,7 +54,6 @@
 ------
 
 .. figure:: /_static/images/generated/reciprocal_lattice.png
-   :width: 960px
    :alt: Reciprocal lattice vector lengths and RK-based k-point meshes for FCC/BCC/HCP
 
    左图：FCC Cu、BCC Fe、HCP Mg 三种结构的 ``|b1|``、``|b2|``、``|b3|``

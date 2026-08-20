@@ -55,7 +55,6 @@ HCP 晶体方向常用四指数 ``[u,v,t,w]`` 表示，其中 ``t = -(u+v)``，�
 ------
 
 .. figure:: /_static/images/generated/miller_index_and_density.png
-   :width: 960px
    :alt: HCP Miller index conversion table and density bar chart for FCC/BCC/HCP/diamond
 
    左图：HCP 方向 3↔4 指数转换示例表。右图：FCC Cu、BCC Fe、HCP Mg、

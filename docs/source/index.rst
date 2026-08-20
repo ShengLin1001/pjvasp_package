@@ -57,7 +57,6 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
 --------
 
 .. figure:: /_static/images/generated/au111_slab.png
-   :width: 960px
    :alt: Side and top views of a twelve-layer Au(111) slab with vacuum along z
 
    Getting Started 生成的真实 Au(111) 结构。左图以六个面内重复单元显示
@@ -65,7 +64,6 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    ``docs/scripts/generate_structure_images.py`` 从教程脚本确定性生成。
 
 .. figure:: /_static/images/generated/fcc_surfaces.png
-   :width: 960px
    :alt: Side and top views of Cu(100), Cu(110) and Cu(111) 12-layer slabs
 
    FCC 多表面教程同时构建 Cu(100)/(110)/(111) 三个 12-layer slab。上排为
@@ -73,21 +71,18 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    排列和层间距完全不同。
 
 .. figure:: /_static/images/generated/bulk_structures.png
-   :width: 960px
    :alt: 3D and side views of FCC Cu, BCC Fe, HCP Mg and Diamond Si conventional cells
 
    :doc:`getting_started/bulk_structures` 一次性构建四种常见 bulk cell
    (FCC/BCC/HCP/Diamond)，对比 cell 参数与原子排列。
 
 .. figure:: /_static/images/generated/eos_curve.png
-   :width: 960px
    :alt: Murnaghan and Birch-Murnaghan EOS fits to synthetic Cu-like data
 
    EOS 教程用 Cu-like 合成数据演示 Murnaghan 与 Birch-Murnaghan 拟合。
    左图为拟合曲线，右图为残差。
 
 .. figure:: /_static/images/generated/kpoints_sampling.png
-   :width: 960px
    :alt: Monkhorst-Pack vs Gamma-centered k-points and RK scan for a Cu(111) slab
 
    :doc:`tutorials/kpoints_sampling` 同时展示 MP/Gamma k 点位置、
@@ -95,119 +90,102 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    两种自动网格。
 
 .. figure:: /_static/images/generated/schmid_factor.png
-   :width: 960px
    :alt: FCC Schmid factor polar map and per-slip-system bar chart for [1, 1, 6] loading
 
    :doc:`tutorials/schmid_factor` 在 (001) 立方极图上扫描最大 Schmid
    因子分布，并列出 ``[1, 1, 6]`` 加载方向下 12 个 FCC 滑移系的 ``m``。
 
 .. figure:: /_static/images/generated/neighbor_distances.png
-   :width: 960px
    :alt: Normalized RDF and cumulative coordination number for FCC Cu, BCC Fe and HCP Mg
 
    :doc:`tutorials/neighbor_distances` 同时给出 FCC/BCC/HCP 三种结构的
    归一化 RDF 与累计配位数曲线。
 
 .. figure:: /_static/images/generated/atom_manipulation.png
-   :width: 960px
    :alt: Reference Au(111) slab, slab with bottom half frozen, and slab with top layer shifted to bridge site
 
    :doc:`tutorials/atom_manipulation` 演示 ``FixAtoms`` 约束、按位置
    范围筛选原子、写出 ``Selective dynamics`` POSCAR 的完整流程。
 
 .. figure:: /_static/images/generated/strain_deformation.png
-   :width: 960px
    :alt: Lagrangian strain tensors for uniaxial x, biaxial xy and simple shear xy
 
    :doc:`tutorials/strain_deformation` 把三种参考变形转换为 deformation
    gradient ``F`` 与 Lagrangian 应变 ``E``，并以热图标注每个分量。
 
 .. figure:: /_static/images/generated/gsfe_models.png
-   :width: 960px
    :alt: Side views of FCC(111), HCP(0001) basal and HCP(10-10) prism I GSFE supercells
 
    :doc:`tutorials/gsfe_models` 一次性构建 FCC(111)、HCP(0001) 基面和
    HCP(10-10) prism I 三种 GSFE 超胞。
 
 .. figure:: /_static/images/generated/cubic_cell_and_stretch.png
-   :width: 960px
    :alt: Hexagonal primitive cell, orthorhombic cell, and three uniaxially stretched cells
 
    :doc:`tutorials/cubic_cell_and_stretch` 把 primitive 六角 cell 转成正交
    cell（面积守恒），再沿 x 方向施加拉伸扫描。
 
 .. figure:: /_static/images/generated/deformation_and_hnf.png
-   :width: 960px
    :alt: Deformation gradient schematic and Hermite Normal Form heatmaps
 
    :doc:`tutorials/deformation_and_hnf` 计算变形梯度 ``F`` 和整数矩阵的
    Hermite Normal Form。
 
 .. figure:: /_static/images/generated/reciprocal_lattice.png
-   :width: 960px
    :alt: Reciprocal lattice vector lengths and RK-based k-point meshes for FCC/BCC/HCP
 
    :doc:`tutorials/reciprocal_lattice` 对比叉积法和矩阵求逆法计算倒格子
    矢量，并展示 RK → k 点网格映射。
 
 .. figure:: /_static/images/generated/cij_energy_fitting.png
-   :width: 960px
    :alt: Strain-energy curves and input vs fitted Cij bar chart for synthetic Cu
 
    :doc:`tutorials/cij_energy_fitting` 用合成 Cu-like 数据演示 energy-strain
    法拟合二阶弹性常数 C11/C12/C44。
 
 .. figure:: /_static/images/generated/periodic_table_heatmap.png
-   :width: 960px
    :alt: Periodic table heatmap of bulk moduli for selected pure elements
 
    :doc:`tutorials/periodic_table_and_arkel` 在周期表上按元素值着色，
    并把二元化合物绘制在 van Arkel 三角图上。
 
 .. figure:: /_static/images/generated/miller_index_and_density.png
-   :width: 960px
    :alt: HCP Miller index conversion table and density bar chart
 
    :doc:`tutorials/miller_index_and_density` 演示 HCP 方向 3↔4 指数转换
    和 FCC/BCC/HCP/diamond 密度计算。
 
 .. figure:: /_static/images/generated/slurm_script_generation.png
-   :width: 960px
    :alt: Slurm script generation pipeline flowchart and rendered script text
 
    :doc:`tutorials/slurm_script_generation` 以 dry-run 模式生成 Slurm
    作业脚本，不调用 ``sbatch``。
 
 .. figure:: /_static/images/generated/vasp_universal_overview.png
-   :width: 960px
    :alt: vasp_universal sub-package overview: runner flow, directory scan, clean-up comparison, INCAR operations, exit codes
 
    :doc:`manual/vasp_universal` 展示 VASP 单目录工具集的核心功能：
    runner 流程、目录扫描、清理脚本对比、INCAR 操作和退出码约定。
 
 .. figure:: /_static/images/generated/vasp_workflow_bulk_overview.png
-   :width: 960px
    :alt: vasp_workflow_bulk and neb_utils overview: workflow classification, lifecycle, plot_all dispatcher, NEB toolchain
 
    :doc:`manual/vasp_workflow_bulk` 展示 VASP bulk workflow 的分类、
    通用生命周期、plot_all 调度器映射和 NEB 工具链流程。
 
 .. figure:: /_static/images/generated/slurm_utils_overview.png
-   :width: 960px
    :alt: slurm_utils overview: three submission modes, directory discovery, retry strategy, preset registry
 
    :doc:`manual/slurm_utils` 展示 Slurm 提交脚本的三种模式对比、
    目录发现机制、重试策略和 preset 注册表。
 
 .. figure:: /_static/images/generated/lmp_utils_overview.png
-   :width: 960px
    :alt: lmp_utils overview: runner flow, template comparison, mod dependencies, GSFE slip systems, sed substitution
 
    :doc:`manual/lmp_utils` 展示 LAMMPS 工作流的 runner 流程、
    模板结构对比、.mod 依赖关系和 GSFE 滑移系类型。
 
 .. figure:: /_static/images/generated/n2p2_utils_overview.png
-   :width: 960px
    :alt: n2p2_utils overview: full workflow, active learning SF selection, SF generation, pipeline runner, clean_train
 
    :doc:`manual/n2p2_utils` 展示 n2p2 神经网络势函数工具的完整工作流、

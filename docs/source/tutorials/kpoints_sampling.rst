@@ -94,7 +94,6 @@ VASP 的 ``KSPACING`` 与 ``RK`` 产品关系为：
    wrote: .../docs/_build/example-kpoints/kpoints_sampling.png
 
 .. figure:: /_static/images/generated/kpoints_sampling.png
-   :width: 960px
    :alt: Monkhorst-Pack vs Gamma-centered k-points, RK scan, and in-plane/out-of-plane ratio
 
    左图：6x6x1 Monkhorst-Pack（蓝圆）与 Gamma-centered（红叉）k 点在

@@ -134,7 +134,6 @@ cubic=True)`` 在运行时构建。三种变形分别为：
    wrote: .../docs/_build/example-strain/strain_deformation.png
 
 .. figure:: /_static/images/generated/strain_deformation.png
-   :width: 960px
    :alt: Lagrangian strain tensors for uniaxial x, biaxial xy and simple shear xy
 
    三个子图分别展示三种参考变形对应的 Lagrangian 应变张量 ``E``。

@@ -20,7 +20,6 @@ Mg(10-10) narrow 与 Mg(10-11) 四个 slab，对比面内 cell、原子数和层
 --------
 
 .. figure:: /_static/images/generated/hcp_surfaces.png
-   :width: 960px
    :alt: Side and top views of Mg(0001), Mg(10-10) prism I (wide/narrow), Mg(10-11) prism II slabs
 
    上排是四个 slab 沿面内 2 倍重复后的侧视图，下排是 2x2 重复后的俯视图。

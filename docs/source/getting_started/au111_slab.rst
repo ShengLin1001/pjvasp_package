@@ -19,7 +19,6 @@
 --------
 
 .. figure:: /_static/images/generated/au111_slab.png
-   :width: 960px
    :alt: Side and top views of a twelve-layer Au(111) slab with vacuum along z
 
    左图把同一个 primitive slab 沿面内重复六次以便观察，并保留上下各

@@ -73,7 +73,6 @@ GPa（``1 eV/Å³ = 160.21766 GPa``）。Birch-Murnaghan 形式由 ASE 内部实
    wrote: .../docs/_build/example-eos/eos_curve.png
 
 .. figure:: /_static/images/generated/eos_curve.png
-   :width: 960px
    :alt: Murnaghan and Birch-Murnaghan EOS fits to synthetic Cu-like data
 
    左图：合成数据点（黑点）、Murnaghan 拟合（蓝实线）、Birch-Murnaghan

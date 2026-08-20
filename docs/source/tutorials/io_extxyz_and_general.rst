@@ -61,7 +61,6 @@ Extended XYZ 轨迹与通用文本 I/O
 ------
 
 .. figure:: /_static/images/generated/io_extxyz_and_general.png
-   :width: 960px
    :alt: Extended XYZ trajectory displacement and convergence data round-trip
 
    左图：5 帧 Cu 轨迹中第一个原子的位移随帧变化。右图：general_write 写出

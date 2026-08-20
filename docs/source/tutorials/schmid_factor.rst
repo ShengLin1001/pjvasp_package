@@ -88,7 +88,6 @@ FCC 完美位错柏氏矢量为 ``a/2<110>``，滑移面为 ``{111}``。对加�
    wrote: .../docs/_build/example-schmid/schmid_factor.png
 
 .. figure:: /_static/images/generated/schmid_factor.png
-   :width: 960px
    :alt: Polar Schmid-factor map and per-slip-system bar chart for FCC [1, 1, 6] loading
 
    左图：(001) 立方极图上的最大 Schmid 因子分布。颜色越亮代表最大

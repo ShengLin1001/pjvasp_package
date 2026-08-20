@@ -77,7 +77,6 @@
    wrote: .../docs/_build/example-biaxial/biaxial_stretch.png
 
 .. figure:: /_static/images/generated/biaxial_stretch.png
-   :width: 960px
    :alt: Side views of Cu(111) slabs under -3% strain along x/z/xy, and the three strain-energy curves
 
    上排：三个方向在最大压缩 (``strain = -3%``) 下的侧视图（面内 3 倍重复）。

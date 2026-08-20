@@ -1,20 +1,408 @@
 n2p2 Workflows
 ==============
 
-``mymetal.ml.n2p2`` supports data preparation for neural-network potential
-training.
+本页是 n2p2 神经网络势函数训练 workflow 的图文总览：从应用场景、输入文件
+结构、执行流程到基于集群真实训练结果的展示。辅助脚本的逐文件说明见
+:doc:`n2p2_utils`。
 
-Typical workflow
-----------------
+.. contents:: 本页内容
+   :local:
+   :depth: 2
 
-1. Generate or collect VASP calculations.
-2. Extract structures, energies and forces from ``OUTCAR`` files.
-3. Write n2p2 ``input.data`` files.
-4. Generate or compare symmetry-function parameter files.
+应用场景
+--------
 
-Important modules
------------------
+``mymetal.ml.n2p2`` 与 ``n2p2_utils`` 支持从第一性原理 (VASP) 数据出发，
+训练 n2p2 神经网络势函数 (NNP)，并用 LAMMPS 进行性质预测验证。完整 workflow
+覆盖以下场景：
 
-* ``mymetal.ml.n2p2.dataset``
-* ``mymetal.ml.n2p2.calculate.sf``
-* ``mymetal.ml.n2p2.sfparamgen.sfparamgen``
+.. list-table::
+   :header-rows: 1
+   :widths: 25 30 45
+
+   * - 阶段
+     - 脚本/模块
+     - 应用场景
+   * - 数据准备
+     - ``data_input.py`` / ``data_read.py``
+     - 从 VASP ``OUTCAR`` 提取结构、能量、力，写入 ``input.data``
+   * - 对称函数生成
+     - ``sfs_gen_basic_SF.py``
+     - 生成 G2 (径向) / G4 (角向) 对称函数参数
+   * - SF 选择
+     - ``active_sf_0_*``
+     - active learning (CUR/FPS) 选择最重要的 SF 子集
+   * - scaling
+     - ``nnp-scaling``
+     - 计算对称函数的归一化参数（``scaling.data`` ）
+   * - 训练
+     - ``nnp-train`` (MPI 并行)
+     - 训练 NNP，输出 ``learning-curve.out`` 和 ``weights.*.out``
+   * - 性质验证
+     - LAMMPS ``pair_style hdnnp``
+     - 逐 epoch 预测晶格常数、Cij、GSFE 等，与 DFT 对比
+   * - 结果提取
+     - ``train_get_result.bash``
+     - 提取最佳 epoch 的权重和 scaling
+
+输入文件结构
+------------
+
+n2p2 训练的目录结构如下（以 Au NNP stage0 为例）：
+
+.. code-block:: text
+
+   train/
+   |-- stage0/                       # 测试训练参数和流程
+   |   |-- 0/                        # 第 0 个 run（共 10 个 ensemble runs）
+   |   |   |-- data/
+   |   |   |   |-- train/
+   |   |   |   |   `-- input.data    # 训练集（1836 帧）
+   |   |   |   `-- test/
+   |   |   |       `-- input.data     # 测试集
+   |   |   |-- sf/                    # 对称函数候选
+   |   |   |-- train/
+   |   |   |   |-- input.nn           # n2p2 配置（48 个 SF）
+   |   |   |   `-- y_n2p2_train/
+   |   |   |       `-- y_post/
+   |   |   |           |-- 001/ ... 010/   # 每个 run 的后处理
+   |   |   |           |   |-- check_interface/
+   |   |   |           |   |-- properties/
+   |   |   |           |   `-- training/
+   |   |   |           |       |-- epoch.txt
+   |   |   |           |       |-- p_post_learning_curve.txt
+   |   |   |           |       `-- p_post_rmse.txt
+   |   |   |           |-- p_post_rmse_summary.txt      # ensemble RMSE
+   |   |   |           |-- p_post_epoch_stretch_summary.txt
+   |   |   |           |-- p_post_epoch_cij_summary.txt
+   |   |   |           `-- p_post_epoch_gsfe_summary.txt
+   |   |   |-- sub.n2p2_workflow.sh
+   |   |   `-- slurm-*.out
+   |   |-- 1/ ... 5/                  # 其他 ensemble runs
+   |   `-- README.md
+   |-- stage1/                       # 用初始数据集训练
+   |-- stage2/                       # MD epoch 增强数据集
+   |-- stage3/                       # 人工增强数据集
+   `-- README.md
+
+关键配置文件
+~~~~~~~~~~~~
+
+``input.nn`` 的核心参数（来自 Au NNP，仅展示参数部分）：
+
+.. code-block:: bash
+
+   # 网络结构
+   number_of_elements              1
+   elements                        Au
+   atom_energy                     Au 0.0
+   cutoff_type                     6 0.0
+   global_hidden_layers_short      2
+   global_nodes_short              24 24
+   global_activation_short         p p l
+
+   # 训练设置
+   epochs                          1500
+   normalize_data_set              force
+   updater_type                    1        # 1=Kalman filter
+   parallel_mode                   0
+   selection_mode                  2        # 2=Threshold
+   task_batch_size_energy          1
+   task_batch_size_force           1
+   random_seed                     20260529
+
+对称函数示例（48 个 G2 径向 SF）：
+
+.. code-block:: bash
+
+   symfunction_short  Au 2  Au   1.0066e-01   3.0000e+00   6.0000e+00
+   symfunction_short  Au 2  Au   1.0205e-02   2.6000e+00   5.2000e+00
+   symfunction_short  Au 2  Au   1.0296e-01   0.0000e+00   4.3000e+00
+   # ... 共 48 个
+
+典型 workflow
+-------------
+
+.. code-block:: text
+
+   VASP OUTCAR (construct_dataset/calculate/)
+       │
+       ▼
+   data_input.py / data_read.py      ← 数据准备
+       │                                (StructureForge + myvasp)
+       ▼
+   input.data (1836 帧) + energy.npy + forces_cfg
+       │
+       ▼
+   sfs_gen_basic_SF.py               ← 对称函数生成
+       │                                (G2 径向 / G4 角向)
+       ▼
+   sflist → input.nn (48 个 SF)
+       │
+       ▼
+   active_sf_0 (sub_cal → collect → select)   ← active learning SF 选择
+       │                                         (CUR / FPS, skcosmo)
+       ▼
+   input.nn (精选 SF)
+       │
+       ▼
+   nnp-scaling → scaling.data        ← 归一化
+       │
+       ▼
+   mpirun -np 16 nnp-train           ← 训练 (16-32 cores)
+       │
+       ▼
+   learning-curve.out + weights.*.out
+       │
+       ▼
+   LAMMPS pair_style hdnnp           ← 逐 epoch 性质预测
+       │                                (stretch / Cij / GSFE)
+       ▼
+   p_post_epoch_*_summary.txt        ← ensemble 汇总
+       │
+       ▼
+   train_get_result.bash + train_final_result.bash   ← 结果提取
+
+执行流程
+--------
+
+n2p2 训练在 Slurm 分配内由 ``pei_n2p2_univ_run`` 编排：
+
+.. code-block:: bash
+
+   # 1. 加载环境（source 而非执行）
+   source pei_n2p2_univ_load_env
+
+   # 2. scaling（已存在则跳过）
+   srun nnp-scaling 10000
+
+   # 3. 训练（不支持断点续传）
+   mpirun -np 16 nnp-train
+
+   # 4. 后处理：逐 epoch LAMMPS 性质扫描
+   python post/stretch.py    # y_stretch/<lat>/ → p_post_stretch.*
+   python post/Cij_energy.py # y_Cij_energy/<lat>/ → y_post_cij_energy.*
+   python post/gsfe.py       # y_gsfe/<lat>/<type>/ → y_post_gsfe.*
+
+退出码约定：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   * - 退出码
+     - 含义
+   * - ``0``
+     - pipeline 完成
+   * - ``10``
+     - 已完成，跳过（检测到哨兵文件）
+   * - ``1``
+     - 失败或输入缺失
+
+n2p2 没有原生完成标记，runner 写入自己的哨兵文件 (``done_file``) 用于跳过/续算。
+``nnp-scaling`` 在 ``scaling.data`` 已存在时跳过；``nnp-train`` 不支持断点续传。
+
+实际结果展示（真实数据）
+------------------------
+
+以下图表均基于集群 (zcm6) 上 Au NNP 的真实训练结果，数据来自
+``train/stage0/0/`` 目录。训练使用 1836 帧数据集、48 个 G2 对称函数、
+24×24 隐藏层、1500 epochs、10 个 ensemble runs。
+
+学习曲线
+~~~~~~~~
+
+能量和力的 RMSE 随 epoch 变化（10 runs ensemble，mean ± std）：
+
+.. figure:: /_static/images/generated/n2p2_learning_curve_real.png
+   :alt: Au NNP 训练学习曲线真实结果
+   :width: 95%
+
+   Au NNP 训练学习曲线（真实数据）。能量 RMSE 从 ~273 eV/atom 降到 ~3.3
+   meV/atom；力 RMSE 从 ~12,469 meV/Å 降到 ~20 meV/Å。10 runs 的 std
+   在前 10 epoch 较大，后期收敛。
+
+关键里程碑：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 25 30 30
+
+   * - epoch
+     - E RMSE (meV/atom)
+     - F RMSE (meV/Å)
+     - 说明
+   * - 0
+     - 273,046
+     - 12,469
+     - 初始（随机权重）
+   * - 5
+     - 40.5
+     - 139.0
+     - 快速下降阶段
+   * - 50
+     - 8.8
+     - 32.3
+     - 力 RMSE 进入平台
+   * - 500
+     - 3.2
+     - 28.2
+     - 能量 RMSE 缓慢下降
+   * - 1500
+     - 3.3
+     - 20.2
+     - 最终收敛
+
+性质预测 vs epoch
+~~~~~~~~~~~~~~~~~
+
+逐 epoch 用 LAMMPS ``pair_style hdnnp`` 预测 FCC/BCC/HCP 晶格常数，
+与 VASP DFT 参考值对比：
+
+.. figure:: /_static/images/generated/n2p2_property_scan_real.png
+   :alt: NNP 预测晶格常数 vs epoch 真实结果
+   :width: 90%
+
+   NNP 预测晶格常数 vs 训练 epoch（真实数据）。epoch ≥ 5 后 a 收敛到
+   DFT 参考值 ±0.001 Å 以内。虚线为 VASP DFT 参考值。
+
+对称函数分布
+~~~~~~~~~~~~
+
+48 个 G2 径向对称函数的参数空间分布：
+
+.. figure:: /_static/images/generated/n2p2_symfunc_real.png
+   :alt: n2p2 对称函数分布真实结果
+   :width: 95%
+
+   48 个 G2 径向对称函数的参数空间（真实数据）。(a) η 分布直方图；
+   (b) r_shift vs r_cutoff 散点图，颜色编码 η。
+
+参数说明
+--------
+
+对称函数生成参数（``sfs_gen_basic_SF.py`` ）：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 15 85
+
+   * - 参数
+     - 说明
+   * - ``-G``
+     - 对称函数类型：``G2`` (径向) 或 ``G4`` (角向)
+   * - ``-e``
+     - 元素符号 (如 ``Mg``, ``Au``)
+   * - ``-c``
+     - 截断半径 (Å)
+   * - ``-n``
+     - 点数 (生成 ``2N+1`` 个对称函数)
+   * - ``-z``
+     - zeta 列表 (默认 ``[1, 4, 16]`` ，仅 G4)
+
+Active learning SF 选择参数（``active_sf_0_select_feat.py`` ）：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - 参数
+     - 说明
+   * - ``N`` (位置参数)
+     - 要选择的 SF 数量
+   * - ``--strategy``
+     - ``CUR_feat_av`` (帧平均) 或 ``CUR_feat_atom`` (按元素分组)
+   * - ``--max_0``
+     - 过滤 0 值比例超过此值 (5%) 的 SF
+
+n2p2 训练关键 ``input.nn`` 参数：
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - 参数
+     - 说明
+   * - ``epochs``
+     - 训练 epoch 数（Au NNP 用 1500）
+   * - ``global_hidden_layers_short``
+     - 隐藏层数（Au NNP 用 2）
+   * - ``global_nodes_short``
+     - 每层节点数（Au NNP 用 24 24）
+   * - ``updater_type``
+     - 权重更新方法（0=GD, 1=Kalman filter）
+   * - ``normalize_data_set``
+     - 数据归一化（ ``force`` = 用力预测归一化）
+   * - ``selection_mode``
+     - 候选选择（0=Random, 1=Sort, 2=Threshold）
+
+重要模块
+--------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - 模块
+     - 功能
+   * - ``mymetal.ml.n2p2.dataset``
+     - ``input.data`` 读写与格式转换
+   * - ``mymetal.ml.n2p2.calculate.sf``
+     - 对称函数计算
+   * - ``mymetal.ml.n2p2.sfparamgen.sfparamgen``
+     - 对称函数参数生成
+
+与 mymetal 库函数的关联
+-----------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 35 65
+
+   * - 模块
+     - 功能
+   * - ``mymetal.ml.n2p2.dataset``
+     - 从 VASP ``OUTCAR`` 提取结构/能量/力，写 ``input.data``
+   * - ``mymetal.ml.n2p2.calculate.sf``
+     - 对称函数值计算（用于 active learning）
+   * - ``mymetal.ml.n2p2.sfparamgen``
+     - 生成 G2/G4 参数（替代 ``sfs_gen_basic_SF.py`` ）
+   * - ``mymetal.build.bulk.gsfe``
+     - 构建 GSFE 超胞（用于 LAMMPS 性质验证）
+   * - ``mymetal.post.stretch`` / ``Cij_energy`` / ``gsfe``
+     - LAMMPS 后处理（逐 epoch 性质提取）
+
+常见问题与排查
+--------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - 问题
+     - 排查
+   * - ``nnp-scaling`` 报错
+     - 检查 ``input.nn`` 的 ``symfunction_short`` 行格式；
+       ``scaling.data`` 已存在时跳过
+   * - ``nnp-train`` 不收敛
+     - 检查 ``learning-curve.out`` ；降低 ``learning_rate`` 或增加
+       ``epochs`` ；确认 ``input.data`` 帧数足够
+   * - 力 RMSE 平台高
+     - 增加 G4 角向 SF；增大截断半径；检查训练集力的分布
+   * - LAMMPS ``pair_style hdnnp`` 报错
+     - 确认 ``weights.*.out`` 和 ``scaling.data`` 在 LAMMPS 工作目录；
+       检查 ``input.nn`` 的 ``elements`` 和 ``cutoff``
+   * - ensemble runs 方差大
+     - 增加 ``random_seed`` 多样性；检查数据集划分；
+       用 ``p_post_rmse_summary.txt`` 的 std 诊断
+   * - 性质预测与 DFT 偏差
+     - 检查 ``p_post_epoch_*_summary.txt`` ；确认训练集覆盖目标应变范围；
+       考虑 active learning 增补数据
+
+.. seealso::
+
+   - :doc:`n2p2_utils` — n2p2 辅助脚本逐文件说明
+   - :doc:`slurm_utils` — Slurm 提交入口（n2p2 preset）
+   - :doc:`lmp_utils` — LAMMPS 势函数计算（性质验证）
+   - :doc:`workflows` — Workflow 总览
+   - :doc:`../api/ml` — mymetal.ml.n2p2 Python API

@@ -233,6 +233,59 @@ def main() -> None:
     render_n2p2(PATH_IMAGES / "n2p2_utils_overview.png")
     print("generated: " + str(PATH_IMAGES / "n2p2_utils_overview.png"))
 
+    # Plot gallery: one PNG per mymetal.universal.plot module, all VASP-free.
+    from plot_gallery_demo import (
+        render_general, render_plot, render_colorbar,
+        render_convergence, render_relax_convergence, render_kpar_ncore,
+        render_stretch, render_energy_components,
+        render_interlayer_distance, render_zpositions, render_rdf,
+        render_learning_curve, render_compare, render_rmse_by_tag,
+        render_epoch_rmse, render_pretty_plot, render_periodic_heatmap,
+        render_van_arkel, render_render_info, render_ppt_info, render_dos,
+    )
+    render_general(PATH_IMAGES / "plot_gallery_general.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_general.png"))
+    render_plot(PATH_IMAGES / "plot_gallery_plot.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_plot.png"))
+    render_colorbar(PATH_IMAGES / "plot_gallery_colorbar.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_colorbar.png"))
+    render_convergence(PATH_IMAGES / "plot_gallery_convergence.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_convergence.png"))
+    render_relax_convergence(PATH_IMAGES / "plot_gallery_relax.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_relax.png"))
+    render_kpar_ncore(PATH_IMAGES / "plot_gallery_kpar_ncore.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_kpar_ncore.png"))
+    render_stretch(PATH_IMAGES / "plot_gallery_stretch.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_stretch.png"))
+    render_energy_components(PATH_IMAGES / "plot_gallery_energy.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_energy.png"))
+    render_interlayer_distance(PATH_IMAGES / "plot_gallery_interlayer.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_interlayer.png"))
+    render_zpositions(PATH_IMAGES / "plot_gallery_zpositions.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_zpositions.png"))
+    render_rdf(PATH_IMAGES / "plot_gallery_rdf.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_rdf.png"))
+    render_learning_curve(PATH_IMAGES / "plot_gallery_learning.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_learning.png"))
+    render_compare(PATH_IMAGES / "plot_gallery_compare.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_compare.png"))
+    render_rmse_by_tag(PATH_IMAGES / "plot_gallery_rmse_tag.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_rmse_tag.png"))
+    render_epoch_rmse(PATH_IMAGES / "plot_gallery_epoch_rmse.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_epoch_rmse.png"))
+    render_pretty_plot(PATH_IMAGES / "plot_gallery_pretty.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_pretty.png"))
+    render_periodic_heatmap(PATH_IMAGES / "plot_gallery_periodic.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_periodic.png"))
+    render_van_arkel(PATH_IMAGES / "plot_gallery_arkel.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_arkel.png"))
+    render_render_info(PATH_IMAGES / "plot_gallery_render.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_render.png"))
+    render_ppt_info(PATH_IMAGES / "plot_gallery_ppt.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_ppt.png"))
+    render_dos(PATH_IMAGES / "plot_gallery_dos.png")
+    print("generated: " + str(PATH_IMAGES / "plot_gallery_dos.png"))
+
 
 if __name__ == "__main__":
     main()

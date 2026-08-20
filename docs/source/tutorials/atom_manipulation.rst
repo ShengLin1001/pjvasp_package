@@ -93,7 +93,6 @@ bridge 位置。
    wrote: .../docs/_build/example-manipulation/atom_manipulation.png
 
 .. figure:: /_static/images/generated/atom_manipulation.png
-   :width: 960px
    :alt: Reference Au(111) slab, slab with bottom half frozen, and slab with top layer shifted to bridge site
 
    左图：6-layer Au(111) 参考结构，没有任何约束。中图：底层 3 个原子

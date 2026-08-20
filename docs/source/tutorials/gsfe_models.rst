@@ -61,7 +61,6 @@ FCC(111)、HCP(0001) 基面和 HCP(10-10) prism I（wide），打印结构摘要
 ------
 
 .. figure:: /_static/images/generated/gsfe_models.png
-   :width: 960px
    :alt: Side views of FCC(111), HCP(0001) basal and HCP(10-10) prism I GSFE supercells
 
    三个 GSFE 超胞的侧视图。左：FCC Au(111)，7 层，18 原子；

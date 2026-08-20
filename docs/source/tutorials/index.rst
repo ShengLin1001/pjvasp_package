@@ -25,6 +25,17 @@ Tutorials
    miller_index_and_density
    periodic_table_and_arkel
    slurm_script_generation
+   plot_gallery
+   plot_gallery_general
+   plot_gallery_plot
+   plot_gallery_workflow
+   plot_gallery_energy
+   plot_gallery_atominfo
+   plot_gallery_n2p2
+   plot_gallery_plotting
+   plot_gallery_render
+   plot_gallery_ppt
+   plot_gallery_oldplotdos
 
 后续案例
 --------

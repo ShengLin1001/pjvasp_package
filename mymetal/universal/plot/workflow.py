@@ -826,41 +826,8 @@ def my_plot_neb_xy(xy_list: list = None, z_list: list = None, figxy_wh_lim: list
         ValueError: If neither if_every_atom nor if_every_frame is True.
 
     Example:
-        ```python
-        # Example usage of my_plot_xy for visualizing atomic trajectories
-
-        # 1. Prepare atomic data from extxyz file
-        atomlist = extxyz_to_atomlist(file)
-        cell = np.array(atomlist[0].get_cell())
-        cellxy = cell[:2, :2]  # Extract 2D cell vectors
-
-        # 2. Convert special points from direct to Cartesian coordinates
-        cellxypoints_special_direct = [[0, 0], [1/3, 2/3], [2/3, 1/3]]
-        cellxypoints_special = np.dot(np.array(cellxypoints_special_direct), cellxy)
-
-        # 3. Calculate trajectory data
-        [positions_xy_list, delta_xy_list, dist_xy_list], [positions_z_list] = get_delta_dist_list(atomlist)
-
-        # 4. Get figure dimensions and limits
-        cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim = get_figxy_wh_lim(atomlist)
-
-        # 5. Identify overlapping atoms
-        overlap_pairs, overlap_groups = save_overlap_pairs_groups(
-            positions_xy_list, 
-            distance_threshold=distance_threshold, 
-            save_dir=save_dir
-        )
-
-        # 6. Plot trajectories
-        if if_plot:
-            # Please see mymetal.post.neb.analyze_neb_trajectory for more details on the parameters.
-            # Example 1: Plot trajectories by atom (each subplot shows one atom's path through frames)
-
-            # Example 2: Plot trajectories by frame (each subplot shows all atoms in one frame)
-
-            # Example 3: Basic frame-by-frame plot without overlap annotations
-        ```
-    """
+        See :doc:`../tutorials/plot_gallery_workflow` for a complete example.
+        """
     [positions_xy_list, delta_xy_list, dist_xy_list], [positions_z_list] = xy_list, z_list
     [cellxypoints_xy, [figxy_width, figxy_height], axes_height_xy, figxy_lim] = figxy_wh_lim
     boundary = cellxypoints_xy

@@ -75,7 +75,6 @@
 ------
 
 .. figure:: /_static/images/generated/cij_energy_fitting.png
-   :width: 960px
    :alt: Strain-energy curves and input vs fitted Cij bar chart for synthetic Cu
 
    左图：三种变形模式的应变-能量曲线（数据点 + 二次拟合）。右图：输入

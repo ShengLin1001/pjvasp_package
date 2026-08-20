@@ -109,11 +109,28 @@ body {
 
 .rst-content figure img {
   display: block;
-  max-width: 100%;
+  /* max-width with !important overrides the inline width set by RST
+     ``:width:`` options, so figures scale responsively to the container
+     rather than forcing a fixed pixel width that overflows. */
+  max-width: 100% !important;
+  width: auto !important;
   height: auto;
   margin: 0 auto;
   border: 1px solid #f0f1f3;
   border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* Cap very wide overview diagrams (natural 2400 px) so their text does
+   not render oversized at the page width — they still scale down freely. */
+.rst-content figure img {
+  max-height: none;
+}
+
+/* Ensure the figure element itself never overflows its column. */
+.rst-content figure {
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .rst-content figcaption {
@@ -271,6 +288,15 @@ body {
 
   .wy-nav-content {
     padding: 1.25rem;
+  }
+
+  .rst-content figure {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .rst-content figure img {
+    width: 100% !important;
   }
 
   .rst-content pre {

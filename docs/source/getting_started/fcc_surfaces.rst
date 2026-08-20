@@ -20,7 +20,6 @@ slab，对比面内 cell、c 方向长度和层数诊断，并写出可被 VASP 
 --------
 
 .. figure:: /_static/images/generated/fcc_surfaces.png
-   :width: 960px
    :alt: Side and top views of Cu(100), Cu(110) and Cu(111) 12-layer slabs
 
    上排是三个 slab 沿面内方向 3 倍重复后的侧视图，下排是 2x2 重复后的

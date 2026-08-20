@@ -78,7 +78,6 @@
    wrote: .../docs/_build/example-neighbor/neighbor_distances.png
 
 .. figure:: /_static/images/generated/neighbor_distances.png
-   :width: 960px
    :alt: Normalized RDF and cumulative coordination number for FCC Cu, BCC Fe and HCP Mg
 
    左图：三种结构的归一化 ``g(r)`` 曲线。FCC Cu 第一峰在 ``2.55 Å``

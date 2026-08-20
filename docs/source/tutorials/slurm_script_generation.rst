@@ -62,7 +62,6 @@ Slurm 作业脚本生成（dry-run）
 ------
 
 .. figure:: /_static/images/generated/slurm_script_generation.png
-   :width: 960px
    :alt: Slurm script generation pipeline flowchart and rendered script text
 
    左图：脚本生成流程图（header → launcher → assemble → write）。

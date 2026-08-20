@@ -43,14 +43,12 @@
 ------
 
 .. figure:: /_static/images/generated/periodic_table_heatmap.png
-   :width: 960px
    :alt: Periodic table heatmap of bulk moduli for selected pure elements
 
    15 种纯元素的体弹模量（GPa）周期表热图。过渡金属（W、Fe、Cu）体弹模量
    较高，碱金属（Na、K）较低。
 
 .. figure:: /_static/images/generated/van_arkel_triangle.png
-   :width: 720px
    :alt: Van Arkel-Ketelaar triangle for NaCl, MgO, Al2O3, SiO2, GaAs, ZnS, CuBr, InP
 
    8 种二元化合物的 van Arkel 三角图。NaCl、MgO 位于离子区（大 Δχ），

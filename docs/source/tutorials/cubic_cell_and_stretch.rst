@@ -65,7 +65,6 @@ HCP/FCC 薄膜面内通常是六角（120° γ）或非正交的。``find_cubic`
 ------
 
 .. figure:: /_static/images/generated/cubic_cell_and_stretch.png
-   :width: 960px
    :alt: Hexagonal primitive cell, orthorhombic cell, and three uniaxially stretched cells
 
    2×2 对比图。左上：primitive 六角 cell（γ=120°）；右上：正交化后的

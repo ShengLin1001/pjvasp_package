@@ -63,7 +63,6 @@
 ------
 
 .. figure:: /_static/images/generated/deformation_and_hnf.png
-   :width: 960px
    :alt: Deformation gradient schematic and Hermite Normal Form heatmaps
 
    左图：FCC Cu 初始 cell（蓝）与 x 方向 5% 拉伸后 cell（红）叠加示意。

@@ -20,7 +20,6 @@ surface、slab、k-point 教程的最小入口。
 --------
 
 .. figure:: /_static/images/generated/bulk_structures.png
-   :width: 960px
    :alt: 3D and side views of FCC Cu, BCC Fe, HCP Mg and Diamond Si conventional cells
 
    上排是四个 bulk cell 的 3D 倾斜视图，下排是沿 ``y`` 方向观察的侧视图。
