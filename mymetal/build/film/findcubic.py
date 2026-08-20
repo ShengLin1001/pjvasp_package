@@ -51,13 +51,13 @@ def find_optimal_cell_shape(
     most closely approximates the shape defined by *target_shape*.
 
     Updated with code from the `doped` defect simulation package
-    (https://doped.readthedocs.io) to be rotationally invariant and
+    (https://doped.readthedocs.io/en/latest/) to be rotationally invariant and
     allow transformation matrices with negative determinants, boosting
     performance.
 
     Please note that the function is based on the ASE implementation.
     https://docs.ase-lib.org/ase/build/tools.html#ase.build.find_optimal_cell_shape
-    https://docs.ase-lib.org/ase/tutorials/defects/defects.html#supercell-creation
+    https://docs.ase-lib.org/examples_generated/03-tutorials/defects.html#supercell-creation
 
     Parameters:
 
