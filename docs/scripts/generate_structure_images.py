@@ -203,6 +203,36 @@ def main() -> None:
                  PATH_IMAGES / "slurm_script_generation.png")
     print("generated: " + str(PATH_IMAGES / "slurm_script_generation.png"))
 
+    # vasp_universal overview: runner flow, directory scan, clean-up comparison,
+    # INCAR operations, exit-code convention.
+    from vasp_universal_overview import render_overview as render_vasp_univ
+    render_vasp_univ(PATH_IMAGES / "vasp_universal_overview.png")
+    print("generated: " + str(PATH_IMAGES / "vasp_universal_overview.png"))
+
+    # vasp_workflow_bulk + neb_utils overview: workflow classification,
+    # lifecycle, plot_all dispatcher, NEB toolchain, strain types.
+    from vasp_workflow_bulk_overview import render_overview as render_vasp_wf
+    render_vasp_wf(PATH_IMAGES / "vasp_workflow_bulk_overview.png")
+    print("generated: " + str(PATH_IMAGES / "vasp_workflow_bulk_overview.png"))
+
+    # slurm_utils overview: three modes, directory discovery, retry strategy,
+    # preset registry, monitor & useful commands.
+    from slurm_utils_overview import render_overview as render_slurm
+    render_slurm(PATH_IMAGES / "slurm_utils_overview.png")
+    print("generated: " + str(PATH_IMAGES / "slurm_utils_overview.png"))
+
+    # lmp_utils overview: runner flow, template comparison, .mod dependencies,
+    # GSFE slip systems, sed template substitution.
+    from lmp_utils_overview import render_overview as render_lmp
+    render_lmp(PATH_IMAGES / "lmp_utils_overview.png")
+    print("generated: " + str(PATH_IMAGES / "lmp_utils_overview.png"))
+
+    # n2p2_utils overview: full workflow, active learning SF selection,
+    # SF generation params, pipeline runner, clean_train strategy.
+    from n2p2_utils_overview import render_overview as render_n2p2
+    render_n2p2(PATH_IMAGES / "n2p2_utils_overview.png")
+    print("generated: " + str(PATH_IMAGES / "n2p2_utils_overview.png"))
+
 
 if __name__ == "__main__":
     main()

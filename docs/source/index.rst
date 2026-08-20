@@ -178,6 +178,41 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    :doc:`tutorials/slurm_script_generation` 以 dry-run 模式生成 Slurm
    作业脚本，不调用 ``sbatch``。
 
+.. figure:: /_static/images/generated/vasp_universal_overview.png
+   :width: 960px
+   :alt: vasp_universal sub-package overview: runner flow, directory scan, clean-up comparison, INCAR operations, exit codes
+
+   :doc:`manual/vasp_universal` 展示 VASP 单目录工具集的核心功能：
+   runner 流程、目录扫描、清理脚本对比、INCAR 操作和退出码约定。
+
+.. figure:: /_static/images/generated/vasp_workflow_bulk_overview.png
+   :width: 960px
+   :alt: vasp_workflow_bulk and neb_utils overview: workflow classification, lifecycle, plot_all dispatcher, NEB toolchain
+
+   :doc:`manual/vasp_workflow_bulk` 展示 VASP bulk workflow 的分类、
+   通用生命周期、plot_all 调度器映射和 NEB 工具链流程。
+
+.. figure:: /_static/images/generated/slurm_utils_overview.png
+   :width: 960px
+   :alt: slurm_utils overview: three submission modes, directory discovery, retry strategy, preset registry
+
+   :doc:`manual/slurm_utils` 展示 Slurm 提交脚本的三种模式对比、
+   目录发现机制、重试策略和 preset 注册表。
+
+.. figure:: /_static/images/generated/lmp_utils_overview.png
+   :width: 960px
+   :alt: lmp_utils overview: runner flow, template comparison, mod dependencies, GSFE slip systems, sed substitution
+
+   :doc:`manual/lmp_utils` 展示 LAMMPS 工作流的 runner 流程、
+   模板结构对比、.mod 依赖关系和 GSFE 滑移系类型。
+
+.. figure:: /_static/images/generated/n2p2_utils_overview.png
+   :width: 960px
+   :alt: n2p2_utils overview: full workflow, active learning SF selection, SF generation, pipeline runner, clean_train
+
+   :doc:`manual/n2p2_utils` 展示 n2p2 神经网络势函数工具的完整工作流、
+   active learning SF 选择和 pipeline runner。
+
 .. toctree::
    :maxdepth: 2
    :caption: Start
@@ -192,9 +227,15 @@ POTCAR、SLURM 或集群账号的 Au(111) 案例。
    tutorials/index
    manual/workflows
    manual/vasp
+   manual/vasp_universal
+   manual/vasp_workflow_bulk
+   manual/neb_utils
    manual/slurm
+   manual/slurm_utils
    manual/lammps
+   manual/lmp_utils
    manual/n2p2
+   manual/n2p2_utils
    user_guide/examples
    user_guide/troubleshooting
 
