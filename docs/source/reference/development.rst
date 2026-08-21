@@ -30,7 +30,7 @@
 
    python docs/examples/getting_started_au111.py --output docs/_build/example-au111
    python docs/examples/surface_energy.py
-   python docs/examples/outcar_summary.py mymetal/example/test-post/y_dir \
+   python docs/examples/outcar_summary.py mymetal/example/post-outcar-parse/y_dir \
        -cases 0.997 1.000 -output docs/_build/outcar-summary.csv
    python -m compileall mymetal docs/examples docs/scripts
    python -m sphinx -b html -W --keep-going docs/source docs/_build/html

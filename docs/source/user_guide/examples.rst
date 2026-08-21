@@ -26,16 +26,16 @@ HPC workflow
 历史 fixture
 ------------
 
-``mymetal/example/test-generate-bulk``
+``mymetal/example/bulk-structure-generation``
    Bulk 和 surface 结构生成。
 
-``mymetal/example/test-surface-energy``
+``mymetal/example/surface-energy-fitting``
    Bulk/slab 能量与结构目录。
 
-``mymetal/example/test-stretch`` 和 ``mymetal/example/test-post``
+``mymetal/example/stretch-film-generation`` 和 ``mymetal/example/post-outcar-parse``
    ``y_dir/<case>`` 批量目录和 VASP 输出。
 
-``mymetal/example/test-n2p2-sfparams``
+``mymetal/example/n2p2-symfunc-params``
    n2p2 symmetry-function 与 dataset 示例。
 
 教程脚本位于 ``docs/examples/``，其中断言是文档构建的最小 smoke test。

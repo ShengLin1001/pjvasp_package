@@ -49,7 +49,7 @@
 
 .. code-block:: text
 
-   mymetal/example/test-surface-energy/fcc/
+   mymetal/example/surface-energy-fitting/fcc/
    ├── energy.txt
    └── 1.000-2.8485/
        ├── bulk/CONTCAR
