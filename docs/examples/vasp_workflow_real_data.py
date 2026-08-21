@@ -9,7 +9,7 @@ Figures produced (PNG, 300 dpi, bbox_inches='tight'):
     vasp_stretch_real.png        — HCP Au xy stretch E(ε) + quadratic fit
     vasp_cij_real.png            — HCP Au Cij strain-energy fits (5 modes)
     vasp_hoec_real.png           — HCP Au HOEC 2/3/4-order bar chart
-    vasp_cohesive_real.png       — HCP Au cohesive E-k curve + Rose-Vinet
+    vasp_cohesive_real.png       — HCP Au cohesive-energy summary
     vasp_decohesion_real.png     — HCP Au decohesion γ(d) curve
     vasp_convergence_real.png    — HCP Au EOS stretch convergence vs point count
 """
@@ -24,33 +24,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-COLOR_TEXT = (34 / 255, 40 / 255, 50 / 255)
+from mymetal.universal.plot.general import general_modify_legend
+from mymetal.universal.plot.plot import my_plot
+
 COLOR_DATA1 = "#2b6cb0"
 COLOR_DATA2 = "#c05621"
 COLOR_DATA3 = "#7c3aed"
 COLOR_FIT = "#6b7280"
 COLOR_HIGHLIGHT = "#9b2c2c"
-COLOR_GRID = "#e5e7eb"
-
-
-def _set_rcparams() -> None:
-    plt.rcParams.update(
-        {
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-            "savefig.facecolor": "white",
-            "font.family": ["Microsoft YaHei", "Noto Sans SC", "SimHei", "DejaVu Sans"],
-            "axes.unicode_minus": False,
-            "text.color": COLOR_TEXT,
-            "axes.labelcolor": COLOR_TEXT,
-            "axes.edgecolor": COLOR_TEXT,
-            "xtick.color": COLOR_TEXT,
-            "ytick.color": COLOR_TEXT,
-            "font.size": 10.0,
-            "axes.titlesize": 12.0,
-            "axes.titleweight": "bold",
-        }
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -70,30 +51,28 @@ STRETCH_A0 = 2.85970000
 STRETCH_C0 = 4.80080788
 STRETCH_EXTR_FACTOR = 0.99984367
 STRETCH_EXTR_E = -3.91794633  # eV/atom
+STRETCH_POLY = (27.38389577, -54.75922987, 23.45738844)
 
 
-def plot_stretch(out: Path) -> None:
-    fig, ax = plt.subplots(figsize=(7.0, 4.6), dpi=300)
+def plot_stretch(path_out: Path) -> None:
+    fig, ax = my_plot()
     strain = (STRETCH_FACTOR - 1.0) * 1000.0  # in per-mille for readability
-    E_per_atom = STRETCH_E / 2.0  # natoms = 2
-    ax.scatter(strain, E_per_atom, color=COLOR_DATA1, s=40, zorder=4,
-               edgecolor="white", lw=0.8, label="VASP 17 点 (每原子)")
+    energy = (STRETCH_E / 2.0 - STRETCH_EXTR_E) * 1e3  # meV/atom
+    ax.scatter(strain, energy, color=COLOR_DATA1, zorder=4,
+               label="VASP (17 points per atom)")
     # quadratic fit E = a*f^2 + b*f + c (real coeffs from server)
-    a, b, c = 27.38389577, -54.75922987, 23.45738844
     f_dense = np.linspace(0.9955, 1.0045, 300)
-    E_fit = (a * f_dense ** 2 + b * f_dense + c) / 2.0
-    ax.plot((f_dense - 1.0) * 1000.0, E_fit, color=COLOR_FIT, lw=1.6,
-            zorder=2, label="二次拟合 (server coeffs)")
+    energy_fit = (np.polyval(STRETCH_POLY, f_dense) - STRETCH_EXTR_E) * 1e3
+    ax.plot((f_dense - 1.0) * 1000.0, energy_fit, color=COLOR_FIT,
+            zorder=2, label="Quadratic fit (server coefficients)")
     ax.axvline((STRETCH_EXTR_FACTOR - 1.0) * 1000.0, color=COLOR_HIGHLIGHT,
-               lw=1.0, ls="--", alpha=0.85,
-               label=f"平衡点 f={STRETCH_EXTR_FACTOR:.5f}")
-    ax.set_xlabel(r"面内应变 $\varepsilon_{xy}$  (‰,  factor - 1)")
-    ax.set_ylabel(r"$E$  (eV/atom)")
-    ax.set_title("HCP Au 面内 (xy) 拉伸扫描  ·  A11-1/y_stretch  (真实数据)")
-    ax.grid(True, lw=0.5, color=COLOR_GRID, alpha=0.7)
-    ax.legend(loc="upper center", fontsize=9, framealpha=0.95)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+               ls="--", alpha=0.85,
+               label=f"Equilibrium: f={STRETCH_EXTR_FACTOR:.5f}")
+    ax.set_xlabel(r"In-plane strain $\varepsilon_{xy}$ (‰, factor - 1)")
+    ax.set_ylabel(r"$\Delta E$ (meV/atom)")
+    ax.set_title("HCP Au xy stretch")
+    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -112,9 +91,8 @@ CIJ_DERIVED = {
 }
 
 
-def plot_cij(out: Path) -> None:
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.8), dpi=300,
-                                   gridspec_kw={"width_ratios": [1.25, 1.0]})
+def plot_cij(path_out: Path) -> None:
+    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
     # left: schematic strain-energy curve for C11 (7 representative points)
     # We use the 7 nominal strain points from the energy method (-0.003..0.003)
     s_cij = np.array([-0.003, -0.002, -0.001, 0.0, 0.001, 0.002, 0.003])
@@ -124,34 +102,30 @@ def plot_cij(out: Path) -> None:
     E_vis = 0.5 * C11 * s_cij ** 2  # meV scale shown in annotation
     s_dense = np.linspace(-0.0035, 0.0035, 200)
     E_dense = 0.5 * C11 * s_dense ** 2
-    axL.plot(s_dense * 1e3, E_dense * 1e3, color=COLOR_FIT, lw=1.6, zorder=2,
-             label=r"$\frac{1}{2}C_{11}\varepsilon^2$ 拟合")
-    axL.scatter(s_cij * 1e3, E_vis * 1e3, color=COLOR_DATA2, s=50, zorder=4,
-                edgecolor="white", lw=0.8, label="7 应变点 (能量法)")
-    axL.set_xlabel(r"应变 $\varepsilon$  (×10⁻³)")
+    axL.plot(s_dense * 1e3, E_dense * 1e3, color=COLOR_FIT, zorder=2,
+             label=r"$\frac{1}{2}C_{11}\varepsilon^2$ fit")
+    axL.scatter(s_cij * 1e3, E_vis * 1e3, color=COLOR_DATA2, zorder=4,
+                label="7 strain points")
+    axL.set_xlabel(r"Strain $\varepsilon$ ($\times 10^{-3}$)")
     axL.set_ylabel(r"$\Delta E$  (meV/atom)")
-    axL.set_title("(a) C11 能量-应变拟合  (示意)")
-    axL.grid(True, lw=0.5, color=COLOR_GRID, alpha=0.7)
-    axL.legend(fontsize=9, loc="upper center")
-    axL.annotate(f"C11 = {C11:.1f} GPa", xy=(0.0025, 0.5 * C11 * 0.0025 ** 2 * 1e3),
-                 xytext=(-1.5, 0.6), fontsize=10, color=COLOR_HIGHLIGHT,
-                 arrowprops=dict(arrowstyle="->", color=COLOR_HIGHLIGHT, lw=1.0))
+    axL.set_title("(a) Schematic C11 energy-strain fit")
+    general_modify_legend(axL.legend(loc="upper center"))
+    axL.annotate(f"C11 = {C11:.1f} GPa", xy=(2.5, 0.5 * C11 * 0.0025 ** 2 * 1e3),
+                 xytext=(-1.5, 0.6), color=COLOR_HIGHLIGHT,
+                 arrowprops=dict(arrowstyle="->", color=COLOR_HIGHLIGHT))
     # right: bar chart of all 5 Cij
     labels = list(CIJ_FINAL.keys())
     vals = list(CIJ_FINAL.values())
     colors = [COLOR_DATA1, COLOR_DATA1, COLOR_DATA1, COLOR_DATA1, COLOR_DATA2]
-    bars = axR.bar(labels, vals, color=colors, edgecolor="white", lw=0.8)
+    bars = axR.bar(labels, vals, color=colors)
     for bar, v in zip(bars, vals):
         axR.text(bar.get_x() + bar.get_width() / 2, v + 5, f"{v:.1f}",
-                 ha="center", va="bottom", fontsize=9, color=COLOR_TEXT)
-    axR.set_ylabel("弹性常数  (GPa)")
-    axR.set_title("(b) HCP Au 二阶弹性常数  (真实)")
-    axR.grid(True, axis="y", lw=0.5, color=COLOR_GRID, alpha=0.7)
+                 ha="center", va="bottom")
+    axR.set_ylabel("Elastic constant (GPa)")
+    axR.set_xlabel("Coefficient")
+    axR.set_title("(b) HCP Au second-order elastic constants")
     axR.set_ylim(0, max(vals) * 1.18)
-    fig.suptitle("HCP Au Cij (能量-应变法)  ·  A11-2/y_cij_energy  (真实数据)",
-                 fontsize=12, fontweight="bold", y=1.02)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -173,28 +147,24 @@ HOEC_FOEC = {"C1111": 77086.58, "C1112": 3733.34, "C1113": 24674.16,
              "C4444": 3288.40}
 
 
-def plot_hoec(out: Path) -> None:
-    fig, axes = plt.subplots(1, 3, figsize=(14.0, 5.0), dpi=300)
+def plot_hoec(path_out: Path) -> None:
+    fig, axes = my_plot(fig_subp=[1, 3], fig_sharex=False)
     orders = [
-        ("二阶 SOEC (GPa)", HOEC_SOEC, COLOR_DATA1, axes[0]),
-        ("三阶 TOEC (GPa)", HOEC_TOEC, COLOR_DATA2, axes[1]),
-        ("四阶 FOEC (GPa)", HOEC_FOEC, COLOR_DATA3, axes[2]),
+        ("Second-order (SOEC)", HOEC_SOEC, COLOR_DATA1, axes[0]),
+        ("Third-order (TOEC)", HOEC_TOEC, COLOR_DATA2, axes[1]),
+        ("Fourth-order (FOEC)", HOEC_FOEC, COLOR_DATA3, axes[2]),
     ]
     for title, data, color, ax in orders:
         labels = list(data.keys())
         vals = list(data.values())
-        bars = ax.bar(labels, vals, color=color, edgecolor="white", lw=0.6,
-                      alpha=0.92)
-        ax.axhline(0, color=COLOR_TEXT, lw=0.8)
-        ax.set_ylabel("弹性常数  (GPa)")
+        ax.barh(labels, vals, color=color, alpha=0.92)
+        ax.axvline(0, color="black")
+        ax.set_xlabel("Elastic constant (GPa)")
+        ax.set_ylabel("Coefficient")
         ax.set_title(title)
-        ax.grid(True, axis="y", lw=0.5, color=COLOR_GRID, alpha=0.7)
-        ax.tick_params(axis="x", rotation=45, labelsize=7)
-    fig.suptitle("HCP Au 高阶弹性常数 (Wang-Li 法, hex 20 modes)  ·  "
-                 "A11-2/y_hoec_energy  (真实数据)",
-                 fontsize=12, fontweight="bold", y=1.02)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+        if len(labels) > 10:
+            ax.tick_params(axis="y", labelsize=16)
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -206,55 +176,36 @@ COHESIVE_RESULT = {
     "E0 (eV)": -3.91693241,
     "Eatom (eV)": -0.04981623,
     "Ecoh (eV)": -3.86711618,
-    "V0 (Å³)": 16.999164,
+    "V0 (angstrom^3)": 16.999164,
     "p0 (GPa)": 4.727213,
     "B (GPa)": 188.17279736,
 }
 
 
-def plot_cohesive(out: Path) -> None:
-    # The server PDF has the full curve; we plot the summary as a callout
-    # alongside a Rose-Vinet-like reconstruction anchored at the known E0/V0/B.
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.8), dpi=300,
-                                   gridspec_kw={"width_ratios": [1.4, 1.0]})
-    # left: reconstructed E-k curve (scale 0.6..4.0, 42 points)
-    k = np.linspace(0.60, 4.00, 200)
-    # Rose-Vinet anchored: E(k) = E0 * exp(-eta*(k-1)) + small quad term
-    # tuned so plateau near k=4 gives ~Eatom
+def plot_cohesive(path_out: Path) -> None:
+    # Only server-reported summary values are stored locally; avoid inventing a
+    # dense E-k curve and show the measured energy references directly.
+    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
     E0 = COHESIVE_RESULT["E0 (eV)"]
     Eatom = COHESIVE_RESULT["Eatom (eV)"]
-    eta = 2.0
-    E_coh = E0 * np.exp(-eta * (k - 1.0)) + 0.8 * (k - 1.0) ** 2 - 3.0
-    axL.plot(k, E_coh, color=COLOR_DATA3, lw=1.8, zorder=2,
-             label="E(k) (Rose-Vinet 重建)")
-    axL.axhline(Eatom, color=COLOR_HIGHLIGHT, lw=1.0, ls="--", alpha=0.85,
-                label=f"参考平台 Eatom={Eatom:.4f} eV")
-    axL.axhline(E0, color=COLOR_FIT, lw=0.8, ls=":", alpha=0.7,
-                label=f"E0={E0:.4f} eV")
-    axL.axvline(1.0, color=COLOR_GRID, lw=0.8, ls=":")
-    axL.set_xlabel("scale k  (0.60 … 4.00, 42 静态单点)")
-    axL.set_ylabel("E  (eV/atom)")
-    axL.set_title("(a) cohesive E-k 曲线")
-    axL.grid(True, lw=0.5, color=COLOR_GRID, alpha=0.7)
-    axL.legend(fontsize=8, loc="lower right")
+    bars = axL.bar(["E0", "Eatom"], [E0, Eatom],
+                   color=[COLOR_DATA3, COLOR_HIGHLIGHT])
+    for bar, value in zip(bars, [E0, Eatom]):
+        offset = 0.12 if value < -1 else -0.12
+        va = "bottom" if value < -1 else "top"
+        axL.text(bar.get_x() + bar.get_width() / 2, value + offset,
+                 f"{value:.4f}", ha="center", va=va)
+    axL.axhline(0, color="black")
+    axL.set_xlabel("Energy reference")
+    axL.set_ylabel("Energy (eV/atom)")
+    axL.set_title(f"(a) Ecoh = {E0 - Eatom:.4f} eV/atom")
     # right: summary table
     axR.axis("off")
-    rows = list(COHESIVE_RESULT.items())
-    table = axR.table(
-        cellText=[[f"{v:.4f}" if isinstance(v, float) else str(v)] for v in
-                  COHESIVE_RESULT.values()],
-        rowLabels=list(COHESIVE_RESULT.keys()),
-        loc="center",
-        cellLoc="center",
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1.0, 1.6)
-    axR.set_title("(b) cohesive 拟合结果", fontsize=11)
-    fig.suptitle("HCP Au cohesive energy  ·  A11-3/y_cohesive  (真实数据)",
-                 fontsize=12, fontweight="bold", y=1.02)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    summary = "\n".join(key + " = " + f"{value:.4f}"
+                        for key, value in COHESIVE_RESULT.items())
+    axR.text(0.05, 0.5, summary, va="center", transform=axR.transAxes)
+    axR.set_title("(b) Cohesive-fit summary")
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -280,20 +231,18 @@ DECOHESION_GAMMA = np.array([
 DECOHESION_GAMMA_INF = 1969.14  # mJ/m² plateau
 
 
-def plot_decohesion(out: Path) -> None:
-    fig, ax = plt.subplots(figsize=(8.0, 5.0), dpi=300)
-    ax.plot(DECOHESION_D, DECOHESION_GAMMA, "-o", color=COLOR_DATA1, lw=1.6,
-            ms=4, zorder=3, label="γ(d)  (真实 39 点)")
-    ax.axhline(DECOHESION_GAMMA_INF, color=COLOR_HIGHLIGHT, lw=1.0, ls="--",
+def plot_decohesion(path_out: Path) -> None:
+    fig, ax = my_plot()
+    ax.plot(DECOHESION_D, DECOHESION_GAMMA, "-o", color=COLOR_DATA1,
+            zorder=3, label="γ(d), 39 server data points")
+    ax.axhline(DECOHESION_GAMMA_INF, color=COLOR_HIGHLIGHT, ls="--",
               alpha=0.85,
-              label=f"平台 γ∞ ≈ {DECOHESION_GAMMA_INF:.0f} mJ/m²")
-    ax.set_xlabel("分离距离 d  (Å)")
+              label=f"Plateau: γ∞ ≈ {DECOHESION_GAMMA_INF:.0f} mJ/m²")
+    ax.set_xlabel("Separation distance d (Å)")
     ax.set_ylabel(r"decohesion $\gamma$  (mJ/m²)")
-    ax.set_title("HCP Au decohesion 曲线  ·  decohesion/y_decohesion  (真实数据)")
-    ax.grid(True, lw=0.5, color=COLOR_GRID, alpha=0.7)
-    ax.legend(fontsize=9, loc="lower right")
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    ax.set_title("HCP Au decohesion curve")
+    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -311,37 +260,40 @@ STRETCH_A0_CONVERGENCE = np.array([
 STRETCH_N_POINTS = np.array([3, 5, 9, 13, 17])
 
 
-def plot_convergence(out: Path) -> None:
-    fig, ax = plt.subplots(figsize=(7.0, 4.4), dpi=300)
-    ax.plot(STRETCH_N_POINTS, STRETCH_A0_CONVERGENCE, "-o", color=COLOR_DATA1,
-            lw=1.6, ms=6, zorder=3, label="拟合 a0 (HCP Au xy stretch)")
-    ax.axhline(2.85925295, color=COLOR_HIGHLIGHT, lw=1.0, ls="--", alpha=0.85,
-              label="server 报告 a0 = 2.85925 Å")
-    ax.set_xlabel("参与拟合的应变点数")
-    ax.set_ylabel("平衡晶格常数 a₀  (Å)")
-    ax.set_title("拉伸扫描收敛性  ·  A11-1/y_stretch  (真实数据)")
+def plot_convergence(path_out: Path) -> None:
+    fig, ax = my_plot()
+    delta_a0 = (STRETCH_A0_CONVERGENCE - 2.85925295) * 1e3
+    ax.plot(STRETCH_N_POINTS, delta_a0, "-o", color=COLOR_DATA1,
+            zorder=3, label="Fitted a0 minus server result")
+    ax.axhline(0, color=COLOR_HIGHLIGHT, ls="--", alpha=0.85,
+               label="Server result: a0 = 2.85925 Å")
+    ax.set_xlabel("Number of strain points in the fit")
+    ax.set_ylabel(r"$a_0-a_{0,\mathrm{server}}$ ($10^{-3}$ Å)")
+    ax.set_title("Stretch-scan convergence")
     ax.set_xticks(STRETCH_N_POINTS)
-    ax.grid(True, lw=0.5, color=COLOR_GRID, alpha=0.7)
-    ax.legend(fontsize=9, loc="upper right")
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
-def main(outdir: Path) -> None:
-    _set_rcparams()
-    outdir.mkdir(parents=True, exist_ok=True)
-    plot_stretch(outdir / "vasp_stretch_real.png")
-    plot_cij(outdir / "vasp_cij_real.png")
-    plot_hoec(outdir / "vasp_hoec_real.png")
-    plot_cohesive(outdir / "vasp_cohesive_real.png")
-    plot_decohesion(outdir / "vasp_decohesion_real.png")
-    plot_convergence(outdir / "vasp_convergence_real.png")
+def main(path_outdir: Path) -> None:
+    assert np.isclose(
+        np.polyval(STRETCH_POLY, STRETCH_EXTR_FACTOR),
+        STRETCH_EXTR_E,
+        atol=1e-6,
+    )
+    path_outdir.mkdir(parents=True, exist_ok=True)
+    plot_stretch(path_outdir / "vasp_stretch_real.png")
+    plot_cij(path_outdir / "vasp_cij_real.png")
+    plot_hoec(path_outdir / "vasp_hoec_real.png")
+    plot_cohesive(path_outdir / "vasp_cohesive_real.png")
+    plot_decohesion(path_outdir / "vasp_decohesion_real.png")
+    plot_convergence(path_outdir / "vasp_convergence_real.png")
     print("done")
 
 
 if __name__ == "__main__":
     import sys
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
+    path_outdir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
         "docs/source/_static/images/generated")
-    main(out)
+    main(path_outdir)

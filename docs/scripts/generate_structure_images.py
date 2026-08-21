@@ -286,6 +286,14 @@ def main() -> None:
     render_dos(PATH_IMAGES / "plot_gallery_dos.png")
     print("generated: " + str(PATH_IMAGES / "plot_gallery_dos.png"))
 
+    # Real server-data figures used by the VASP/LAMMPS/n2p2 manual pages.
+    from vasp_workflow_real_data import main as render_vasp_workflow_real
+    from lammps_workflow_real_data import main as render_lammps_workflow_real
+    from n2p2_workflow_real_data import main as render_n2p2_workflow_real
+    render_vasp_workflow_real(PATH_IMAGES)
+    render_lammps_workflow_real(PATH_IMAGES)
+    render_n2p2_workflow_real(PATH_IMAGES)
+
 
 if __name__ == "__main__":
     main()

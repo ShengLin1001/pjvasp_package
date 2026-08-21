@@ -446,23 +446,16 @@ def render_epoch_rmse(path_out: Path) -> Path:
 # ---------------------------------------------------------------------------
 def render_pretty_plot(path_out: Path) -> Path:
     """Demonstrate ``pretty_plot`` and ``pretty_polyfit_plot``."""
-    from mymetal.universal.plot.plotting import pretty_plot, pretty_polyfit_plot
+    from mymetal.universal.plot.plotting import pretty_polyfit_plot
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     x = np.linspace(0, 10, 30)
     y = 0.5 * x + 0.2 + 0.3 * np.random.RandomState(SEED).randn(30)
-
-    plt.sca(axes[0])
-    pretty_plot(width=6, ax=axes[0])
-    axes[0].plot(x, y, "o", label="data")
-    axes[0].set_xlabel("x")
-    axes[0].set_ylabel("y")
-    axes[0].legend()
-
-    plt.sca(axes[1])
-    pretty_polyfit_plot(x, y, deg=1, xlabel="x", ylabel="y")
-    axes[1].set_title("polyfit deg=1")
-
+    ax = pretty_polyfit_plot(x, y, deg=1, xlabel="x", ylabel="y")
+    ax.set_title("pretty_polyfit_plot (degree 1)")
+    fig = ax.figure
+    # pretty_polyfit_plot owns a non-mymetal canvas size, so let matplotlib
+    # resolve its label and title spacing before export.
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
     _assert_non_blank(path_out)
@@ -511,7 +504,7 @@ def render_render_info(path_out: Path) -> Path:
     which is outside the VASP-free scope of this gallery. The panel below
     summarises the call signature and the typical render workflow.
     """
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = my_plot(grid=False)
     ax.axis("off")
     text = (
         "my_render(pipeline, imagefile, size, renderer, camera_dir, viewtype)\n\n"
@@ -540,7 +533,7 @@ def render_ppt_info(path_out: Path) -> Path:
     which is outside the VASP-free scope of this gallery. The panel summarises
     the call and the export pipeline.
     """
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = my_plot(grid=False)
     ax.axis("off")
     text = (
         "ppt2picture(path_ppt, path_output, style='png', dpi=600,\n"

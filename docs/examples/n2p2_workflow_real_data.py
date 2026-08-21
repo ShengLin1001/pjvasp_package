@@ -22,34 +22,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-COLOR_TEXT = (34 / 255, 40 / 255, 50 / 255)
+from mymetal.universal.plot.general import general_modify_legend
+from mymetal.universal.plot.plot import my_plot
+
 COLOR_DATA1 = "#2b6cb0"
 COLOR_DATA2 = "#c05621"
 COLOR_DATA3 = "#7c3aed"
-COLOR_FIT = "#6b7280"
-COLOR_HIGHLIGHT = "#9b2c2c"
-COLOR_GRID = "#e5e7eb"
 COLOR_BAND = "#2b6cb0"
-
-
-def _set_rcparams() -> None:
-    plt.rcParams.update(
-        {
-            "figure.facecolor": "white",
-            "axes.facecolor": "white",
-            "savefig.facecolor": "white",
-            "font.family": ["Microsoft YaHei", "Noto Sans SC", "SimHei", "DejaVu Sans"],
-            "axes.unicode_minus": False,
-            "text.color": COLOR_TEXT,
-            "axes.labelcolor": COLOR_TEXT,
-            "axes.edgecolor": COLOR_TEXT,
-            "xtick.color": COLOR_TEXT,
-            "ytick.color": COLOR_TEXT,
-            "font.size": 10.0,
-            "axes.titlesize": 12.0,
-            "axes.titleweight": "bold",
-        }
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -84,32 +63,29 @@ LC_F_STD = np.array([
 ])
 
 
-def plot_learning_curve(out: Path) -> None:
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(12.0, 4.8), dpi=300)
+def plot_learning_curve(path_out: Path) -> None:
+    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
     # energy RMSE
-    axL.semilogy(LC_EPOCH, LC_E_MEAN, "-", color=COLOR_DATA1, lw=1.8,
-                 label="E RMSE 均值 (10 runs)")
+    axL.semilogy(LC_EPOCH, LC_E_MEAN, "-", color=COLOR_DATA1,
+                 label="Mean E RMSE (10 runs)")
     axL.fill_between(LC_EPOCH, LC_E_MEAN - LC_E_STD, LC_E_MEAN + LC_E_STD,
                      color=COLOR_BAND, alpha=0.18, label="±1σ")
     axL.set_xlabel("epoch")
     axL.set_ylabel(r"$E_{\mathrm{RMSE}}$  (meV/atom)")
-    axL.set_title("(a) 能量 RMSE  ·  1500 epochs")
-    axL.grid(True, which="both", lw=0.5, color=COLOR_GRID, alpha=0.7)
-    axL.legend(fontsize=9, loc="upper right")
+    axL.set_title("(a) Energy RMSE over 1500 epochs")
+    axL.grid(True, which="both")
+    general_modify_legend(axL.legend(loc="upper right"))
     # force RMSE
-    axR.semilogy(LC_EPOCH, LC_F_MEAN, "-", color=COLOR_DATA2, lw=1.8,
-                 label="F RMSE 均值 (10 runs)")
+    axR.semilogy(LC_EPOCH, LC_F_MEAN, "-", color=COLOR_DATA2,
+                 label="Mean F RMSE (10 runs)")
     axR.fill_between(LC_EPOCH, LC_F_MEAN - LC_F_STD, LC_F_MEAN + LC_F_STD,
                      color=COLOR_DATA2, alpha=0.18, label="±1σ")
     axR.set_xlabel("epoch")
     axR.set_ylabel(r"$F_{\mathrm{RMSE}}$  (meV/Å)")
-    axR.set_title("(b) 力 RMSE  ·  1500 epochs")
-    axR.grid(True, which="both", lw=0.5, color=COLOR_GRID, alpha=0.7)
-    axR.legend(fontsize=9, loc="upper right")
-    fig.suptitle("Au NNP 训练学习曲线  ·  stage0/0  ·  10 runs ensemble  (真实数据)",
-                 fontsize=12, fontweight="bold", y=1.02)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    axR.set_title("(b) Force RMSE over 1500 epochs")
+    axR.grid(True, which="both")
+    general_modify_legend(axR.legend(loc="upper right"))
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -130,27 +106,25 @@ A_BCC_DFT = 3.24
 A_HCP_DFT = 2.86
 
 
-def plot_property_scan(out: Path) -> None:
-    fig, ax = plt.subplots(figsize=(8.5, 5.0), dpi=300)
-    ax.plot(PROP_EPOCH, A_FCC, "-o", color=COLOR_DATA1, lw=1.6, ms=6,
+def plot_property_scan(path_out: Path) -> None:
+    fig, ax = my_plot()
+    ax.plot(PROP_EPOCH, A_FCC, "-o", color=COLOR_DATA1,
             label="FCC a  (NNP)")
-    ax.axhline(A_FCC_DFT, color=COLOR_DATA1, lw=1.0, ls="--", alpha=0.6,
+    ax.axhline(A_FCC_DFT, color=COLOR_DATA1, ls="--", alpha=0.6,
                label=f"FCC a (DFT) = {A_FCC_DFT} Å")
-    ax.plot(PROP_EPOCH, A_BCC, "-s", color=COLOR_DATA2, lw=1.6, ms=6,
+    ax.plot(PROP_EPOCH, A_BCC, "-s", color=COLOR_DATA2,
             label="BCC a  (NNP)")
-    ax.axhline(A_BCC_DFT, color=COLOR_DATA2, lw=1.0, ls="--", alpha=0.6,
+    ax.axhline(A_BCC_DFT, color=COLOR_DATA2, ls="--", alpha=0.6,
                label=f"BCC a (DFT) = {A_BCC_DFT} Å")
-    ax.plot(PROP_EPOCH, A_HCP, "-^", color=COLOR_DATA3, lw=1.6, ms=6,
+    ax.plot(PROP_EPOCH, A_HCP, "-^", color=COLOR_DATA3,
             label="HCP a  (NNP)")
-    ax.axhline(A_HCP_DFT, color=COLOR_DATA3, lw=1.0, ls="--", alpha=0.6,
+    ax.axhline(A_HCP_DFT, color=COLOR_DATA3, ls="--", alpha=0.6,
                label=f"HCP a (DFT) = {A_HCP_DFT} Å")
-    ax.set_xlabel("训练 epoch")
-    ax.set_ylabel("晶格常数 a  (Å)")
-    ax.set_title("NNP 预测晶格常数 vs 训练 epoch  ·  LAMMPS hdnnp  (真实数据)")
-    ax.grid(True, lw=0.5, color=COLOR_GRID, alpha=0.7)
-    ax.legend(fontsize=8, loc="right", ncol=2)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    ax.set_xlabel("Training epoch")
+    ax.set_ylabel("Lattice constant a (Å)")
+    ax.set_title("NNP lattice constants during training")
+    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -166,7 +140,7 @@ SF_RSHIFT = np.array([3.0, 2.6, 0.0, 2.15, 0.0, 3.0])
 SF_RCUT = np.array([6.0, 5.2, 4.3, 4.3, 6.0, 6.0])
 
 
-def plot_symfunc(out: Path) -> None:
+def plot_symfunc(path_out: Path) -> None:
     # Build a representative 48-SF set from the real pattern:
     # G2 with eta in [0.001, 0.15], r_shift in [0, 3], r_cut in [4.3, 6.0]
     np.random.seed(42)
@@ -174,39 +148,32 @@ def plot_symfunc(out: Path) -> None:
     etas = np.sort(np.random.uniform(0.001, 0.15, n_sf))
     r_shifts = np.random.uniform(0.0, 3.0, n_sf)
     r_cuts = np.random.choice([4.3, 5.2, 6.0], n_sf)
-    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11.0, 4.6), dpi=300)
+    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
     # left: eta distribution histogram
     axL.hist(etas, bins=12, color=COLOR_DATA1, edgecolor="white", alpha=0.85)
-    axL.set_xlabel(r"$\eta$  (radial SF 宽度参数)")
-    axL.set_ylabel("SF 数量")
-    axL.set_title("(a) 48 个对称函数 η 分布")
-    axL.grid(True, axis="y", lw=0.5, color=COLOR_GRID, alpha=0.7)
+    axL.set_xlabel(r"$\eta$ (radial SF width)")
+    axL.set_ylabel("Number of symmetry functions")
+    axL.set_title("(a) η distribution for 48 symmetry functions")
     # right: r_shift vs r_cutoff scatter (colored by eta)
-    sc = axR.scatter(r_shifts, r_cuts, c=etas, s=60, cmap="viridis",
-                     edgecolor="white", lw=0.6, zorder=3)
+    sc = axR.scatter(r_shifts, r_cuts, c=etas, cmap="viridis", zorder=3)
     cbar = fig.colorbar(sc, ax=axR, label=r"$\eta$")
     axR.set_xlabel(r"$r_{\mathrm{shift}}$  (Å)")
     axR.set_ylabel(r"$r_{\mathrm{cutoff}}$  (Å)")
-    axR.set_title("(b) SF 参数空间 (r_shift, r_cutoff)")
-    axR.grid(True, lw=0.5, color=COLOR_GRID, alpha=0.7)
-    fig.suptitle("n2p2 对称函数 (G2 径向)  ·  Au NNP  ·  48 SFs  (真实数据)",
-                 fontsize=12, fontweight="bold", y=1.02)
-    fig.tight_layout()
-    fig.savefig(out, bbox_inches="tight", dpi=300)
+    axR.set_title("(b) SF parameter space")
+    fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
 
-def main(outdir: Path) -> None:
-    _set_rcparams()
-    outdir.mkdir(parents=True, exist_ok=True)
-    plot_learning_curve(outdir / "n2p2_learning_curve_real.png")
-    plot_property_scan(outdir / "n2p2_property_scan_real.png")
-    plot_symfunc(outdir / "n2p2_symfunc_real.png")
+def main(path_outdir: Path) -> None:
+    path_outdir.mkdir(parents=True, exist_ok=True)
+    plot_learning_curve(path_outdir / "n2p2_learning_curve_real.png")
+    plot_property_scan(path_outdir / "n2p2_property_scan_real.png")
+    plot_symfunc(path_outdir / "n2p2_symfunc_real.png")
     print("done")
 
 
 if __name__ == "__main__":
     import sys
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
+    path_outdir = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(
         "docs/source/_static/images/generated")
-    main(out)
+    main(path_outdir)
