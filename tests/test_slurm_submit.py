@@ -203,8 +203,33 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["system"].call_count, 3)
         self.assertEqual(dict_mock["worker"].call_args_list[0].args[1:3], (2, 16))
 
+    def test_parallel_submits_one_single_core_submitter_job(self):
+        # parallel 不再在登录节点上逐个 sbatch：整批提交收进一个 -N 1 -n 1 的提交作业，
+        # 这样 sbatch_retry 的在队作业数限流才有地方等队列腾空。
+        dict_mock = self.run_submit("parallel", chunks=1)
+
+        self.assertEqual(dict_mock["base"].call_count, 3)
+        self.assertEqual(dict_mock["worker"].call_count, 1)
+        self.assertEqual(dict_mock["shared"].call_count, 0)
+        self.assertEqual(dict_mock["system"].call_count, 1)
+        # 子作业保留用户资源；只负责 sbatch 的提交作业修正为 1/1。
+        self.assertEqual(dict_mock["base"].call_args_list[0].args[1:3], (2, 16))
+        self.assertEqual(dict_mock["worker"].call_args_list[0].args[1:3], (1, 1))
+        self.assertEqual(
+            dict_mock["worker"].call_args.kwargs["path_save"],
+            Path("/work/slurm/sub_slurm_parallel_chunk001.sh"),
+        )
+
+    def test_parallel_collapses_chunks_into_a_single_submitter_job(self):
+        # 多条 worker 各自 squeue 的快照会互相打架、把队列推过闸门，故 parallel 强制单条。
+        dict_mock = self.run_submit("parallel", chunks=3)
+
+        self.assertEqual(dict_mock["worker"].call_count, 1)
+        self.assertEqual(dict_mock["system"].call_count, 1)
+        self.assertEqual(len(dict_mock["worker"].call_args.kwargs["group"]), 3)
+
     def test_chunk_scripts_stay_in_path_root_slurm_directory(self):
-        for mode in ("each_subdir", "single_alloc"):
+        for mode in ("parallel", "each_subdir", "single_alloc"):
             with self.subTest(mode=mode):
                 dict_mock = self.run_submit(mode, chunks=3)
                 for call_worker in dict_mock["worker"].call_args_list:
@@ -281,11 +306,16 @@ class TestChunkParentLayout(unittest.TestCase):
             "7-00:00:00",
         )
 
+        # parallel 现在也由提交作业承载整批 sbatch，因此同样吃 parent_wall_time。
         dict_mock = self.run_submit(
             "parallel", chunks=1, parent_wall_time="7-00:00:00"
         )
-        self.assertEqual(dict_mock["worker"].call_count, 0)
+        self.assertEqual(dict_mock["worker"].call_count, 1)
         self.assertEqual(dict_mock["shared"].call_count, 0)
+        self.assertEqual(
+            dict_mock["worker"].call_args.kwargs["wall_time"],
+            "7-00:00:00",
+        )
 
     def test_parent_scripts_emit_parent_wall_time(self):
         dict_args = {
@@ -312,6 +342,40 @@ class TestChunkParentLayout(unittest.TestCase):
 
         self.assertIn("#SBATCH --time=7-00:00:00\n", line_worker)
         self.assertIn("#SBATCH --time=7-00:00:00\n", line_shared)
+
+    def test_submitter_loops_wrap_sbatch_and_differ_only_by_wait(self):
+        """parallel 只投不等、无收敛统计；each_subdir 用 --wait 串行并判收敛。"""
+        dict_args = {
+            "partition": "amd_512",
+            "nodes": 1,
+            "ncores": 1,
+            "module_profile_type": "none",
+            "MODULE_BLOCKS": {"none": "# no modules\n"},
+            "launcher": "srun",
+            "cmd": "run-one-case",
+            "if_use_my_launcher": False,
+            "group": [Path("/jobs/001"), Path("/jobs/002")],
+            "if_output": False,
+        }
+        line_parallel = generate_slurm_script_sequential(**dict_args, mode="parallel")
+        line_each_subdir = generate_slurm_script_sequential(**dict_args, mode="each_subdir")
+
+        for line in (line_parallel, line_each_subdir):
+            completed = subprocess.run(
+                ["bash", "-n"], input=line, text=True, capture_output=True, check=False
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            # 两种 mode 的 sbatch 都必须经限流 + 重试包装器，绝不裸调 sbatch。
+            self.assertIn("pei_slurm_univ_sbatch_retry", line)
+            self.assertIn('grep -q "Submitted batch job"', line)
+
+        self.assertIn("pei_slurm_univ_sbatch_retry sub_slurm_univ.sh", line_parallel)
+        self.assertNotIn("--wait", line_parallel)
+        self.assertNotIn("not_convergenced_dirs", line_parallel)
+        self.assertIn("✅ 提交成功", line_parallel)
+
+        self.assertIn("pei_slurm_univ_sbatch_retry --wait sub_slurm_univ.sh", line_each_subdir)
+        self.assertIn("not_convergenced_dirs", line_each_subdir)
 
     def test_generated_shared_parent_is_valid_bash_and_quotes_paths(self):
         line = generate_slurm_script_shared_parent(

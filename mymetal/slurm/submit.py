@@ -3,7 +3,7 @@
 Functions:
     check_wall_time: Validate an optional Slurm wall-time value.
     generate_slurm_script_base: Generate one calculation job script.
-    generate_slurm_script_sequential: Generate one sequential chunk worker.
+    generate_slurm_script_sequential: Generate one chunk worker (submitter or runner).
     generate_slurm_script_shared_parent: Generate one parent for chunk workers.
     get_y_dir_lsubdir: Recursively discover jobs below every y_dir directory.
     split_chunks: Split calculation directories into balanced scheduling lanes.
@@ -24,9 +24,12 @@ from mymetal.universal.check.type import check_positive_int, check_none, check_b
 # 启动失败重试包装器：slurm_utils/slurm_universal/pei_slurm_univ_launch_retry，与 cmd
 # (如 pei_vasp_univ_sbatch) 一样靠 PATH 找到。集中成常量，别在生成 shell 处散写字符串。
 LAUNCH_RETRY_WRAPPER = "pei_slurm_univ_launch_retry"
-# sbatch「提交」失败重试包装器：slurm_utils/slurm_universal/pei_slurm_univ_sbatch_retry，同样
-# 靠 PATH 找到。它只在「提交没被 slurmctld 接住」时轮询重试（默认 99 次 ×10s），一旦作业被
-# 创建（输出含 "Submitted batch job" 或退出码 0）就原样透传退出码，绝不因作业算崩而重投。
+# sbatch「提交」限流 + 失败重试包装器：slurm_utils/slurm_universal/pei_slurm_univ_sbatch_retry，
+# 同样靠 PATH 找到。它做两件事：提交前用 squeue 把在队作业数压在闸门（默认 70-5=65）以下，
+# 免得撞上集群单用户在队上限被拒；提交没被 slurmctld 接住时轮询重投（默认 99 次 ×10s）。
+# 一旦作业被创建（输出含 "Submitted batch job" 或退出码 0）就原样透传退出码，绝不因作业算崩而重投。
+# 限流靠「等队列腾空」实现，动辄几十分钟，因此三种 mode 的提交循环都必须跑在 Slurm 作业里，
+# 不能留在登录节点上 —— 这正是 parallel 也要生成提交作业脚本的原因。
 SBATCH_RETRY_WRAPPER = "pei_slurm_univ_sbatch_retry"
 CHUNK_PARENT_LAYOUTS = ["auto", "shared", "per_chunk"]
 WALL_TIME_PATTERN = re.compile(r"^[0-9]+(?:-[0-9]+)?(?::[0-9]+){0,2}$")
@@ -206,6 +209,9 @@ def generate_slurm_script_sequential(partition: str, nodes: int, ncores: int, mo
                         wall_time: str = None):
     """生成按子目录顺序执行的 Slurm 编排脚本。
 
+    三种 mode 都用它：parallel 生成「只投不等」的提交作业，each_subdir 生成
+    ``sbatch --wait`` 串行链，single_alloc 生成单一分配内顺序跑计算的作业。
+
     Args:
         partition: Slurm 分区名称。
         nodes: 申请的节点数。
@@ -216,7 +222,7 @@ def generate_slurm_script_sequential(partition: str, nodes: int, ncores: int, mo
         cmd: 在每个子目录中执行的计算命令。
         if_use_my_launcher: 是否通过 MY_LAUNCHER 环境变量传递启动器命令。
         group: 当前编排脚本负责处理的子目录列表。
-        mode: 执行模式，例如 "each_subdir" 或 "single_alloc"。
+        mode: 执行模式，可选 "parallel"、"each_subdir" 或 "single_alloc"。
         if_output: 是否将生成的脚本写入文件。
         path_save: 生成脚本的保存路径。
         wall_time: 父/编排脚本的最大运行时间；None 时不生成 ``--time`` 行。
@@ -371,8 +377,8 @@ def generate_loop(group: list, mode: str, line_launcher: str):
 
     Args:
         group: 需要处理的计算子目录列表。
-        mode: 执行模式，例如 "each_subdir" 或 "single_alloc"。
-        line_launcher: 用于执行计算任务的 shell 命令代码块。
+        mode: 执行模式，可选 "parallel"、"each_subdir" 或 "single_alloc"。
+        line_launcher: 用于执行计算任务的 shell 命令代码块（仅 single_alloc 用到）。
 
     Returns:
         包含目录遍历、状态统计和最终汇总的 Bash 循环字符串。
@@ -383,15 +389,24 @@ def generate_loop(group: list, mode: str, line_launcher: str):
     lsubdir = [str(subdir) for subdir in group]
     subdirs = " ".join(shlex.quote(subdir) for subdir in lsubdir)
 
+    # parallel 只把子作业投出去就走、根本拿不到作业结果，谈不上「收敛与否」；each_subdir
+    # (sbatch --wait) 与 single_alloc（就地跑）才握得到退出码，才做收敛分类与四计数 summary。
+    if_check_convergence = mode in ["each_subdir", "single_alloc"]
+
     # —— 计数器 + 失败/未收敛目录数组 + 目录列表 + 循环开头 ——
     line_loop = (
         'start_dir="$(pwd)"\n'
         "submit_success=0\n"
         "submit_failed=0\n"
-        "submit_success_convergenced=0\n"
-        "submit_success_not_convergenced=0\n"
         "failed_dirs=()\n"
-        "not_convergenced_dirs=()\n"
+    )
+    if if_check_convergence:
+        line_loop += (
+            "submit_success_convergenced=0\n"
+            "submit_success_not_convergenced=0\n"
+            "not_convergenced_dirs=()\n"
+        )
+    line_loop += (
         "lsubdir=(" + subdirs + " )\n"
         "\n"
         'for subdir in "${lsubdir[@]}"; do\n'
@@ -406,15 +421,18 @@ def generate_loop(group: list, mode: str, line_launcher: str):
         '    echo "📍 当前目录: $(pwd)"\n'
     )
 
-    if mode == "each_subdir":
-        # 子作业经 sbatch --wait 提交，但外面包一层 pei_slurm_univ_sbatch_retry：提交若没被
-        # slurmctld 接住（暂态繁忙 / 超时 / 通信抖动），它会轮询重试（默认 99 次 ×10s）而不是
-        # 像以前那样直接跳过本子目录；重试耗尽（或命中永久性错误）仍未提交成功，才判失败并 skip。
-        # 作业一旦被创建（输出含 Submitted batch job），--wait 的退出码即作业本身结果，据此判收敛，
-        # 绝不因作业算崩而重投（否则会把必崩算例重跑 99 遍）。
+    if mode in ["parallel", "each_subdir"]:
+        # 两种 mode 的提交长得一样，只差一个 --wait：
+        #   parallel   —— 投完就走，作业结果各自留在 subdir 的 slurm-*.out 里；
+        #   each_subdir —— --wait 串行等，退出码即作业本身结果，据此判收敛。
+        # 外面统一包 pei_slurm_univ_sbatch_retry：提交前先把在队作业数压到闸门以下（免得撞上
+        # 集群单用户在队上限被直接拒掉），没被 slurmctld 接住时轮询重投（默认 99 次 ×10s），
+        # 而不是像以前那样一抖就跳过整个子目录；重试耗尽（或命中永久性错误）才判失败并 skip。
+        # 作业一旦被创建（输出含 Submitted batch job）就绝不重投，否则必崩算例会被重跑 99 遍。
+        cmd_submit = SBATCH_RETRY_WRAPPER + (" --wait" if mode == "each_subdir" else "") + " sub_slurm_univ.sh"
         line_loop += (
-            '    echo "▶️  ' + SBATCH_RETRY_WRAPPER + ' --wait sub_slurm_univ.sh"\n'
-            '    sbatch_out="$(' + SBATCH_RETRY_WRAPPER + ' --wait sub_slurm_univ.sh 2>&1)"; status=$?\n'
+            '    echo "▶️  ' + cmd_submit + '"\n'
+            '    sbatch_out="$(' + cmd_submit + ' 2>&1)"; status=$?\n'
             '    echo "$sbatch_out"\n'
             '    if ! grep -q "Submitted batch job" <<< "$sbatch_out"; then\n'
             '        echo "❌ 提交失败（已轮询重试仍未成功）: $subdir" >&2\n'
@@ -423,6 +441,8 @@ def generate_loop(group: list, mode: str, line_launcher: str):
             "    fi\n"
             "    submit_success=$((submit_success + 1))\n"
         )
+        if mode == "parallel":
+            line_loop += '    echo "✅ 提交成功"\n'
     elif mode == "single_alloc":
         # 单一分配内直接运行命令：cd 成功即视为运行成功，再按退出码判断收敛。
         line_loop += (
@@ -433,39 +453,55 @@ def generate_loop(group: list, mode: str, line_launcher: str):
         )
 
     # —— 依据退出码判定收敛：pei_vasp_univ_sbatch 约定 0/10=已收敛，其余=未收敛 ——
-    line_loop += (
-        "    if (( status == 0 || status == 10 )); then\n"
-        '        echo "✅ 已收敛 (exit $status)"\n'
-        "        submit_success_convergenced=$((submit_success_convergenced + 1))\n"
-        "    else\n"
-        '        echo "❌ 未收敛 (exit $status): $subdir" >&2\n'
-        "        submit_success_not_convergenced=$((submit_success_not_convergenced + 1))\n"
-        '        not_convergenced_dirs+=("$subdir")\n'
-        "    fi\n"
-        "done\n"
-    )
+    if if_check_convergence:
+        line_loop += (
+            "    if (( status == 0 || status == 10 )); then\n"
+            '        echo "✅ 已收敛 (exit $status)"\n'
+            "        submit_success_convergenced=$((submit_success_convergenced + 1))\n"
+            "    else\n"
+            '        echo "❌ 未收敛 (exit $status): $subdir" >&2\n'
+            "        submit_success_not_convergenced=$((submit_success_not_convergenced + 1))\n"
+            '        not_convergenced_dirs+=("$subdir")\n'
+            "    fi\n"
+        )
+    line_loop += "done\n"
 
-    # —— 最终 summary：四个量 + 挨个列出 not_convergenced_dirs 与 failed_dirs ——
+    # —— 最终 summary：计数 + 挨个列出 not_convergenced_dirs 与 failed_dirs ——
     line_loop += (
         'cd "$start_dir" || exit 1\n'
         'echo ""\n'
         'echo "================ 📊 Summary (mode=' + mode + ')"\n'
-        'echo "submit_success=$submit_success    submit_failed=$submit_failed'
-        "    convergenced=$submit_success_convergenced"
-        '    not_convergenced=$submit_success_not_convergenced"\n'
-        "if (( ${#not_convergenced_dirs[@]} > 0 )); then\n"
-        '    echo "❌ 未收敛的目录:"\n'
-        '    for d in "${not_convergenced_dirs[@]}"; do echo "  - 📁 $d"; done\n'
-        "fi\n"
+    )
+    if if_check_convergence:
+        line_loop += (
+            'echo "submit_success=$submit_success    submit_failed=$submit_failed'
+            "    convergenced=$submit_success_convergenced"
+            '    not_convergenced=$submit_success_not_convergenced"\n'
+            "if (( ${#not_convergenced_dirs[@]} > 0 )); then\n"
+            '    echo "❌ 未收敛的目录:"\n'
+            '    for d in "${not_convergenced_dirs[@]}"; do echo "  - 📁 $d"; done\n'
+            "fi\n"
+        )
+        line_failed_title = "❌ 提交/运行失败的目录:"
+        line_fail_cond = "if (( submit_failed > 0 || submit_success_not_convergenced > 0 )); then\n"
+        line_done_bad = "❌ Done: 存在失败或未收敛的计算。"
+        line_done_ok = "🎉 Done: 全部完成且收敛！"
+    else:
+        line_loop += 'echo "submit_success=$submit_success    submit_failed=$submit_failed"\n'
+        line_failed_title = "❌ 提交失败的目录:"
+        line_fail_cond = "if (( submit_failed > 0 )); then\n"
+        line_done_bad = "❌ Done: 存在提交失败的目录。"
+        line_done_ok = "🎉 Done: 全部已提交！各作业结果见对应子目录的 slurm-*.out。"
+    line_loop += (
         "if (( ${#failed_dirs[@]} > 0 )); then\n"
-        '    echo "❌ 提交/运行失败的目录:"\n'
+        '    echo "' + line_failed_title + '"\n'
         '    for d in "${failed_dirs[@]}"; do echo "  - 📁 $d"; done\n'
         "fi\n"
-        "if (( submit_failed > 0 || submit_success_not_convergenced > 0 )); then\n"
-        '    echo "❌ Done: 存在失败或未收敛的计算。"\n'
+        + line_fail_cond
+        + '    echo "' + line_done_bad + '"\n'
         "    exit 1\n"
         "fi\n"
-        'echo "🎉 Done: 全部完成且收敛！"\n'
+        'echo "' + line_done_ok + '"\n'
         "exit 0\n"
     )
     return line_loop
@@ -694,8 +730,8 @@ def pei_slurm_univ_submit(
         if_sbatch: 是否调用 sbatch 提交生成的脚本。
         child_wall_time: parallel / each_subdir 计算子作业的最大运行时间；None 时不在
             ``sub_slurm_univ.sh`` 中生成 ``#SBATCH --time``。single_alloc 下忽略。
-        parent_wall_time: each_subdir / single_alloc 父脚本的最大运行时间；None 时不生成
-            ``#SBATCH --time``。parallel 下忽略。
+        parent_wall_time: 编排/提交作业（三种 mode 都有）的最大运行时间；None 时不生成
+            ``#SBATCH --time``。提交作业可能长时间等待队列闸门，建议给足。
         MODULE_BLOCKS: 环境模块配置字典，键为配置类型，值为对应的 shell 代码块。
         LAUNCHERS: 允许使用的启动器类型列表。
         MODES: 允许使用的运行模式列表。
@@ -708,7 +744,12 @@ def pei_slurm_univ_submit(
         SystemExit: 当必要参数缺失、路径非法、模式非法、资源参数非法或启动器类型未知时退出。
 
     Notes:
-        值得注意的是当选择each_subdir模式时，ncores 应为单独子作业的核数，而不是总核数。父作业的核数将被自动设置为 1；而在single_alloc模式下，ncores 是整个分配的总核数。
+        值得注意的是当选择 parallel / each_subdir 模式时，ncores 应为单独子作业的核数，而不是总核数：
+        这两种模式下编排(提交)作业只做 sbatch，不跑计算，其核数会被自动设置为 -N 1 -n 1；
+        而在 single_alloc 模式下，ncores 是整个分配的总核数。
+
+        三种模式的提交循环现在都跑在 Slurm 作业里（parallel 也会生成一个提交作业而非在登录节点
+        直接 sbatch），这样 pei_slurm_univ_sbatch_retry 的在队作业数限流才能真正等到队列腾空。
     """
     ################################### Check
     # check if None
@@ -730,13 +771,20 @@ def pei_slurm_univ_submit(
     if mode not in MODES:
         fail(f"Unknown mode: {mode}")
 
+    # parallel 现在也由一个 -N 1 -n 1 的提交作业承载整批 sbatch。提交本身很快，真正的节流在
+    # sbatch_retry 的队列闸门上；多开几条 worker 只会让各自 squeue 快照互相打架、把队列推过
+    # 闸门，故强制单条。
+    if mode == "parallel" and chunks > 1:
+        warn("-chunks ignored in parallel mode (整批提交由单个提交作业承载)")
+        chunks = 1
+
     child_wall_time = check_wall_time(child_wall_time)
     if mode == "single_alloc" and child_wall_time is not None:
         warn("-child_wall_time ignored in single_alloc mode (no calculation child jobs)")
 
+    # parent_wall_time 现在三种 mode 都生效：parallel 的提交作业可能长时间卡在队列闸门上等位置，
+    # 给它留足 wall time 才不会等到一半被 Slurm 砍掉、剩下的子目录集体漏投。
     parent_wall_time = check_wall_time(parent_wall_time)
-    if mode == "parallel" and parent_wall_time is not None:
-        warn("-parent_wall_time ignored in parallel mode (no parent job)")
 
     # chunks 表示并发调度流数量；父作业布局另行解析，避免把两个概念继续绑定。
     chunk_parent_layout = check_chunk_parent_layout(
@@ -776,99 +824,70 @@ def pei_slurm_univ_submit(
                                         if_output=True, path_save=path_save,
                                         wall_time=child_wall_time)
 
-    if mode == "parallel":
-        if chunks > 1:
-            warn("-chunks ignored in parallel mode (already one job per dir)")
-        if if_sbatch:
-            # parallel 只负责提交、不等待结果，因此只统计 submit_success / submit_failed。
-            submit_success = 0
-            submit_failed = 0
-            submit_failed_dirs = []
-            for subdir in lsubdir:
-                path_save = subdir / "sub_slurm_univ.sh"
-                print("")
-                print(f"================ 📁 {subdir}")
-                print(f"▶️  {SBATCH_RETRY_WRAPPER} {path_save}")
-                # 这个 bash 脚本结束就会回到 path_root。sbatch 提交经 pei_slurm_univ_sbatch_retry
-                # 轮询重试：提交被 slurmctld 暂态拒于门外时不立刻记失败，重试耗尽才判失败。
-                rc = os.system(f"cd {subdir} && {SBATCH_RETRY_WRAPPER} {path_save}")
-                exit_code = os.waitstatus_to_exitcode(rc)
-                if exit_code == 0:
-                    print("✅ 提交成功")
-                    submit_success += 1
-                else:
-                    print(f"❌ 提交失败 (exit {exit_code}): {subdir}")
-                    submit_failed += 1
-                    submit_failed_dirs.append(subdir)
-            # —— summary：两个量 + 挨个列出 submit_failed_dirs ——
+    # 三种 mode 现在共用同一套「worker(+parent) 脚本 → 提交」流程。parallel 以前是在登录节点上
+    # os.system 逐个 sbatch：既把登录节点占着，也接不进 sbatch_retry 的在队作业数限流 —— 限流靠
+    # 等队列腾空，动辄几十分钟到几小时，登录节点上根本等不起。收进一个 -N 1 -n 1 的提交作业后，
+    # 三种 mode 的提交循环都由 Slurm 作业守着，限流与重试自然生效。
+    # parallel / each_subdir 的 worker 只做提交编排、本身不跑计算（计算资源由各 base 脚本
+    # 自己申请），因此 worker / shared parent 固定 -N 1 -n 1；single_alloc 的 worker 自己
+    # 持有整个计算分配，沿用传入的 nodes / ncores。
+    parent_nodes = nodes
+    parent_ncores = ncores
+    if mode in ["parallel", "each_subdir"]:
+        parent_nodes = 1
+        parent_ncores = 1
+    # 编排脚本(chunk)及其 slurm-<jobid>.out 单独收进 path_root/slurm/ —— 否则会
+    # 直接堆在 path_root 里，与后处理产物(y_post_*.txt 等)混在一起。
+    # 从 slurm_dir 里 sbatch，默认的 slurm-*.out 也就落在这里；子作业(base script)在各自
+    # subdir 内提交，其输出仍留在对应 subdir，不受影响。
+    slurm_dir = path_root / "slurm"
+    slurm_dir.mkdir(parents=True, exist_ok=True)
+    # 始终保留历史 chunk 文件名：既能被 shared parent 当普通 Bash worker 调用，也能在
+    # per_chunk 兼容模式或故障恢复时单独 sbatch。只把本次生成的明确列表交给 shared
+    # parent，不能 glob slurm_dir，避免旧运行残留的更高编号 chunk 被误执行。
+    lpath_worker = []
+    for chunk_id, group in enumerate(lgroup, start=1):
+        path_worker = (
+            slurm_dir
+            / ("sub_slurm_" + mode.replace("-", "_")
+               + "_chunk" + str(chunk_id).zfill(3) + ".sh")
+        )
+        generate_slurm_script_sequential(
+            partition, parent_nodes, parent_ncores,
+            module_profile_type, MODULE_BLOCKS,
+            launcher_type, cmd, if_use_my_launcher,
+            group=group, mode=mode,
+            if_output=True, path_save=path_worker,
+            wall_time=parent_wall_time,
+        )
+        lpath_worker.append(path_worker.resolve())
+
+    lpath_submit = list(lpath_worker)
+    if (mode == "each_subdir"
+            and chunk_parent_layout == "shared"
+            and len(lpath_worker) > 1):
+        path_parent = slurm_dir / "sub_slurm_each_subdir_parent.sh"
+        generate_slurm_script_shared_parent(
+            partition, module_profile_type, MODULE_BLOCKS,
+            lpath_worker=lpath_worker,
+            if_output=True, path_save=path_parent,
+            wall_time=parent_wall_time,
+        )
+        lpath_submit = [path_parent.resolve()]
+
+    if if_sbatch:
+        for path_submit in lpath_submit:
             print("")
-            print("================ 📊 Summary (mode=parallel)")
-            print(f"submit_success={submit_success}    submit_failed={submit_failed}")
-            if submit_failed_dirs:
-                print("❌ 提交失败的目录:")
-                for d in submit_failed_dirs:
-                    print(f"  - 📁 {d}")
-            print("❌ Done with submission failures." if submit_failed > 0 else "🎉 Done!")
-    elif mode in ["each_subdir", "single_alloc"]:
-        # each_subdir 的 chunk 脚本只负责循环 + sbatch --wait 子作业，本身不跑计算，
-        # 实际计算资源由各子 base 脚本申请，因此 worker / shared parent 固定为 -N 1 -n 1。
-        parent_nodes = nodes
-        parent_ncores = ncores
-        if mode == "each_subdir" and (nodes != 1 or ncores != 1):
-            warn(f"each_subdir 编排脚本无需多资源，已将 nodes={nodes}, ncores={ncores} 修正为 1")
-            parent_nodes = 1
-            parent_ncores = 1
-        # 编排脚本(chunk)及其 slurm-<jobid>.out 单独收进 path_root/slurm/ —— 否则会
-        # 直接堆在 path_root 里，与后处理产物(y_post_*.txt 等)混在一起。
-        # 从 slurm_dir 里 sbatch，默认的 slurm-*.out 也就落在这里；子作业(base script)经
-        # sbatch --wait 在各自 subdir 内提交，其输出仍留在对应 subdir，不受影响。
-        slurm_dir = path_root / "slurm"
-        slurm_dir.mkdir(parents=True, exist_ok=True)
-        # 始终保留历史 chunk 文件名：既能被 shared parent 当普通 Bash worker 调用，也能在
-        # per_chunk 兼容模式或故障恢复时单独 sbatch。只把本次生成的明确列表交给 shared
-        # parent，不能 glob slurm_dir，避免旧运行残留的更高编号 chunk 被误执行。
-        lpath_worker = []
-        for chunk_id, group in enumerate(lgroup, start=1):
-            path_worker = (
-                slurm_dir
-                / ("sub_slurm_" + mode.replace("-", "_")
-                   + "_chunk" + str(chunk_id).zfill(3) + ".sh")
+            print("================ ▶️ 提交父作业")
+            print("  mode: " + mode)
+            print("  chunk_parent_layout: " + chunk_parent_layout)
+            print("  script: " + str(path_submit))
+            # 父作业提交同样经 pei_slurm_univ_sbatch_retry：撞上在队上限时先等队列，
+            # 提交抖动时轮询重投，避免整批任务因为一次抖动直接漏投。
+            os.system(
+                "cd " + shlex.quote(str(slurm_dir))
+                + " && " + SBATCH_RETRY_WRAPPER + " " + shlex.quote(str(path_submit))
             )
-            generate_slurm_script_sequential(
-                partition, parent_nodes, parent_ncores,
-                module_profile_type, MODULE_BLOCKS,
-                launcher_type, cmd, if_use_my_launcher,
-                group=group, mode=mode,
-                if_output=True, path_save=path_worker,
-                wall_time=parent_wall_time,
-            )
-            lpath_worker.append(path_worker.resolve())
-
-        lpath_submit = list(lpath_worker)
-        if (mode == "each_subdir"
-                and chunk_parent_layout == "shared"
-                and len(lpath_worker) > 1):
-            path_parent = slurm_dir / "sub_slurm_each_subdir_parent.sh"
-            generate_slurm_script_shared_parent(
-                partition, module_profile_type, MODULE_BLOCKS,
-                lpath_worker=lpath_worker,
-                if_output=True, path_save=path_parent,
-                wall_time=parent_wall_time,
-            )
-            lpath_submit = [path_parent.resolve()]
-
-        if if_sbatch:
-            for path_submit in lpath_submit:
-                print("")
-                print("================ ▶️ 提交父作业")
-                print("  mode: " + mode)
-                print("  chunk_parent_layout: " + chunk_parent_layout)
-                print("  script: " + str(path_submit))
-                # 父作业提交同样经 pei_slurm_univ_sbatch_retry 轮询重试，避免提交抖动直接漏投。
-                os.system(
-                    "cd " + shlex.quote(str(slurm_dir))
-                    + " && " + SBATCH_RETRY_WRAPPER + " " + shlex.quote(str(path_submit))
-                )
 
     ################################### Main control flow to here
     return None

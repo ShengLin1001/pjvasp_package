@@ -622,6 +622,16 @@ def general_modify_legend(legend, boxstyle: str = 'Square',
     Returns:
         None
 
+    Note:
+        Do not pass ``borderaxespad`` to a legend handed to this function -- keep matplotlib's
+        default (0.5). The ``Square`` boxstyle set here inflates the frame *outward* by
+        ``pad * fontsize`` (default 0.5 * fontsize) on every side, beyond the legend's
+        placement box; the default ``borderaxespad=0.5`` insets that placement box from the
+        axes edge by exactly the same amount, so the inflated frame lands flush inside the
+        axes. Setting ``borderaxespad=0`` cancels that inset and the inflated frame then
+        spills past the axes spine. Position the legend with ``loc`` / ``bbox_to_anchor``,
+        not by shrinking ``borderaxespad``.
+
     Example:
             >>> from mymetal.universal.plot.plot import my_plot
             >>> from mymetal.universal.plot.general import general_modify_legend

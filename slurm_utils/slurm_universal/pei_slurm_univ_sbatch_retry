@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# pei_slurm_univ_sbatch_retry —— sbatch「提交」失败重试包装器（轮询检测）。
+# pei_slurm_univ_sbatch_retry —— sbatch「提交」限流 + 失败重试包装器（轮询检测）。
 #
 # Usage:
 #   pei_slurm_univ_sbatch_retry [sbatch args...]
@@ -10,9 +10,18 @@
 #   pei_slurm_univ_sbatch_retry sub.544.sh
 #   pei_slurm_univ_sbatch_retry sub.*
 #
+# 本脚本只管「提交」这一步，但管两件事：
+#   1) 限流（throttle）：提交前先用 squeue 数自己的在队作业数，超过闸门就轮询等待，等队列
+#      腾出位置再提交。集群对单用户有「最大在队作业数」硬限制（本机 70），撞上后 sbatch 会
+#      被直接拒掉（Job violates accounting/QOS policy … job submit limit），整批提交就此漏投。
+#      闸门 = PEI_SBATCH_MAX_JOBS - PEI_SBATCH_JOB_RESERVE（默认 70-5=65）。留 5 个缓冲是因为
+#      多条 chunk worker 会并发提交：每条 worker 的 squeue 读到的都是「检查那一刻」的快照，
+#      几乎同时提交时会一起把队列推高，缓冲正是用来吸收这个竞态的。
+#   2) 重试（retry）：提交没被 slurmctld 接住（暂态繁忙 / 超时 / 通信抖动）时轮询重投。
+#
 # 与 pei_slurm_univ_launch_retry 的分工（两者互不重叠，可叠加使用）：
 #   launch_retry 包 srun / mpirun，处理「作业内并行启动器起不来」；
-#   本脚本包 sbatch，处理「提交这一步没被 slurmctld 接住」。
+#   本脚本包 sbatch，处理「提交这一步没被 slurmctld 接住」以及「队列已满得先等」。
 #
 # 为什么重试「提交」是安全的：
 #   提交失败意味着 slurmctld 没接住这次请求 —— 根本没有作业被创建，重试绝对安全：不会
@@ -28,8 +37,12 @@
 #   两条都不命中 → 这次提交没成：暂态错误（slurmctld 繁忙 / 超时 / 通信抖动）等待重试；
 #   永久性错误（分区名写错、脚本不存在等）立即放弃，不空转 99×10s。
 #
+# ⚠️ 限流靠 squeue，所以本脚本天然适合跑在「有父作业一直守着」的场景（pei_slurm_univ_submit
+#    的三种 mode 现在都由 -N 1 -n 1 的编排作业承载循环）。在登录节点上直接跑整批提交，一旦
+#    队列满就得把登录节点占上几小时，不是本脚本的用法。
+#
 # ⚠️ 不要拿本脚本单独去解析 --parsable 的作业号：成功时它会把 sbatch 的原样输出回显到
-#    stdout，但同时混入本脚本自己的 ▶️/⚠️ 诊断（走 stderr，不污染 stdout）。需要确定性捕获
+#    stdout，但同时混入本脚本自己的 ▶️/⚠️/⏳ 诊断（走 stderr，不污染 stdout）。需要确定性捕获
 #    作业号的场景（如 n2p2 的 _sbatch_capture）请在调用方自带重试，别经本包装器。
 #
 # Exit codes:
@@ -37,8 +50,16 @@
 #   永久性错误 / 重试耗尽：返回最后一次 sbatch 的退出码。
 
 # ================ ⚙️  可调参数（环境变量覆盖，无需改本文件）
-: "${PEI_SBATCH_RETRY_MAX:=99}"      # 最多尝试次数（含第一次）
-: "${PEI_SBATCH_RETRY_SLEEP:=10}"    # 每次重试前 sleep 的秒数
+: "${PEI_SBATCH_RETRY_MAX:=99}"        # 提交失败最多尝试次数（含第一次）
+: "${PEI_SBATCH_RETRY_SLEEP:=10}"      # 提交失败 / squeue 查询失败后 sleep 的秒数
+
+# —— 在队作业数限流 ——
+# PEI_SBATCH_MAX_JOBS=0 即完全关闭限流（不查 squeue、直接提交），留作应急逃生口。
+: "${PEI_SBATCH_MAX_JOBS:=70}"         # 集群对单用户的最大在队作业数（本机 70）
+: "${PEI_SBATCH_JOB_RESERVE:=5}"       # 预留缓冲；实际闸门 = MAX_JOBS - RESERVE
+: "${PEI_SBATCH_THROTTLE_SLEEP:=30}"   # 队列已满时的轮询间隔（等别人的作业跑完是分钟量级）
+: "${PEI_SBATCH_THROTTLE_MAX:=8640}"   # 队列已满最多轮询几次（8640×30s≈72h）后放行
+: "${PEI_SBATCH_SQUEUE_MAX:=99}"       # squeue 连续查询失败几次后放弃限流、直接提交
 
 # 永久性提交错误特征表：命中任一条即刻放弃、不再重试（避免拿写错的分区 / 不存在的脚本空转
 # 99×10s）。这里用「黑名单」而非 launch_retry 的「白名单」：sbatch 提交重试很廉价（不占分配、
@@ -61,6 +82,17 @@ if [[ -n "$PEI_SBATCH_PERMANENT_EXTRA_PATTERNS" ]]; then
         [[ -n "$extra_pattern" ]] && SBATCH_PERMANENT_PATTERNS+=("$extra_pattern")
     done <<< "$PEI_SBATCH_PERMANENT_EXTRA_PATTERNS"
 fi
+
+# 「在队作业数已达上限」特征表：这不是失败，是背压 —— 前面的限流闸门已经等过，仍被拒说明
+# 竞态（别的 worker 抢先填满）或闸门被调高了。这类情况必须用限流的长间隔去等队列腾空，且
+# 不能计入 PEI_SBATCH_RETRY_MAX：99×10s≈16.5min 根本等不到别人的作业跑完，一旦耗尽就会把
+# 整个子目录判成提交失败漏投。所以命中后回到限流循环重等，用的是限流预算而非重试预算。
+SBATCH_LIMIT_PATTERNS=(
+    "job submit limit"                 # Job violates accounting/QOS policy (job submit limit, …)
+    "QOSMaxSubmitJobPerUserLimit"
+    "AssocMaxSubmitJobLimit"
+    "MaxSubmitJobsPerUser"
+)
 # to here ================
 
 # ====== check ======
@@ -73,7 +105,9 @@ command -v sbatch >/dev/null 2>&1 || {
     echo "❌ ERROR: sbatch 不在 PATH 中，无法提交。" >&2
     exit 1
 }
-for knob_name in PEI_SBATCH_RETRY_MAX PEI_SBATCH_RETRY_SLEEP; do
+for knob_name in PEI_SBATCH_RETRY_MAX PEI_SBATCH_RETRY_SLEEP \
+                 PEI_SBATCH_MAX_JOBS PEI_SBATCH_JOB_RESERVE \
+                 PEI_SBATCH_THROTTLE_SLEEP PEI_SBATCH_THROTTLE_MAX PEI_SBATCH_SQUEUE_MAX; do
     if ! [[ "${!knob_name}" =~ ^[0-9]+$ ]]; then
         echo "❌ ERROR: $knob_name 必须是非负整数，收到: ${!knob_name}" >&2
         exit 1
@@ -86,13 +120,32 @@ if (( PEI_SBATCH_RETRY_MAX < 1 )); then
     echo "❌ ERROR: PEI_SBATCH_RETRY_MAX 必须 >= 1，收到: $PEI_SBATCH_RETRY_MAX" >&2
     exit 1
 fi
+
+# 闸门在此定死一次，后面只读：MAX_JOBS=0 表示关闭限流。
+PEI_SBATCH_JOB_LIMIT=0
+if (( PEI_SBATCH_MAX_JOBS > 0 )); then
+    PEI_SBATCH_JOB_LIMIT=$((PEI_SBATCH_MAX_JOBS - PEI_SBATCH_JOB_RESERVE))
+    if (( PEI_SBATCH_JOB_LIMIT < 1 )); then
+        echo "❌ ERROR: 限流闸门 = PEI_SBATCH_MAX_JOBS($PEI_SBATCH_MAX_JOBS) -" \
+             "PEI_SBATCH_JOB_RESERVE($PEI_SBATCH_JOB_RESERVE) = $PEI_SBATCH_JOB_LIMIT，必须 >= 1。" >&2
+        exit 1
+    fi
+    # squeue 缺失就没法限流；直接关掉而不是让每次提交都空转 99 次查询失败。
+    if ! command -v squeue >/dev/null 2>&1; then
+        echo "⚠️  squeue 不在 PATH 中，无法统计在队作业数，本次跳过提交限流。" >&2
+        PEI_SBATCH_MAX_JOBS=0
+    fi
+fi
 # ====== to here ======
 
 # ====== prepare ======
-# 命中永久性错误特征则打印匹配到的串并返回 0；没命中返回 1。入参是本次 sbatch 的完整输出。
-is_permanent_failure() {
-    local text="$1" pattern
-    for pattern in "${SBATCH_PERMANENT_PATTERNS[@]}"; do
+# 在给定的特征表里找第一条命中项：命中则打印该串并返回 0，没命中返回 1。
+# 用法: match_first_pattern "$text" "${SOME_PATTERNS[@]}"
+match_first_pattern() {
+    local text="$1"
+    shift
+    local pattern
+    for pattern in "$@"; do
         if grep -qiF -- "$pattern" <<< "$text"; then
             echo "$pattern"
             return 0
@@ -100,11 +153,69 @@ is_permanent_failure() {
     done
     return 1
 }
+
+# 数当前用户的在队作业数（默认状态集即 PD/R/CG 等仍占名额的活跃作业）。
+# 成功：把数字打到 stdout 并返回 0；squeue 查询失败：返回 1，由调用方按「未知」处理。
+# ⚠️ 绝不能把查询失败当成 0 —— 那会让闸门形同虚设，一口气把队列灌满。
+count_queued_jobs() {
+    local squeue_out
+    squeue_out="$(squeue -u "${USER:-$(whoami)}" -h -o '%i' 2>/dev/null)" || return 1
+    # 空输出 = 队列里一个作业都没有。这里不能用 `wc -l <<< "$squeue_out"`：here-string 会给
+    # 空串也补一个换行，数出来是 1，凭空多占一个名额。
+    if [[ -z "$squeue_out" ]]; then
+        echo 0
+        return 0
+    fi
+    grep -c '^' <<< "$squeue_out"
+}
+
+# 提交前的限流闸门：轮询等到在队作业数低于闸门再返回。
+# 返回 0 表示「可以提交了」；两种放行兜底（都会明确警告，绝不静默漏投）：
+#   a) squeue 连续失败 PEI_SBATCH_SQUEUE_MAX 次 —— 查不到队列长度就不该永远卡住不提交；
+#   b) 队列满轮询满 PEI_SBATCH_THROTTLE_MAX 次 —— 放行让 sbatch 自己去撞限额，
+#      真撞上会命中 SBATCH_LIMIT_PATTERNS，由主循环再送回这里继续等。
+wait_for_queue_slot() {
+    (( PEI_SBATCH_MAX_JOBS == 0 )) && return 0
+
+    local poll=1 squeue_failed=0 njob reason
+    while :; do
+        # 不能写成 `local njob="$(...)"`：local 会吃掉命令替换的退出码，查询失败也成 0。
+        if njob="$(count_queued_jobs)"; then
+            squeue_failed=0
+            if (( njob < PEI_SBATCH_JOB_LIMIT )); then
+                (( poll > 1 )) && echo "✅ 队列已腾出位置（在队 $njob < 闸门 $PEI_SBATCH_JOB_LIMIT），继续提交。" >&2
+                return 0
+            fi
+            if (( poll >= PEI_SBATCH_THROTTLE_MAX )); then
+                echo "⚠️  限流已等待 $PEI_SBATCH_THROTTLE_MAX 次仍未腾出位置（在队 $njob），放行交由 sbatch 自行判定。" >&2
+                return 0
+            fi
+            reason="在队作业 $njob ≥ 闸门 $PEI_SBATCH_JOB_LIMIT（上限 $PEI_SBATCH_MAX_JOBS - 预留 $PEI_SBATCH_JOB_RESERVE）"
+            echo "⏳ [throttle $poll/$PEI_SBATCH_THROTTLE_MAX] $reason，${PEI_SBATCH_THROTTLE_SLEEP}s 后重查…" >&2
+            poll=$((poll + 1))
+            sleep "$PEI_SBATCH_THROTTLE_SLEEP"
+            continue
+        fi
+
+        # squeue 自己也会暂态抖动：按 99×10s 快速重查，而不是拿限流的长间隔干等。
+        squeue_failed=$((squeue_failed + 1))
+        if (( squeue_failed >= PEI_SBATCH_SQUEUE_MAX )); then
+            echo "⚠️  squeue 连续查询失败 $squeue_failed 次，无法统计在队作业数，本次跳过限流直接提交。" >&2
+            return 0
+        fi
+        echo "⚠️  [squeue $squeue_failed/$PEI_SBATCH_SQUEUE_MAX] 查询在队作业数失败，${PEI_SBATCH_RETRY_SLEEP}s 后重查…" >&2
+        sleep "$PEI_SBATCH_RETRY_SLEEP"
+    done
+}
 # ====== to here ======
 
 # ====== main ======
 attempt=1
+limit_wait=0
 while :; do
+    # 提交前先过限流闸门；关掉限流（PEI_SBATCH_MAX_JOBS=0）时它直接返回、零开销。
+    wait_for_queue_slot
+
     # 诊断一律走 stderr，stdout 留给 sbatch 的原样输出（--parsable 的作业号也在其中）。
     echo "▶️  [attempt $attempt/$PEI_SBATCH_RETRY_MAX] sbatch $*" >&2
 
@@ -119,11 +230,26 @@ while :; do
         exit "$status"
     fi
 
-    matched="$(is_permanent_failure "$sbatch_out")"
+    matched="$(match_first_pattern "$sbatch_out" "${SBATCH_PERMANENT_PATTERNS[@]}")"
     if [[ -n "$matched" ]]; then
         echo "❌ 提交失败且命中永久性错误特征（$matched），不重试放弃: sbatch $*" >&2
         exit "$status"
     fi
+
+    # 撞上在队作业数上限：不算重试次数，回到限流闸门等队列腾空（闸门被显式关掉时也得等，
+    # 否则这里会变成 10s 一次的忙撞墙），只用限流预算兜底，避免无限循环。
+    matched="$(match_first_pattern "$sbatch_out" "${SBATCH_LIMIT_PATTERNS[@]}")"
+    if [[ -n "$matched" ]]; then
+        limit_wait=$((limit_wait + 1))
+        if (( limit_wait >= PEI_SBATCH_THROTTLE_MAX )); then
+            echo "❌ 在队作业数上限（$matched）已等待 $limit_wait 次仍无法提交，放弃: sbatch $*" >&2
+            exit "$status"
+        fi
+        echo "⏳ [limit $limit_wait/$PEI_SBATCH_THROTTLE_MAX] 提交被在队作业数上限拒绝（$matched），${PEI_SBATCH_THROTTLE_SLEEP}s 后重等队列…" >&2
+        sleep "$PEI_SBATCH_THROTTLE_SLEEP"
+        continue
+    fi
+
     if (( attempt >= PEI_SBATCH_RETRY_MAX )); then
         echo "❌ sbatch 提交重试 $PEI_SBATCH_RETRY_MAX 次仍未成功 (exit $status)，放弃: sbatch $*" >&2
         exit "$status"

@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+# J. Pei, 2026-08-20
+# pei_vasp_run_gsfe_extend
+#  >>> Extend an existing GSFE gamma-line to a FULL slip period.
+#
+#  pei_vasp_run_gsfe lays out N1+1 = 11 images spanning (bp1*a11, bp2*b22), which for
+#  most modes is only a fraction of the fault vector that brings the crystal back onto
+#  itself: FCC_111 and HCP_basal walk 1/3 of their period (they stop at the intrinsic
+#  stacking fault), HCP_prism1w and HCP_pyr2 walk 1/2, HCP_pyr1w walks 1/4, FCC_100
+#  happens to walk a whole one. This script appends the missing images to the SAME
+#  y_dir, leaving every converged directory untouched.
+#
+#  Run it at the level of y_full_relax, exactly like pei_vasp_run_gsfe.
+#
+#  It reads the shear step back out of the existing images rather than recomputing it
+#  from bp1/bp2, so new images land exactly on the old line -- mymetal.post.gsfe aborts
+#  on a 1e-10 collinearity deviation. The period and the symmetry-equivalent images
+#  inside it are detected from the structures, so a mode whose second half only mirrors
+#  its first half is reported as already complete instead of being recomputed: HCP
+#  prism1w image i and image 20-i are the same structure, and computing the mirror half
+#  would only feed a NNP symmetry-equivalent duplicates. -include_equivalent overrides
+#  that when you want the whole curve to come from DFT.
+#
+#  It ONLY prepares input directories -- it writes y_gsfe_<mode>/y_sbatch_extend.sh but
+#  does not submit. Run that script yourself, then post-process as usual.
+#
+#  >>> Example usage:
+#      pei_vasp_run_gsfe_extend -mode FCC_111             # 11..29 of a 30-step period
+#      pei_vasp_run_gsfe_extend -mode HCP_pyr1w           # 11..39 of a 40-step period
+#      pei_vasp_run_gsfe_extend -mode HCP_prism1w         # reports "nothing to do"
+#      pei_vasp_run_gsfe_extend -mode HCP_prism1w -include_equivalent   # 11..19 anyway
+#      pei_vasp_run_gsfe_extend -mode HCP_pyr1w -index_end 20           # stop early
+#
+#  Prerequisite: y_gsfe_<mode>/y_dir must hold a gap-free 00..N1 run from
+#  pei_vasp_run_gsfe, and y_full_relax must still hold the inputs it was seeded from.
+
+import argparse
+import sys
+from pathlib import Path
+
+from mymetal.build.workflow.gsfe import DICT_SLIP_MODE, generate_gsfe_extend_dirs
+
+# Kept in sync with the ">>> Example usage" block above; argparse only shows what we
+# hand it, so the header comment alone never reaches a --help reader.
+EPILOG = """\
+most common:
+  pei_vasp_run_gsfe_extend -mode FCC_111        # append 11..29, closing the <112> line
+  pei_vasp_run_gsfe_extend -mode HCP_pyr1w      # append 11..39
+  pei_vasp_run_gsfe_extend -mode HCP_prism1w    # already complete: the missing half is
+                                                # the mirror of the computed half
+
+then:
+  bash y_gsfe_<mode>/y_sbatch_extend.sh         # submit the NEW images only
+  pei_vasp_univ_post && post_gsfe()             # post-process the whole line
+
+notes:
+  run at the level of y_full_relax, on a y_dir that pei_vasp_run_gsfe already filled.
+  it only prepares dirs -- no sbatch of its own.
+  the closing image (index == period) is a duplicate of 00 and is NOT laid out; the
+  curve closes on 00's energy.
+"""
+
+parser = argparse.ArgumentParser(
+    description="Extend an existing GSFE gamma-line to a full slip period.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument("-mode", required=True, choices=sorted(DICT_SLIP_MODE),
+                    help="Slip mode, the same name pei_vasp_run_gsfe was given.")
+parser.add_argument("-index_end", type=int, default=None,
+                    help="Last image index to lay out. Default: one full period minus "
+                         "one, i.e. up to but not including the duplicate of 00.")
+parser.add_argument("-include_equivalent", action="store_true",
+                    help="Also lay out images that are only symmetry-equivalent mirrors "
+                         "of ones already computed (default: skip them).")
+parser.add_argument("-srcdir", default="y_full_relax", help="Relaxed reference directory.")
+parser.add_argument("-workdir", default=None,
+                    help="GSFE directory. Default: y_gsfe_<mode>.")
+args = parser.parse_args()
+
+sys.stdout.reconfigure(line_buffering=True)
+
+print("Slip mode  :", args.mode)
+print("Index end  :", "auto (one full period)" if args.index_end is None else args.index_end)
+print("Equivalent :", "laid out too" if args.include_equivalent else "skipped")
+print("Source dir :", args.srcdir)
+print("Work dir   :", args.workdir if args.workdir else "y_gsfe_" + args.mode)
+
+path_root = Path.cwd().resolve()
+print("🟢 ===== pei_vasp_run_gsfe_extend in %s" % path_root)
+generate_gsfe_extend_dirs(path_root=path_root, mode=args.mode, index_end=args.index_end,
+                          include_equivalent=args.include_equivalent,
+                          srcdir=args.srcdir, workdir=args.workdir)

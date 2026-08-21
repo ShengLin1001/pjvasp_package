@@ -44,7 +44,6 @@ from pathlib import Path
 import shutil
 import shlex
 import subprocess
-import re
 import time
 import getpass
 import warnings
@@ -241,52 +240,137 @@ class PeiN2p2:
 
 
     @staticmethod
-    def _select_symmetric_strain_dirs(ldir: list, n_side: int = 10, zero_atol: float = 1e-12) -> list:
-        """对应变扫描子目录做对称抽样：保留 0 应变 + 正/负各 n_side 个近似均匀点。
-
-        子目录名形如 ``s_+0.0000`` / ``s_-0.0025``（末尾带符号的应变值）。解析应变后按
-        零 / 负 / 正 分三组，各组按应变升序排列，再用 ``np.linspace`` 取含首尾的 n_side
-        个近似均匀索引——正负两侧各 n_side 个、中间 1 个零应变，共 ``2*n_side+1`` 个。
-        某侧点数不足 n_side 时取该侧全部（去重、不补齐）。
-
-        Note:
-            "均匀"指在该侧应变的**索引**上均匀（linspace + round），当原网格等间距时
-            即应变均匀；含首尾点，故会保留最大幅度应变（如 ±0.12）。原网格非等距时退化
-            为按序号均匀。无法从目录名解析出应变的子目录会被跳过。
+    def _check_select_n_uniform_point(select_n_uniform_point: int = None):
+        """校验每个 y_dir 的均匀选点上限。
 
         Args:
-            ldir: 应变扫描的结构子目录列表（每个是一个应变点）。
-            n_side: 正负两侧各保留的点数。
-            zero_atol: 判定"零应变"的容差。
+            select_n_uniform_point: 最多保留的均匀点数，或 None。
 
         Returns:
-            抽样后的子目录列表，按应变升序（负 -> 0 -> 正）。
+            规范化后的正整数，或 None。
+
+        Raises:
+            ValueError: select_n_uniform_point 不是正整数。
         """
-        def _parse_strain(name):
-            # 末尾带符号的浮点即应变；解析不到（非应变目录）返回 None，交由调用处跳过
-            m = re.search(r'([-+]?\d+(?:\.\d+)?)\s*$', name)
-            return float(m.group(1)) if m else None
+        if select_n_uniform_point is None:
+            return None
 
-        def _even_pick(lseq, n):
-            # 索引上取 n 个含首尾的近似均匀点；点数不足则全取（round 后去重防重复索引）
-            if len(lseq) <= n:
-                return list(lseq)
-            lidx = np.unique(np.linspace(0, len(lseq) - 1, n).round().astype(int))
-            return [lseq[i] for i in lidx]
+        is_integer = isinstance(select_n_uniform_point, (int, np.integer))
+        if isinstance(select_n_uniform_point, bool) or not is_integer:
+            raise ValueError("select_n_uniform_point must be a positive integer or None.")
+        if select_n_uniform_point <= 0:
+            raise ValueError("select_n_uniform_point must be a positive integer or None.")
+        return int(select_n_uniform_point)
 
-        lstrain = [(_parse_strain(d.name), d) for d in ldir]
-        lstrain = sorted(((s, d) for s, d in lstrain if s is not None), key=lambda x: x[0])
-        lzero = [d for s, d in lstrain if abs(s) <= zero_atol]
-        lneg  = [d for s, d in lstrain if s < -zero_atol]   # 升序：最负 -> 最接近 0
-        lpos  = [d for s, d in lstrain if s >  zero_atol]    # 升序：最接近 0 -> 最正
 
-        return _even_pick(lneg, n_side) + lzero + _even_pick(lpos, n_side)
+    @classmethod
+    def _get_data_tag_config(cls, data_tag_dict: dict) -> dict:
+        """规范化 generate_data 的标签配置。
+
+        普通 ``{tag: lsubdir}`` 保持原有的全部读取行为。需要均匀选点时，该 tag
+        使用 ``{'lsubdir': [...], 'select_n_uniform_point': N}`` 配置。
+
+        Args:
+            data_tag_dict: tag 到子目录列表或带选点参数配置的映射。
+
+        Returns:
+            每个 tag 都包含 lsubdir 与 select_n_uniform_point 的规范化配置。
+
+        Raises:
+            ValueError: data_tag_dict 或其中的 tag 配置不合法。
+        """
+        if not isinstance(data_tag_dict, dict):
+            raise ValueError("data_tag_dict must be a dict.")
+
+        dict_config = {}
+        lallowed_key = ['lsubdir', 'select_n_uniform_point']
+        for tag, config_tag in data_tag_dict.items():
+            if isinstance(config_tag, dict):
+                lunknown_key = sorted(set(config_tag) - set(lallowed_key))
+                if lunknown_key:
+                    raise ValueError(
+                        f"Unsupported data_tag_dict keys for {tag}: {lunknown_key}"
+                    )
+                if 'lsubdir' not in config_tag:
+                    raise ValueError(f"Missing lsubdir in data_tag_dict[{tag!r}].")
+                lsubdir = config_tag['lsubdir']
+                select_n_uniform_point = config_tag.get('select_n_uniform_point')
+            else:
+                lsubdir = config_tag
+                select_n_uniform_point = None
+
+            if not isinstance(lsubdir, (list, tuple)):
+                raise ValueError(
+                    f"data_tag_dict[{tag!r}] lsubdir must be a list or tuple."
+                )
+            select_n_uniform_point = cls._check_select_n_uniform_point(
+                select_n_uniform_point
+            )
+            dict_config[tag] = {
+                'lsubdir': list(lsubdir),
+                'select_n_uniform_point': select_n_uniform_point,
+            }
+        return dict_config
+
+
+    @staticmethod
+    def _get_ydir_sort_key(path_dir: Path) -> tuple:
+        """返回 y_dir 子目录的稳定排序键。
+
+        完整目录名是数值时直接按数值排序，例如 ``-0.1200``、``0.997`` 和 ``00``。
+        非数值目录保持原有的名字典序，兼容 vacancy 等历史数据目录。
+
+        Args:
+            path_dir: y_dir 下的一个结构目录。
+
+        Returns:
+            可直接传给 ``sorted`` 的排序键。
+        """
+        try:
+            value = float(path_dir.name)
+        except ValueError:
+            return 1, path_dir.name
+        return 0, value, path_dir.name
+
+
+    @classmethod
+    def _select_n_uniform_dirs(cls, ldir: list,
+                               select_n_uniform_point: int = None) -> list:
+        """排序 y_dir 子目录，并按索引均匀选取指定数量。
+
+        数量不足 ``select_n_uniform_point`` 时保留全部目录。需要抽点时使用包含首尾
+        的等间隔索引；如果只选 1 点，则取排序后的中点。
+
+        Args:
+            ldir: y_dir 下的结构目录列表。
+            select_n_uniform_point: 最多保留的均匀点数。None 表示只排序、不抽点。
+
+        Returns:
+            数值优先排序并完成均匀抽点的目录列表。
+
+        Raises:
+            ValueError: select_n_uniform_point 不是正整数。
+        """
+        select_n_uniform_point = cls._check_select_n_uniform_point(
+            select_n_uniform_point
+        )
+
+        ldir_sorted = sorted(ldir, key=cls._get_ydir_sort_key)
+        if select_n_uniform_point is None or len(ldir_sorted) <= select_n_uniform_point:
+            return ldir_sorted
+
+        if select_n_uniform_point == 1:
+            lindex = [len(ldir_sorted) // 2]
+        else:
+            lindex = np.rint(
+                np.linspace(0, len(ldir_sorted) - 1, select_n_uniform_point)
+            ).astype(int)
+        return [ldir_sorted[index] for index in lindex]
 
 
     def generate_data(self, dir_data_source: Path = None, data_tag_dict: dict = None,
                       if_adjust_size: bool = False, size_top: int = 72,
-                      size_bottom: int = 36, size_close: int = 48,
-                      dict_subsample: dict = None):
+                      size_bottom: int = 36, size_close: int = 48):
         """从 VASP OUTCAR 生成 n2p2 训练数据。
 
         遍历 ``dir_data_source/<tag>/<subdir>/y_dir`` 下的每个子目录，用
@@ -301,21 +385,21 @@ class PeiN2p2:
 
         Args:
             dir_data_source: 按 tag 分类存放 VASP 计算结果的根目录。
-            data_tag_dict: tag 到子目录列表的映射。
+            data_tag_dict: tag 到子目录列表或 tag 配置的映射。普通列表默认读取该
+                tag 下的全部结构；需要均匀选点时写成
+                ``{'lsubdir': [...], 'select_n_uniform_point': N}``。
             if_adjust_size: 是否把每个结构的原子数规整到 [size_bottom, size_top] 区间
                 内并尽量逼近 size_close（仅面内 a,b 超胞复制，nz 恒为 1）。默认 False，
                 保持原结构不变。
             size_top: 原子数上限。原子数已超过此值的结构（如大平板）保持原样不复制。
             size_bottom: 原子数下限。
             size_close: 规整目标原子数，复制方案在区间内尽量逼近此值。
-            dict_subsample: 可选的按子目录抽样表 ``{子目录路径子串: n_side}``。某个
-                ``subdir`` 命中任一 key（子串匹配）时，只加载该子目录下 0 应变 + 正/负各
-                ``n_side`` 个近似均匀应变点（见 ``_select_symmetric_strain_dirs``），用于给
-                应变点过密的数据（如 HOEC 每模式 97 点）减重；默认 None 表示全部加载。
 
         Raises:
             FileNotFoundError: 某个数据子目录下缺少 y_dir。
+            ValueError: data_tag_dict 配置或 select_n_uniform_point 不合法。
         """
+        dict_data_tag_config = self._get_data_tag_config(data_tag_dict)
         os.chdir(self.dir_root)
         workdir = self.dir_data
         path_data_train = workdir / 'train'
@@ -330,7 +414,9 @@ class PeiN2p2:
 
         lforces = []
         lenergies = []
-        for tag, lsubdir in data_tag_dict.items():
+        for tag, dict_tag_config in dict_data_tag_config.items():
+            lsubdir = dict_tag_config['lsubdir']
+            select_n_uniform_point = dict_tag_config['select_n_uniform_point']
             for subdir in lsubdir:
                 path_subdir = Path(os.path.join(dir_data_source, tag, subdir))
                 path_ydir   = path_subdir / 'y_dir'
@@ -340,15 +426,16 @@ class PeiN2p2:
 
                 print(f'========{tag} - {subdir}')
                 # search in sub-subdir
-                ldir_struct = [d for d in sorted(path_ydir.iterdir()) if d.is_dir()]
-
-                # 可选：对应变点过密的子目录（如 HOEC）对称抽样，0 应变 + 每侧 n_side 个均匀点
-                n_side = next((n for token, n in (dict_subsample or {}).items() if token in subdir), None)
-                if n_side is not None:
-                    n_before = len(ldir_struct)
-                    ldir_struct = self._select_symmetric_strain_dirs(ldir_struct, n_side=n_side)
-                    print(f"  ↘ subsample {tag}/{subdir}: {n_before} -> {len(ldir_struct)} "
-                          f"structures (0 应变 + 每侧 {n_side} 个均匀应变点)")
+                ldir_struct = [path_dir for path_dir in path_ydir.iterdir()
+                               if path_dir.is_dir()]
+                n_before = len(ldir_struct)
+                ldir_struct = self._select_n_uniform_dirs(
+                    ldir_struct,
+                    select_n_uniform_point=select_n_uniform_point,
+                )
+                if len(ldir_struct) < n_before:
+                    print(f"  ↘ uniform selection {tag}/{subdir}: "
+                          f"{n_before} -> {len(ldir_struct)} structures")
 
                 for d in ldir_struct:
                     if d.is_dir():

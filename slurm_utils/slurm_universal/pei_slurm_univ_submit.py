@@ -212,11 +212,13 @@ def build_parser() -> argparse.ArgumentParser:
             """\
             示例（三种模式与 each_subdir 兼容布局）：
 
-              # parallel：每个子目录一个独立作业，只提交不等待
+              # parallel：每个子目录一个独立作业，只提交不等待；整批提交本身由一个
+              #           -N 1 -n 1 的提交作业承载（不在登录节点上跑），-chunks 恒为 1
               pei_slurm_univ_submit -path_root /public3/home/scg6928/mywork/test \\
-                  -mode parallel -dir_root . -chunks 5 \\
+                  -mode parallel -dir_root . \\
                   -module_profile_type zcm6_vasp_0 -launcher_type srun \\
-                  -cmd "echo Hello, World!" -partition amd_512 -nodes 2 -ncores 16 -if_sbatch
+                  -cmd "echo Hello, World!" -partition amd_512 -nodes 2 -ncores 16 \\
+                  -parent_wall_time 7-00:00:00 -if_sbatch
 
               # each_subdir：编排作业里逐个 sbatch --wait 子作业
               pei_slurm_univ_submit -path_root /public3/home/scg6928/mywork/test \\
@@ -246,6 +248,13 @@ def build_parser() -> argparse.ArgumentParser:
             不加 -preset 时，-mode/-module_profile_type/-launcher_type/-cmd/
             -partition/-nodes/-ncores 为必填；命令行显式值始终覆盖预设。
             不加 -if_sbatch 时只生成脚本、不提交（dry）。
+
+            在队作业数限流：所有 sbatch 都经 pei_slurm_univ_sbatch_retry，提交前先用 squeue 把
+            自己的在队作业数压到闸门以下（默认 70-5=65），撞上集群单用户在队上限就先等队列腾空。
+            旋钮走环境变量，无需改脚本：
+              PEI_SBATCH_MAX_JOBS=70      集群单用户最大在队作业数（设 0 关闭限流）
+              PEI_SBATCH_JOB_RESERVE=5    预留缓冲；闸门 = MAX_JOBS - RESERVE
+              PEI_SBATCH_THROTTLE_SLEEP=30  队列满时的轮询间隔（秒）
             """
         ),
     )
@@ -300,8 +309,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "-parent_wall_time",
-        help=("父/编排作业的最大 wall time，例如 24:00:00 或 7-00:00:00；仅 each_subdir / "
-              "single_alloc 生效。默认不生成 #SBATCH --time 行。"),
+        help=("父/编排(提交)作业的最大 wall time，例如 24:00:00 或 7-00:00:00；三种 mode 均生效。"
+              "提交作业可能长时间卡在队列闸门上等位置，建议给足。默认不生成 #SBATCH --time 行。"),
     )
 
     # —— 提交开关 ——
