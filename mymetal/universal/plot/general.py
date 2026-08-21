@@ -369,18 +369,18 @@ def add_arrow(ax: plt.Axes = None, text: str = '', start: list = None, end: list
 
     Example:
     .. code-block:: python
-        
+
         import matplotlib.pyplot as plt
-        
+
         fig, ax = my_plot()
-        
+
         # Add an arrow from (0.2, 0.2) to (0.8, 0.8) with high z-order
         add_arrow(ax=ax, start=[0.2, 0.2], end=[0.8, 0.8], zorder=10)
-        
+
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         plt.show()
-        
+
     See Also:
         matplotlib.axes.Axes.annotate : Underlying annotation function.
         matplotlib.patches.FancyArrowPatch : Arrow drawing object.
