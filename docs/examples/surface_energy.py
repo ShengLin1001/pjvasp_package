@@ -18,7 +18,7 @@ PATH_DEFAULT_CASE = (
     PATH_REPOSITORY
     / "mymetal"
     / "example"
-    / "test-surface-energy"
+    / "surface-energy-fitting"
     / "fcc"
     / "1.000-2.8485"
 )

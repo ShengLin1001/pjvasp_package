@@ -27,7 +27,7 @@ iteration、elapsed time、energy、stress、pressure、volume 与 maximum force
 
 .. code-block:: text
 
-   mymetal/example/test-post/y_dir/
+   mymetal/example/post-outcar-parse/y_dir/
    ├── 0.997/OUTCAR
    └── 1.000/OUTCAR
 
@@ -50,7 +50,7 @@ iteration、elapsed time、energy、stress、pressure、volume 与 maximum force
 .. code-block:: console
 
    $ python docs/examples/outcar_summary.py \
-       mymetal/example/test-post/y_dir \
+       mymetal/example/post-outcar-parse/y_dir \
        -cases 0.997 1.000 \
        -output docs/_build/outcar-summary.csv
 

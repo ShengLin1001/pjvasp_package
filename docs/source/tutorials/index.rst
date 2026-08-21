@@ -37,10 +37,26 @@ Tutorials
    plot_gallery_ppt
    plot_gallery_oldplotdos
 
+Post-processing 后处理分析
+--------------------------
+
+以下教程基于真实集群计算数据 (zcm6 / LAMMPS) 或合成数据，
+演示 ``mymetal.post`` 各模块的后处理分析流程。
+
+.. toctree::
+   :maxdepth: 1
+
+   post_hoec_energy
+   post_cij_comparison
+   post_stretch_analysis
+   post_gsfe_analysis
+   post_convergence
+   post_relax_convergence
+   post_kpar_ncore
+   post_e_in_1_2_bulk
+
 后续案例
 --------
 
 strained films 的真实 VASP 复算、SLURM dry-run、n2p2 dataset 与
-heterostructure 仍在规划中。GSFE、decohesion 和 HOEC 当前只在
-:doc:`../manual/workflows` 提供 Advanced Workflow 概览，尚未伪造缺少
-审核 fixture 的完整教程。
+heterostructure 仍在规划中。

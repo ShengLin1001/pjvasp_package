@@ -6,7 +6,7 @@ Reads the per-ionic-step convergence data files produced by the bash helper
 sub-directory showing the ionic-relaxation trajectory:
 
     * energy(sigma->0) relative to the last frame, in meV/atom
-    * max force norm, in eV/Ang, together with the |EDIFFG| force criterion
+    * max force norm, in eV/Ang, together with the ``EDIFFG`` force criterion
 
 Data files live in ``y_post_convergence/y_post_convergence_<name>.txt`` and the
 plots are written next to them as ``y_post_convergence_<name>.pdf``. This

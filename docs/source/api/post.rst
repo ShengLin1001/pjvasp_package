@@ -105,6 +105,7 @@ Principal entry point: ``mymetal.post.Cij_energy.fit_cij_energy``。
 
 Related tutorials
    :doc:`../tutorials/cij_energy_fitting`
+   :doc:`../tutorials/post_cij_comparison`
 
 Convergence post-processing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -119,6 +120,9 @@ Convergence post-processing
    排序后绘制收敛曲线并写摘要文件。``my_write_convergence``/
    ``my_read_convergence`` 读写结果。
 
+Related tutorials
+   :doc:`../tutorials/post_convergence`
+
 Stretch post-processing
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -131,6 +135,9 @@ Stretch post-processing
    从 ``y_dir/<strain>`` 提取能量-应变数据，``my_write_stretch``/
    ``my_read_stretch`` 读写结果。
 
+Related tutorials
+   :doc:`../tutorials/post_stretch_analysis`
+
 GSFE / NEB post-processing
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -141,5 +148,69 @@ GSFE / NEB post-processing
    格式问题，暂不自动渲染完整 API；函数签名和用法请直接查看源码或
    :doc:`../manual/workflows` 中的 Advanced Workflow 概览。
 
+.. automodule:: mymetal.post.gsfe
+   :members: post_gsfe, check_constraints, find_sf_usf, write_output
+   :show-inheritance:
+
+.. automodule:: mymetal.post.neb
+   :members: post_neb, my_copy_neb_files, my_write_neb, my_add_head, my_read_neb, my_spline_neb
+   :show-inheritance:
+
+Related tutorials
+   :doc:`../tutorials/post_gsfe_analysis`
+
 .. automodule:: mymetal.post.kpar_ncore
    :members:
+
+HOEC energy post-processing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.post.hoec_energy
+   :members: post_hoec_energy, run_univ_post, load_hoec_manifest, collect_mode_data, fit_P, solve_constants, write_hoec_energy, read_hoec_energy
+   :show-inheritance:
+
+用途
+   用 energy-strain 方法拟合 2/3/4 阶弹性常数 (SOEC/TOEC/FOEC)。
+   从 ``y_hoec_energy/y_dir/<mode>`` 目录读取变形能量，对每个模式
+   做 4 阶多项式拟合，提取 P2/P3/P4 系数，然后通过线性系统求解
+   各阶独立弹性常数。支持固定 SOEC 拟合高阶项、窗口扫描和
+   交叉验证。
+
+Principal entry point: ``mymetal.post.hoec_energy.post_hoec_energy``。
+
+.. note::
+
+   这些函数依赖可选的 ``myvasp`` 包和 ``mymetal.calculate.calmechanics.hoec``
+   模型。文档构建时 ``myvasp`` 被 mock。
+
+Related tutorials
+   :doc:`../tutorials/post_hoec_energy`
+
+Relax convergence post-processing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.post.relax_convergence
+   :members: my_univ_post_convergence, read_univ_post_convergence
+   :show-inheritance:
+
+用途
+   后处理 VASP ionic relaxation 的每步能量和力收敛轨迹。读取
+   ``pei_vasp_univ_extract_convergence`` 生成的数据文件，绘制
+   对数纵轴的能量/力收敛曲线。
+
+Related tutorials
+   :doc:`../tutorials/post_relax_convergence`
+
+E_in_1_2_bulk post-processing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.post.E_in_1_2_bulk
+   :members: post_E_in_1_2_bulk, my_write_E_in_1_2_bulk
+   :show-inheritance:
+
+用途
+   后处理 E_in_1/2 双轴变形体相计算。从 ``y_dir/<a1-a2>`` 提取
+   能量，生成 2D 等高线图和 profile 图，提取平衡参数。
+
+Related tutorials
+   :doc:`../tutorials/post_e_in_1_2_bulk`
