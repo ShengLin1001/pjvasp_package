@@ -41,7 +41,10 @@ from mymetal.calculate.calqm.kpoints import (
     get_kpoints_by_size,
     get_size_by_distance,
 )
-from mymetal.universal.plot.general import general_set_all_rcParams
+from mymetal.universal.plot.general import (
+    general_modify_legend,
+    general_set_all_rcParams,
+)
 
 
 # Lattice constant (Å) and grid size used as a teaching baseline. The
@@ -130,8 +133,10 @@ def render_figure(
     ax.axvline(0.0, color="gray", linestyle=":", linewidth=0.8)
     ax.set_xlabel(r"$k_x$ ($2\pi/a$)")
     ax.set_ylabel(r"$k_y$ ($2\pi/a$)")
-    ax.set_title(f"MP vs Gamma-centered\nsize = {GRID_SIZE}")
-    ax.legend(loc="upper right", fontsize=9)
+    ax.set_title(f"MP vs Gamma-centered\nsize = {GRID_SIZE}", y=1.20)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=9, ncol=2)
+    general_modify_legend(legend, linewidth=1.0)
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlim(-0.6, 0.6)
     ax.set_ylim(-0.6, 0.6)
@@ -148,8 +153,10 @@ def render_figure(
     ax.plot(rk, new[:, 2], "v--", color="#d62728", label=r"$n_z$ (new, ceil)")
     ax.set_xlabel(r"$R_k$ product")
     ax.set_ylabel("k-point count per direction")
-    ax.set_title("RK -> mesh for Cu(111) slab")
-    ax.legend(loc="upper left", fontsize=9)
+    ax.set_title("RK -> mesh for Cu(111) slab", y=1.28)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=9, ncol=2)
+    general_modify_legend(legend, linewidth=1.0)
 
     # Right: ratio between in-plane and out-of-plane density.
     ax = axes[2]
@@ -160,9 +167,12 @@ def render_figure(
             mew=2)
     ax.set_xlabel(r"$R_k$ product")
     ax.set_ylabel(r"$n_x / n_z$")
-    ax.set_title("In-plane vs out-of-plane density")
-    ax.legend(loc="lower right", fontsize=9)
+    ax.set_title("In-plane vs out-of-plane density", y=1.20)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=9, ncol=2)
+    general_modify_legend(legend, linewidth=1.0)
 
+    fig.tight_layout()
     fig.savefig(path_image, bbox_inches="tight")
     plt.close(fig)
 

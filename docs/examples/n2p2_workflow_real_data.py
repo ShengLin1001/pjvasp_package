@@ -29,6 +29,17 @@ COLOR_DATA1 = "#2b6cb0"
 COLOR_DATA2 = "#c05621"
 COLOR_DATA3 = "#7c3aed"
 COLOR_BAND = "#2b6cb0"
+dict_plot_style = {
+    "fontsize": 18,
+    "legend_fontsize": 16,
+    "markersize": 9,
+    "linewidth": 1.6,
+    "markeredgewidth": 1.0,
+    "tick_width": 1.2,
+    "major_tick_length": 6,
+    "minor_tick_length": 3,
+    "grid_linewidth": 0.8,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +75,8 @@ LC_F_STD = np.array([
 
 
 def plot_learning_curve(path_out: Path) -> None:
-    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
+    fig, (axL, axR) = my_plot(
+        fig_subp=[1, 2], fig_sharex=False, **dict_plot_style)
     # energy RMSE
     axL.semilogy(LC_EPOCH, LC_E_MEAN, "-", color=COLOR_DATA1,
                  label="Mean E RMSE (10 runs)")
@@ -74,7 +86,7 @@ def plot_learning_curve(path_out: Path) -> None:
     axL.set_ylabel(r"$E_{\mathrm{RMSE}}$  (meV/atom)")
     axL.set_title("(a) Energy RMSE over 1500 epochs")
     axL.grid(True, which="both")
-    general_modify_legend(axL.legend(loc="upper right"))
+    general_modify_legend(axL.legend(loc="upper right"), linewidth=1.2)
     # force RMSE
     axR.semilogy(LC_EPOCH, LC_F_MEAN, "-", color=COLOR_DATA2,
                  label="Mean F RMSE (10 runs)")
@@ -84,7 +96,8 @@ def plot_learning_curve(path_out: Path) -> None:
     axR.set_ylabel(r"$F_{\mathrm{RMSE}}$  (meV/Å)")
     axR.set_title("(b) Force RMSE over 1500 epochs")
     axR.grid(True, which="both")
-    general_modify_legend(axR.legend(loc="upper right"))
+    general_modify_legend(axR.legend(loc="upper right"), linewidth=1.2)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -107,7 +120,7 @@ A_HCP_DFT = 2.86
 
 
 def plot_property_scan(path_out: Path) -> None:
-    fig, ax = my_plot()
+    fig, ax = my_plot(**dict_plot_style)
     ax.plot(PROP_EPOCH, A_FCC, "-o", color=COLOR_DATA1,
             label="FCC a  (NNP)")
     ax.axhline(A_FCC_DFT, color=COLOR_DATA1, ls="--", alpha=0.6,
@@ -122,8 +135,11 @@ def plot_property_scan(path_out: Path) -> None:
                label=f"HCP a (DFT) = {A_HCP_DFT} Å")
     ax.set_xlabel("Training epoch")
     ax.set_ylabel("Lattice constant a (Å)")
-    ax.set_title("NNP lattice constants during training")
-    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    ax.set_title("NNP lattice constants during training", y=1.22)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=2)
+    general_modify_legend(legend, linewidth=1.2)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -148,7 +164,8 @@ def plot_symfunc(path_out: Path) -> None:
     etas = np.sort(np.random.uniform(0.001, 0.15, n_sf))
     r_shifts = np.random.uniform(0.0, 3.0, n_sf)
     r_cuts = np.random.choice([4.3, 5.2, 6.0], n_sf)
-    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
+    fig, (axL, axR) = my_plot(
+        fig_subp=[1, 2], fig_sharex=False, **dict_plot_style)
     # left: eta distribution histogram
     axL.hist(etas, bins=12, color=COLOR_DATA1, edgecolor="white", alpha=0.85)
     axL.set_xlabel(r"$\eta$ (radial SF width)")
@@ -160,6 +177,7 @@ def plot_symfunc(path_out: Path) -> None:
     axR.set_xlabel(r"$r_{\mathrm{shift}}$  (Å)")
     axR.set_ylabel(r"$r_{\mathrm{cutoff}}$  (Å)")
     axR.set_title("(b) SF parameter space")
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 

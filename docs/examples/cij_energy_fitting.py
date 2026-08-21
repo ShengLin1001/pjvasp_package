@@ -44,7 +44,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from mymetal.universal.plot.general import general_set_all_rcParams
+from mymetal.universal.plot.general import (
+    general_modify_legend,
+    general_set_all_rcParams,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -165,9 +168,18 @@ def render_figure(modes: dict[str, dict[str, np.ndarray]],
         figure_hspace=0.60,
         font_family=["DejaVu Sans"],
         fontsize=12,
+        axes_linewidth=1.2,
         axes_titlepad=8,
+        grid_linewidth=0.8,
+        legend_linewidth=1.2,
         lines_markersize=8,
-        lines_linewidth=2.0,
+        lines_linewidth=1.4,
+        lines_markeredgewidth=1.0,
+        patch_linewidth=1.2,
+        xtick_major_width=1.2,
+        xtick_minor_width=0.8,
+        ytick_major_width=1.2,
+        ytick_minor_width=0.8,
     )
 
     fig, (ax_curves, ax_bar) = plt.subplots(1, 2)
@@ -191,7 +203,9 @@ def render_figure(modes: dict[str, dict[str, np.ndarray]],
     ax_curves.set_ylabel(r"energy density $U/V_0$ (GPa)")
     ax_curves.set_title("(A) Synthetic strain-energy curves\n"
                         "(markers: data, dashed: quadratic fit)")
-    ax_curves.legend(loc="upper center", fontsize=9, framealpha=0.9)
+    legend_curves = ax_curves.legend(
+        loc="upper center", fontsize=9, framealpha=0.9)
+    general_modify_legend(legend_curves, linewidth=1.2)
     ax_curves.ticklabel_format(axis="y", style="sci", scilimits=(-2, 2))
 
     # ---- Panel B: bar chart input vs fitted C11, C12, C44 ----
@@ -214,11 +228,11 @@ def render_figure(modes: dict[str, dict[str, np.ndarray]],
     ax_bar.set_xticklabels(labels)
     ax_bar.set_ylabel("elastic constant (GPa)")
     ax_bar.set_title("(B) Input vs fitted cubic Cij\n(synthetic data, seed=42)")
-    ax_bar.legend(loc="upper right", fontsize=10, framealpha=0.9)
+    legend_bar = ax_bar.legend(loc="upper right", fontsize=10, framealpha=0.9)
+    general_modify_legend(legend_bar, linewidth=1.2)
     ax_bar.set_ylim(0, max(max(input_vals), max(fitted_vals)) * 1.18)
 
-    fig.suptitle("Cij energy-strain fitting (synthetic cubic Cu-like data)",
-                 y=0.995, fontsize=13)
+    fig.tight_layout()
     fig.savefig(path_image, bbox_inches="tight")
     plt.close(fig)
 

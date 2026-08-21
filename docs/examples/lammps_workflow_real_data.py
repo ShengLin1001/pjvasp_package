@@ -31,6 +31,17 @@ COLOR_DATA2 = "#c05621"
 COLOR_DATA3 = "#7c3aed"
 COLOR_FIT = "#6b7280"
 COLOR_HIGHLIGHT = "#9b2c2c"
+dict_plot_style = {
+    "fontsize": 18,
+    "legend_fontsize": 16,
+    "markersize": 9,
+    "linewidth": 1.6,
+    "markeredgewidth": 1.0,
+    "tick_width": 1.2,
+    "major_tick_length": 6,
+    "minor_tick_length": 3,
+    "grid_linewidth": 0.8,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +71,7 @@ STRETCH_EXTR_E = -3.22694904  # eV/atom
 
 
 def plot_stretch(path_out: Path) -> None:
-    fig, ax = my_plot()
+    fig, ax = my_plot(**dict_plot_style)
     strain = (STRETCH_FACTOR - 1.0) * 1e3  # per-mille
     energy = (STRETCH_E / 4.0 - STRETCH_EXTR_E) * 1e3  # meV/atom
     ax.scatter(strain, energy, color=COLOR_DATA1, zorder=4,
@@ -75,8 +86,11 @@ def plot_stretch(path_out: Path) -> None:
                label=f"Equilibrium: f={STRETCH_EXTR_FACTOR:.5f}")
     ax.set_xlabel(r"Isotropic strain $\varepsilon_{xyz}$ (‰)")
     ax.set_ylabel(r"$\Delta E$ (meV/atom)")
-    ax.set_title("FCC Au isotropic stretch (UNNEP)")
-    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    ax.set_title("FCC Au isotropic stretch (UNNEP)", y=1.30)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1)
+    general_modify_legend(legend, linewidth=1.2)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -96,7 +110,8 @@ CIJ_DERIVED = {
 
 
 def plot_cij(path_out: Path) -> None:
-    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
+    fig, (axL, axR) = my_plot(
+        fig_subp=[1, 2], fig_sharex=False, **dict_plot_style)
     # left: strain-energy for C11 (5 modes, energy-strain method)
     s = np.array([-0.003, -0.002, -0.001, 0.0, 0.001, 0.002, 0.003])
     C11 = CIJ_FINAL["C11"]
@@ -109,7 +124,7 @@ def plot_cij(path_out: Path) -> None:
     axL.set_xlabel(r"Strain $\varepsilon$ ($\times 10^{-3}$)")
     axL.set_ylabel(r"$\Delta E$  (meV/atom)")
     axL.set_title("(a) Schematic C11 energy-strain fit")
-    general_modify_legend(axL.legend(loc="upper center"))
+    general_modify_legend(axL.legend(loc="upper center"), linewidth=1.2)
     axL.annotate(f"C11 = {C11:.1f} GPa", xy=(2.5, 0.5 * C11 * 0.0025 ** 2 * 1e3),
                  xytext=(-1.8, 0.6), color=COLOR_HIGHLIGHT,
                  arrowprops=dict(arrowstyle="->", color=COLOR_HIGHLIGHT))
@@ -125,6 +140,7 @@ def plot_cij(path_out: Path) -> None:
     axR.set_xlabel("Coefficient")
     axR.set_title("(b) FCC Au second-order elastic constants")
     axR.set_ylim(0, max(vals) * 1.18)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -145,7 +161,7 @@ GSFE_LOCAL_MAX = 106.49260440
 
 
 def plot_gsfe(path_out: Path) -> None:
-    fig, ax = my_plot()
+    fig, ax = my_plot(**dict_plot_style)
     # x in units of b (slip displacement / a11)
     b = GSFE_JOBN / 11.0  # da31/a11 = -0.025*jobn, but use normalized slip
     ax.plot(b, GSFE_GAMMA, "-o", color=COLOR_DATA3,
@@ -157,8 +173,12 @@ def plot_gsfe(path_out: Path) -> None:
     ax.axvline(1.0, color=COLOR_FIT, ls=":")
     ax.set_xlabel(r"Normalized slip displacement $s/b$ ($b=a_{22}$)")
     ax.set_ylabel(r"GSFE $\gamma$  (mJ/m²)")
-    ax.set_title("FCC Au (111) generalized stacking-fault energy (UNNEP)")
-    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    ax.set_title(
+        "FCC Au (111) generalized stacking-fault energy (UNNEP)", y=1.16)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1)
+    general_modify_legend(legend, linewidth=1.2)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
