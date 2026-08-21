@@ -103,6 +103,13 @@ def compute_polar_grid() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def format_slip_label(slip_plane, dislocation) -> str:
+    """Format NumPy-backed vectors as short, plain-number axis labels."""
+    plane = ", ".join(str(int(value)) for value in slip_plane)
+    vector = ", ".join(f"{float(value):.2g}" for value in dislocation)
+    return f"plane ({plane})\nb ({vector})"
+
+
 def render_figure(
     reference_table: pd.DataFrame,
     scan_table: pd.DataFrame,
@@ -150,10 +157,8 @@ def render_figure(
     df = reference_table.copy()
     df = df.sort_values("schmid_factor", ascending=True).reset_index(drop=True)
     y_pos = np.arange(len(df))
-    labels = [
-        f"plane {tuple(row['slip_plane'])}\nb {tuple(np.round(row['dislocation'], 2))}"
-        for _, row in df.iterrows()
-    ]
+    labels = [format_slip_label(row["slip_plane"], row["dislocation"])
+              for _, row in df.iterrows()]
     colors = ["#d62728" if v > 1e-6 else "#cccccc" for v in df["schmid_factor"]]
     ax.barh(y_pos, df["schmid_factor"], color=colors)
     ax.set_yticks(y_pos)
@@ -215,6 +220,9 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     result = run_example(parse_args().output)
+    assert format_slip_label([-1, 1, 1], [-0.5, 0.0, 0.5]) == (
+        "plane (-1, 1, 1)\nb (-0.5, 0, 0.5)"
+    )
     # The reference direction must activate at least one slip system.
     assert (result["reference_table"]["schmid_factor"] > 1e-6).any()
     # Schmid factors must lie in [0, 0.5].

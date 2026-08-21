@@ -298,7 +298,7 @@ def draw_panel_discovery_layout(ax):
          "生成文件布局", fc=COLOR_NODE, fontsize=8.5, fontweight="bold")
     _arrow(ax, 7.5, 9.95, 7.5, 9.7, lw=1.0)
 
-    _code(ax, 7.5, 7.9, 4.6, 3.4,
+    _code(ax, 7.5, 7.5, 4.6, 4.2,
           "<path_root>/\n"
           "├─ <dir_root>/**/y_dir/<case>/\n"
           "│    └─ sub_slurm_univ.sh      # 每计算目录一脚本\n"
@@ -379,7 +379,7 @@ def draw_panel_retry_table(ax):
         colLabels=headers,
         colWidths=col_widths,
         cellLoc="left",
-        loc="center",
+        bbox=[0.0, 0.10, 1.0, 0.84],
     )
     table.auto_set_font_size(False)
     table.set_fontsize(7.4)
@@ -603,9 +603,9 @@ def draw_panel_monitor_commands(ax):
 def render_overview(path_image: Path) -> None:
     """Build the 5-panel overview figure and save it to path_image."""
     _set_rcparams()
-    fig = plt.figure(figsize=(16, 12), dpi=150)
+    fig = plt.figure(figsize=(18, 16), dpi=150)
     gs = fig.add_gridspec(
-        3, 2, hspace=0.34, wspace=0.12,
+        3, 2, height_ratios=[1.2, 0.85, 1.45], hspace=0.30, wspace=0.12,
         left=0.03, right=0.98, top=0.95, bottom=0.03,
     )
     ax1 = fig.add_subplot(gs[0, 0])

@@ -80,7 +80,6 @@ jobs:
           python docs/examples/lmp_utils_overview.py --output docs/_build/example-lmp-utils
           python docs/examples/n2p2_utils_overview.py --output docs/_build/example-n2p2-utils
           python docs/examples/plot_gallery_demo.py --output docs/_build/example-plot-gallery
-          python docs/scripts/generate_structure_images.py
 
       - name: Configure Pages
         uses: actions/configure-pages@v6
