@@ -708,6 +708,7 @@ def general_font( grid: bool = True, grid_linewidth: float = 2, grid_linestyle =
     """
     plt.rcParams['font.family'] = fontname                 #
     plt.rcParams['font.size'] = fontsize                   #
+    plt.rcParams['axes.labelsize'] = fontsize              #
     plt.rcParams['axes.linewidth'] = linewidth             #
     plt.rcParams['axes.grid'] = grid                       #
     plt.rcParams['grid.linestyle'] = grid_linestyle        #
@@ -716,6 +717,9 @@ def general_font( grid: bool = True, grid_linewidth: float = 2, grid_linestyle =
     plt.rcParams['lines.markersize'] = markersize          #
     plt.rcParams['lines.markeredgewidth'] = markeredgewidth #
     plt.rcParams['lines.markerfacecolor'] = markerfacecolor #
+    plt.rcParams['patch.linewidth'] = linewidth             #
+    plt.rcParams['xtick.labelsize'] = fontsize             #
+    plt.rcParams['ytick.labelsize'] = fontsize             #
     
     # layout
     plt.rcParams['figure.constrained_layout.use'] = constrained_layout
@@ -779,7 +783,10 @@ def general_axes(ax,
                 if_set_lim: bool = True,
                 if_close_right_top_tick: bool = False,
                 if_ax2: bool = False,
-                color: str = 'black',):
+                color: str = 'black',
+                major_tick_length: float = 8,
+                minor_tick_length: float = 4,
+                tick_width: float = 3.0,):
     """
     Modifies axis properties like ticks, labels, and limits.
 
@@ -787,6 +794,9 @@ def general_axes(ax,
         ax: The axis object to modify.
         labelpad (int): Padding for axis labels. Default is 15.
         tick_pad (int): Padding for axis ticks. Default is 10.
+        major_tick_length (float): Major tick length. Default is 8.
+        minor_tick_length (float): Minor tick length. Default is 4.
+        tick_width (float): Major and minor tick width. Default is 3.
         xlabel (str): Label for the x-axis. Default is 'X-axis Label'.
         ylabel (str): Label for the y-axis. Default is 'Y-axis Label'.
         xlim (Union[List[float], None]): x-axis limits. Default is None.
@@ -805,8 +815,14 @@ def general_axes(ax,
         axis.minorticks_on()
         axis.xaxis.set_minor_locator(AutoMinorLocator(2))
         axis.yaxis.set_minor_locator(AutoMinorLocator(2))
-        axis.tick_params(which='major', direction='in', length=8, width=3.0, pad = tick_pad)
-        axis.tick_params(which='minor', direction='in', length=4, width=3.0, pad = tick_pad)
+        axis.tick_params(
+            which='major', direction='in', length=major_tick_length,
+            width=tick_width, pad=tick_pad,
+        )
+        axis.tick_params(
+            which='minor', direction='in', length=minor_tick_length,
+            width=tick_width, pad=tick_pad,
+        )
 
         axis.set_xlabel(xlabel, labelpad=labelpad)
         axis.set_ylabel(ylabel, labelpad=labelpad)
@@ -864,8 +880,8 @@ def general_set_all_rcParams(
         # axes
         axes_grid: bool = True,
         axes_labelpad: float = 15,
-        axes_labelsize: float = 28,
-        axes_linewidth: float = 3,
+        axes_labelsize: float | None = None,
+        axes_linewidth: float | None = None,
         axes_titlepad: float = 15,
         axes_xmargin: float = 0.1,
         axes_ymargin: float = 0.1,
@@ -911,7 +927,7 @@ def general_set_all_rcParams(
         grid_alpha: float = 1.0,
         grid_color: str = 'gray',
         grid_linestyle: str = '--',
-        grid_linewidth: float = 2,
+        grid_linewidth: float | None = None,
 
         # legend
         legend_loc: str = 'upper right', 
@@ -924,13 +940,13 @@ def general_set_all_rcParams(
         legend_framealpha: float = 1.0,
         legend_boxstyle: str = 'Square',
         legend_pad: float = 0.5,
-        legend_linewidth: float = 2.5,
+        legend_linewidth: float | None = None,
 
         # lines
         lines_linestyle: str = '-',
-        lines_linewidth: float = 3,
+        lines_linewidth: float | None = None,
         lines_markeredgecolor = 'auto',
-        lines_markeredgewidth: float = 3,
+        lines_markeredgewidth: float | None = None,
         lines_markerfacecolor = 'white',
         lines_markersize: float = 20,
 
@@ -945,7 +961,7 @@ def general_set_all_rcParams(
         mathtext_default: str = 'it', # it, rm, cal, sf, tt
 
         # patch
-        patch_linewidth: float = 3.0,
+        patch_linewidth: float | None = None,
 
         # savefig
         savefig_dpi: float = 300,
@@ -958,16 +974,16 @@ def general_set_all_rcParams(
         xtick_direction: str = 'in',
         xtick_labelbottom: bool = True,
         xtick_labeltop: bool = False,
-        xtick_labelsize: float = 28,
+        xtick_labelsize: float | None = None,
         xtick_major_bottom: bool = True,
         xtick_major_top: bool = True,
         xtick_major_size: float = 8,
-        xtick_major_width: float = 3.0,
+        xtick_major_width: float | None = None,
         xtick_major_pad: float = 10,
         xtick_minor_bottom: bool = True,
         xtick_minor_top: bool = True,
         xtick_minor_size: float = 4,
-        xtick_minor_width: float = 3.0,
+        xtick_minor_width: float | None = None,
         xtick_minor_pad: float = 10,
         xtick_minor_ndivs: float = 2,
         xtick_minor_visible: bool = True,
@@ -978,16 +994,16 @@ def general_set_all_rcParams(
         ytick_direction: str = 'in',
         ytick_labelleft: bool = True,
         ytick_labelright: bool = False,
-        ytick_labelsize: float = 28,
+        ytick_labelsize: float | None = None,
         ytick_major_left: bool = True,
         ytick_major_right: bool = True,
         ytick_major_size: float = 8,
-        ytick_major_width: float = 3.0,
+        ytick_major_width: float | None = None,
         ytick_major_pad: float = 10,
         ytick_minor_left: bool = True,
         ytick_minor_right: bool = True,
         ytick_minor_size: float = 4,
-        ytick_minor_width: float = 3.0,
+        ytick_minor_width: float | None = None,
         ytick_minor_pad: float = 10,
         ytick_minor_ndivs: str = 2,
         ytick_minor_visible: bool = True,
@@ -1023,6 +1039,53 @@ def general_set_all_rcParams(
         You need to call `plt._general_modify_legend(legend)` after creating a legend to apply
         the custom legend styling.
     """    
+
+    # Custom-sized figures normally set only ``fontsize``; keep their axis
+    # labels and tick labels in the same scale unless explicitly overridden.
+    axes_labelsize = fontsize if axes_labelsize is None else axes_labelsize
+    xtick_labelsize = fontsize if xtick_labelsize is None else xtick_labelsize
+    ytick_labelsize = fontsize if ytick_labelsize is None else ytick_labelsize
+    style_scale = min(1.0, fontsize / 28.0)
+    axes_linewidth = (
+        max(0.8, 3.0 * style_scale)
+        if axes_linewidth is None else axes_linewidth
+    )
+    grid_linewidth = (
+        max(0.6, 2.0 * style_scale)
+        if grid_linewidth is None else grid_linewidth
+    )
+    legend_linewidth = (
+        max(0.8, 2.5 * style_scale)
+        if legend_linewidth is None else legend_linewidth
+    )
+    lines_linewidth = (
+        max(1.0, 3.0 * style_scale)
+        if lines_linewidth is None else lines_linewidth
+    )
+    lines_markeredgewidth = (
+        max(0.8, 3.0 * style_scale)
+        if lines_markeredgewidth is None else lines_markeredgewidth
+    )
+    patch_linewidth = (
+        max(0.8, 3.0 * style_scale)
+        if patch_linewidth is None else patch_linewidth
+    )
+    xtick_major_width = (
+        max(0.8, 3.0 * style_scale)
+        if xtick_major_width is None else xtick_major_width
+    )
+    xtick_minor_width = (
+        max(0.6, 3.0 * style_scale)
+        if xtick_minor_width is None else xtick_minor_width
+    )
+    ytick_major_width = (
+        max(0.8, 3.0 * style_scale)
+        if ytick_major_width is None else ytick_major_width
+    )
+    ytick_minor_width = (
+        max(0.6, 3.0 * style_scale)
+        if ytick_minor_width is None else ytick_minor_width
+    )
 
     # backend: inline, TkAgg, Agg, etc.
     plt.rcParams['axes.grid'] = axes_grid 

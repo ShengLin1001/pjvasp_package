@@ -28,7 +28,10 @@ import numpy as np
 from ase.eos import EquationOfState
 from scipy.optimize import curve_fit
 
-from mymetal.universal.plot.general import general_set_all_rcParams
+from mymetal.universal.plot.general import (
+    general_modify_legend,
+    general_set_all_rcParams,
+)
 
 
 # Reference "true" parameters used to synthesize the data. The values are
@@ -231,8 +234,10 @@ def render_eos_figure(
     ax.axvline(meta["v0_A3"], color="gray", linestyle=":", label="true $V_0$")
     ax.set_xlabel(r"Volume per atom (Å$^3$)")
     ax.set_ylabel(r"Energy per atom (eV)")
-    ax.set_title("Equation of state")
-    ax.legend(loc="upper center", fontsize=9)
+    ax.set_title("Equation of state", y=1.28)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=9, ncol=2)
+    general_modify_legend(legend, linewidth=1.0)
 
     e_murn_res = murnaghan_energy(
         volumes,
@@ -254,9 +259,12 @@ def render_eos_figure(
     ax.axhline(0.0, color="gray", linestyle=":")
     ax.set_xlabel(r"Volume per atom (Å$^3$)")
     ax.set_ylabel(r"Residual (eV)")
-    ax.set_title("Fit residuals")
-    ax.legend(loc="upper right", fontsize=9)
+    ax.set_title("Fit residuals", y=1.18)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=9, ncol=2)
+    general_modify_legend(legend, linewidth=1.0)
 
+    fig.tight_layout()
     fig.savefig(path_image, bbox_inches="tight")
     plt.close(fig)
 

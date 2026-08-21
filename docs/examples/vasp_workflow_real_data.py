@@ -32,6 +32,17 @@ COLOR_DATA2 = "#c05621"
 COLOR_DATA3 = "#7c3aed"
 COLOR_FIT = "#6b7280"
 COLOR_HIGHLIGHT = "#9b2c2c"
+dict_plot_style = {
+    "fontsize": 18,
+    "legend_fontsize": 16,
+    "markersize": 9,
+    "linewidth": 1.6,
+    "markeredgewidth": 1.0,
+    "tick_width": 1.2,
+    "major_tick_length": 6,
+    "minor_tick_length": 3,
+    "grid_linewidth": 0.8,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +66,7 @@ STRETCH_POLY = (27.38389577, -54.75922987, 23.45738844)
 
 
 def plot_stretch(path_out: Path) -> None:
-    fig, ax = my_plot()
+    fig, ax = my_plot(**dict_plot_style)
     strain = (STRETCH_FACTOR - 1.0) * 1000.0  # in per-mille for readability
     energy = (STRETCH_E / 2.0 - STRETCH_EXTR_E) * 1e3  # meV/atom
     ax.scatter(strain, energy, color=COLOR_DATA1, zorder=4,
@@ -70,8 +81,11 @@ def plot_stretch(path_out: Path) -> None:
                label=f"Equilibrium: f={STRETCH_EXTR_FACTOR:.5f}")
     ax.set_xlabel(r"In-plane strain $\varepsilon_{xy}$ (‰, factor - 1)")
     ax.set_ylabel(r"$\Delta E$ (meV/atom)")
-    ax.set_title("HCP Au xy stretch")
-    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    ax.set_title("HCP Au xy stretch", y=1.30)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1)
+    general_modify_legend(legend, linewidth=1.2)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -92,7 +106,8 @@ CIJ_DERIVED = {
 
 
 def plot_cij(path_out: Path) -> None:
-    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
+    fig, (axL, axR) = my_plot(
+        fig_subp=[1, 2], fig_sharex=False, **dict_plot_style)
     # left: schematic strain-energy curve for C11 (7 representative points)
     # We use the 7 nominal strain points from the energy method (-0.003..0.003)
     s_cij = np.array([-0.003, -0.002, -0.001, 0.0, 0.001, 0.002, 0.003])
@@ -109,7 +124,7 @@ def plot_cij(path_out: Path) -> None:
     axL.set_xlabel(r"Strain $\varepsilon$ ($\times 10^{-3}$)")
     axL.set_ylabel(r"$\Delta E$  (meV/atom)")
     axL.set_title("(a) Schematic C11 energy-strain fit")
-    general_modify_legend(axL.legend(loc="upper center"))
+    general_modify_legend(axL.legend(loc="upper center"), linewidth=1.2)
     axL.annotate(f"C11 = {C11:.1f} GPa", xy=(2.5, 0.5 * C11 * 0.0025 ** 2 * 1e3),
                  xytext=(-1.5, 0.6), color=COLOR_HIGHLIGHT,
                  arrowprops=dict(arrowstyle="->", color=COLOR_HIGHLIGHT))
@@ -125,6 +140,7 @@ def plot_cij(path_out: Path) -> None:
     axR.set_xlabel("Coefficient")
     axR.set_title("(b) HCP Au second-order elastic constants")
     axR.set_ylim(0, max(vals) * 1.18)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -148,7 +164,8 @@ HOEC_FOEC = {"C1111": 77086.58, "C1112": 3733.34, "C1113": 24674.16,
 
 
 def plot_hoec(path_out: Path) -> None:
-    fig, axes = my_plot(fig_subp=[1, 3], fig_sharex=False)
+    fig, axes = my_plot(
+        fig_subp=[1, 3], fig_sharex=False, **dict_plot_style)
     orders = [
         ("Second-order (SOEC)", HOEC_SOEC, COLOR_DATA1, axes[0]),
         ("Third-order (TOEC)", HOEC_TOEC, COLOR_DATA2, axes[1]),
@@ -164,6 +181,7 @@ def plot_hoec(path_out: Path) -> None:
         ax.set_title(title)
         if len(labels) > 10:
             ax.tick_params(axis="y", labelsize=16)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -185,7 +203,8 @@ COHESIVE_RESULT = {
 def plot_cohesive(path_out: Path) -> None:
     # Only server-reported summary values are stored locally; avoid inventing a
     # dense E-k curve and show the measured energy references directly.
-    fig, (axL, axR) = my_plot(fig_subp=[1, 2], fig_sharex=False)
+    fig, (axL, axR) = my_plot(
+        fig_subp=[1, 2], fig_sharex=False, **dict_plot_style)
     E0 = COHESIVE_RESULT["E0 (eV)"]
     Eatom = COHESIVE_RESULT["Eatom (eV)"]
     bars = axL.bar(["E0", "Eatom"], [E0, Eatom],
@@ -205,6 +224,7 @@ def plot_cohesive(path_out: Path) -> None:
                         for key, value in COHESIVE_RESULT.items())
     axR.text(0.05, 0.5, summary, va="center", transform=axR.transAxes)
     axR.set_title("(b) Cohesive-fit summary")
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -232,7 +252,7 @@ DECOHESION_GAMMA_INF = 1969.14  # mJ/m² plateau
 
 
 def plot_decohesion(path_out: Path) -> None:
-    fig, ax = my_plot()
+    fig, ax = my_plot(**dict_plot_style)
     ax.plot(DECOHESION_D, DECOHESION_GAMMA, "-o", color=COLOR_DATA1,
             zorder=3, label="γ(d), 39 server data points")
     ax.axhline(DECOHESION_GAMMA_INF, color=COLOR_HIGHLIGHT, ls="--",
@@ -240,8 +260,11 @@ def plot_decohesion(path_out: Path) -> None:
               label=f"Plateau: γ∞ ≈ {DECOHESION_GAMMA_INF:.0f} mJ/m²")
     ax.set_xlabel("Separation distance d (Å)")
     ax.set_ylabel(r"decohesion $\gamma$  (mJ/m²)")
-    ax.set_title("HCP Au decohesion curve")
-    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    ax.set_title("HCP Au decohesion curve", y=1.16)
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1)
+    general_modify_legend(legend, linewidth=1.2)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 
@@ -261,7 +284,7 @@ STRETCH_N_POINTS = np.array([3, 5, 9, 13, 17])
 
 
 def plot_convergence(path_out: Path) -> None:
-    fig, ax = my_plot()
+    fig, ax = my_plot(**dict_plot_style)
     delta_a0 = (STRETCH_A0_CONVERGENCE - 2.85925295) * 1e3
     ax.plot(STRETCH_N_POINTS, delta_a0, "-o", color=COLOR_DATA1,
             zorder=3, label="Fitted a0 minus server result")
@@ -269,9 +292,12 @@ def plot_convergence(path_out: Path) -> None:
                label="Server result: a0 = 2.85925 Å")
     ax.set_xlabel("Number of strain points in the fit")
     ax.set_ylabel(r"$a_0-a_{0,\mathrm{server}}$ ($10^{-3}$ Å)")
-    ax.set_title("Stretch-scan convergence")
+    ax.set_title("Stretch-scan convergence", y=1.16)
     ax.set_xticks(STRETCH_N_POINTS)
-    general_modify_legend(ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1)))
+    legend = ax.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), ncol=1)
+    general_modify_legend(legend, linewidth=1.2)
+    fig.tight_layout()
     fig.savefig(path_out, bbox_inches="tight")
     plt.close(fig)
 

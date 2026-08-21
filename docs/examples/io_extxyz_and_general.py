@@ -44,7 +44,10 @@ from ase.io import write as ase_write
 
 from mymetal.io.extxyz import extxyz_to_atomlist
 from mymetal.io.general import general_read, general_write
-from mymetal.universal.plot.general import general_set_all_rcParams
+from mymetal.universal.plot.general import (
+    general_modify_legend,
+    general_set_all_rcParams,
+)
 
 
 # Textbook ambient lattice constant for FCC Cu (Å). Hardcoded so the script is
@@ -210,8 +213,10 @@ def render_figure(
     ax_traj.plot(first_pos[:, 0], first_pos[:, 1], "ko", ms=4, zorder=4)
     ax_traj.set_xlabel("x (Å)")
     ax_traj.set_ylabel("y (Å)")
-    ax_traj.set_title(f"Cu trajectory ({N_FRAMES} frames, extxyz)")
-    ax_traj.legend(loc="best", fontsize=8)
+    ax_traj.set_title(f"Cu trajectory ({N_FRAMES} frames, extxyz)", y=1.18)
+    legend = ax_traj.legend(
+        loc="lower center", bbox_to_anchor=(0.5, 1.01), fontsize=8, ncol=3)
+    general_modify_legend(legend, linewidth=1.0)
     ax_traj.set_aspect("equal", adjustable="datalim")
 
     # --- Right panel: convergence table ---
@@ -231,6 +236,7 @@ def render_figure(
         fontsize=8,
     )
 
+    fig.tight_layout()
     fig.savefig(path_image, bbox_inches="tight")
     plt.close(fig)
 

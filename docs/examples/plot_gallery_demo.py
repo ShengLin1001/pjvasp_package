@@ -107,7 +107,8 @@ def render_general(path_out: Path) -> Path:
     axa[2].plot(x3, y3a, "--", label="raw sin")
     axa[2].plot(x3, y3b, ":", label="shift cos")
     general_add_vlines_hlines(axa[2], vlines=[2.0, 4.0], hlines=[0.5])
-    general_modify_line(axa[2], if_change_color=True)
+    general_modify_line(
+        axa[2], remove_dashed_line=False, if_change_color=True)
     axa[2].set_xlabel("x")
     axa[2].set_ylabel("amplitude")
     general_modify_legend(axa[2].legend(loc="upper right"))

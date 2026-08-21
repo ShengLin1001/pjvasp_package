@@ -65,6 +65,14 @@ def my_plot(
     axes_height: float = 5.89,
     axes_width: float = 7.31,
     grid_linewidth: float = 2.0,
+    fontsize: float = 28,
+    legend_fontsize: float = 24,
+    markersize: float = 20,
+    linewidth: float = 3,
+    markeredgewidth: float = 3,
+    tick_width: float = 3,
+    major_tick_length: float = 8,
+    minor_tick_length: float = 4,
     constrained_layout: bool = False,
     if_keep_wspace_hspace: bool = False,
     wspace: float = 3.41,
@@ -94,7 +102,15 @@ def my_plot(
         top (float): Top margin in inches (default: 0.9517).
         axes_height (float): Height of each subplot in inches (default: 5.89).
         axes_width (float): Width of each subplot in inches (default: 7.31).
-        grid_linewidth (float): Width of the grid lines (default: 0.5).
+        grid_linewidth (float): Width of the grid lines (default: 2.0).
+        fontsize (float): Axis-label and tick-label font size (default: 28).
+        legend_fontsize (float): Legend font size (default: 24).
+        markersize (float): Default marker size (default: 20).
+        linewidth (float): Default data-line width (default: 3).
+        markeredgewidth (float): Default marker-edge width (default: 3).
+        tick_width (float): Major and minor tick width (default: 3).
+        major_tick_length (float): Major tick length (default: 8).
+        minor_tick_length (float): Minor tick length (default: 4).
         constrained_layout (bool): Whether to use constrained layout for the figure
             (default: False).
         if_keep_wspace_hspace (bool): If True, keeps the specified width and height
@@ -107,7 +123,16 @@ def my_plot(
               If there's only one subplot, it returns a list with one item.
     """
 
-    general_font(grid, grid_linewidth, constrained_layout= constrained_layout)
+    general_font(
+        grid=grid,
+        grid_linewidth=grid_linewidth,
+        fontsize=fontsize,
+        legend_fontsize=legend_fontsize,
+        markersize=markersize,
+        linewidth=linewidth,
+        markeredgewidth=markeredgewidth,
+        constrained_layout=constrained_layout,
+    )
 
     if if_keep_wspace_hspace:
         one_fig_wh = [axes_width + wspace, axes_height + hspace]
@@ -116,7 +141,15 @@ def my_plot(
                            sharex=fig_sharex, figsize=(fig_wh[0], fig_wh[1]))
     general_subplots_adjust(fig, one_fig_wh, fig_subp, axes_height, axes_width, left, top)
     # can't set xlim/ylim before drawing the figure
-    general_axes(ax, labelpad, tick_pad, if_set_lim=False)
+    general_axes(
+        ax,
+        labelpad,
+        tick_pad,
+        major_tick_length=major_tick_length,
+        minor_tick_length=minor_tick_length,
+        tick_width=tick_width,
+        if_set_lim=False,
+    )
 
     return fig, ax
 

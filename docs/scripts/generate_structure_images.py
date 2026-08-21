@@ -13,6 +13,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import matplotlib
+
+
+matplotlib.use("Agg")
+# Website figures mix several plotting APIs; let Matplotlib resolve labels,
+# titles, legends, and colorbars consistently before every save.
+matplotlib.rcParams["figure.autolayout"] = True
+
 
 PATH_DOCS = Path(__file__).resolve().parents[1]
 PATH_EXAMPLES = PATH_DOCS / "examples"
