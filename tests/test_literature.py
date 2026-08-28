@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from mymetal.universal.literature import (
+from mymetal.academic.search.literature_download import (
     check_journal_metadata,
     generate_pdf_filename,
     get_journal_abbreviation,
