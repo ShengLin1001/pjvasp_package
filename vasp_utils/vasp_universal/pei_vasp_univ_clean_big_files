@@ -1,0 +1,415 @@
+#!/usr/bin/env python3
+"""Scan a directory tree for bulky VASP output files and report / free their space.
+
+Walks the tree below -dir (default: the current directory, i.e. wherever the
+script is invoked) and collects every file whose name matches -names
+(default: CHG CHGCAR vasprun.xml EIGENVAL). Deleting is opt-in: without
+-delete the script only reports how much disk space the matches hold, so it
+is safe to run anywhere first and look at the number before touching anything.
+
+Two sizes are reported because they answer different questions:
+    apparent  sum of st_size        -- what the files "contain"
+    on disk   sum of st_blocks*512  -- what the filesystem actually frees
+
+Symlinks are counted but never followed and never deleted: the payload lives
+outside the tree being cleaned, so removing the link frees nothing and may
+break a hand-made shortcut.
+
+exit codes:
+    0  scan finished (dry run, or every requested delete succeeded)
+    1  bad arguments / root missing
+    2  finished, but some deletes failed
+"""
+
+import argparse
+import fnmatch
+import os
+import sys
+from pathlib import Path
+
+# Default targets: the four files that dominate a VASP dataset directory.
+# CHG/CHGCAR are the charge densities, vasprun.xml the full XML trajectory,
+# EIGENVAL the band eigenvalues -- none of them is needed once energies and
+# forces have been extracted (a NNP dataset is built from OUTCAR, which this
+# script must never touch).
+LNAME_DEFAULT = ["CHG", "CHGCAR", "vasprun.xml", "EIGENVAL"]
+
+# Line-buffer stdout so a long walk over a 100 GB tree shows progress live
+# instead of dumping everything when the script exits.
+sys.stdout.reconfigure(line_buffering=True)
+
+
+def fail(msg: str) -> None:
+    """Print an error and abort with exit code 1.
+
+    Args:
+        msg: Message shown to the user.
+    """
+    print("❌ ERROR: " + msg)
+    raise SystemExit(1)
+
+
+def warn(msg: str) -> None:
+    """Print a warning without aborting.
+
+    Args:
+        msg: Message shown to the user.
+    """
+    print("⚠️  " + msg)
+
+
+def get_size_human(nbyte: int) -> str:
+    """Format a byte count as a short human-readable string.
+
+    Args:
+        nbyte: Size in bytes.
+
+    Returns:
+        Size such as "12.34 GiB".
+    """
+    size = float(nbyte)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if size < 1024.0 or unit == "TiB":
+            return f"{size:.2f} {unit}"
+        size /= 1024.0
+    return f"{size:.2f} TiB"
+
+
+def check_dir(str_dir: str) -> Path:
+    """Resolve the scan root and make sure it is a usable directory.
+
+    Args:
+        str_dir: Directory given on the command line.
+
+    Returns:
+        Absolute path of the scan root.
+    """
+    path_root = Path(str_dir).expanduser().resolve()
+    if not path_root.is_dir():
+        fail("dir does not exist or is not a directory: " + str(path_root))
+    return path_root
+
+
+def check_max_depth(imax_depth: int) -> int:
+    """Validate the depth limit.
+
+    Args:
+        imax_depth: Depth limit, negative means unlimited.
+
+    Returns:
+        The validated depth limit.
+    """
+    if imax_depth is None:
+        fail("max_depth must be an integer")
+    return imax_depth
+
+
+def get_is_match(str_name: str, lname: list) -> bool:
+    """Test one file name against the target list.
+
+    A pattern containing a glob character is matched with fnmatch, anything
+    else must match exactly -- otherwise "CHG" would silently also take
+    CHGCAR, and a typo would quietly widen the deletion.
+
+    Args:
+        str_name: File name (no directory part).
+        lname: Target names / glob patterns.
+
+    Returns:
+        True if the file is a target.
+    """
+    for name in lname:
+        if any(char in name for char in "*?["):
+            if fnmatch.fnmatch(str_name, name):
+                return True
+        elif str_name == name:
+            return True
+    return False
+
+
+def scan_files(path_root: Path, lname: list, imax_depth: int) -> list:
+    """Walk the tree and collect every matching file.
+
+    Args:
+        path_root: Absolute scan root.
+        lname: Target names / glob patterns.
+        imax_depth: Maximum directory depth below the root, negative = unlimited.
+
+    Returns:
+        List of dicts with keys path, name, apparent, disk, is_link.
+    """
+    lhit = []
+    ndir = 0
+    for str_dir, ldirname, lfilename in os.walk(path_root, topdown=True, followlinks=False):
+        path_dir = Path(str_dir)
+        ndir += 1
+
+        # Prune below the depth limit instead of walking and filtering: on a
+        # dataset tree the pruned part is most of the inodes.
+        if imax_depth >= 0:
+            idepth = len(path_dir.relative_to(path_root).parts)
+            if idepth >= imax_depth:
+                ldirname[:] = []
+
+        for filename in lfilename:
+            if not get_is_match(filename, lname):
+                continue
+            path_file = path_dir / filename
+            try:
+                stat = path_file.lstat()
+            except OSError as err:
+                warn("cannot stat, skipped: " + str(path_file) + " -- " + str(err))
+                continue
+            lhit.append(
+                {
+                    "path": path_file,
+                    "name": filename,
+                    "apparent": stat.st_size,
+                    # st_blocks is in 512-byte units by POSIX; this is what du
+                    # reports and what actually comes back after rm.
+                    "disk": stat.st_blocks * 512,
+                    "is_link": path_file.is_symlink(),
+                }
+            )
+
+        if ndir % 20000 == 0:
+            print("📍 scanned " + str(ndir) + " directories, " + str(len(lhit)) + " matches so far")
+
+    print("📁 walked " + str(ndir) + " directories under " + str(path_root))
+    return lhit
+
+
+def print_group_summary(lhit: list, lname: list) -> None:
+    """Print the per-name count / size table.
+
+    Args:
+        lhit: Matches from scan_files.
+        lname: Target names, printed in the order the user gave them.
+    """
+    print("================ 📊 matches by name")
+    print("  " + "name".ljust(16) + "count".rjust(8) + "apparent".rjust(14) + "on disk".rjust(14))
+    for name in lname:
+        lsub = [hit for hit in lhit if get_is_match(hit["name"], [name])]
+        print(
+            "  "
+            + name.ljust(16)
+            + str(len(lsub)).rjust(8)
+            + get_size_human(sum(hit["apparent"] for hit in lsub)).rjust(14)
+            + get_size_human(sum(hit["disk"] for hit in lsub)).rjust(14)
+        )
+    print(
+        "  "
+        + "TOTAL".ljust(16)
+        + str(len(lhit)).rjust(8)
+        + get_size_human(sum(hit["apparent"] for hit in lhit)).rjust(14)
+        + get_size_human(sum(hit["disk"] for hit in lhit)).rjust(14)
+    )
+
+
+def print_largest(lhit: list, path_root: Path, ishow: int) -> None:
+    """Print the largest matches, so the number above has a face.
+
+    Args:
+        lhit: Matches from scan_files.
+        path_root: Scan root, used to shorten the printed paths.
+        ishow: How many to print, 0 = all.
+    """
+    if ishow == 0:
+        lshow = sorted(lhit, key=lambda hit: hit["disk"], reverse=True)
+        print("================ 📊 all " + str(len(lshow)) + " matches (largest first)")
+    else:
+        lshow = sorted(lhit, key=lambda hit: hit["disk"], reverse=True)[:ishow]
+        print("================ 📊 largest " + str(len(lshow)) + " matches")
+    for hit in lshow:
+        print(
+            "  "
+            + get_size_human(hit["disk"]).rjust(12)
+            + "  "
+            + str(hit["path"].relative_to(path_root))
+            + ("  🔗 symlink" if hit["is_link"] else "")
+        )
+
+
+def delete_files(lhit: list, path_root: Path, if_verbose: bool) -> dict:
+    """Delete the matches, one explicit path at a time.
+
+    Args:
+        lhit: Matches from scan_files.
+        path_root: Scan root, used to shorten the printed paths.
+        if_verbose: Print one line per file instead of a progress line.
+
+    Returns:
+        Dict with keys ndone, nskip, lfail, disk_freed.
+    """
+    ndone = 0
+    nskip = 0
+    lfail = []
+    disk_freed = 0
+    for i, hit in enumerate(lhit, start=1):
+        if hit["is_link"]:
+            nskip += 1
+            warn("symlink, not deleted: " + str(hit["path"].relative_to(path_root)))
+            continue
+        try:
+            hit["path"].unlink()
+        except OSError as err:
+            lfail.append((hit["path"], str(err)))
+            print("❌ " + str(hit["path"].relative_to(path_root)) + " -- " + str(err))
+            continue
+        ndone += 1
+        disk_freed += hit["disk"]
+        if if_verbose:
+            print("✅ " + str(hit["path"].relative_to(path_root)))
+        # A dataset tree holds tens of thousands of matches; a line each would
+        # bury the summary, so stay coarse unless -verbose was asked for.
+        elif ndone % 1000 == 0:
+            print("📍 deleted " + str(ndone) + " / " + str(len(lhit)) + " files")
+    return {"ndone": ndone, "nskip": nskip, "lfail": lfail, "disk_freed": disk_freed}
+
+
+def get_help_epilog() -> str:
+    """Build the --help epilog with exit codes and common usage examples.
+
+    Returns:
+        Epilog text.
+    """
+    return "\n".join(
+        [
+            "exit codes:",
+            "  0  scan finished (dry run, or every requested delete succeeded)",
+            "  1  bad arguments / root missing",
+            "  2  finished, but some deletes failed",
+            "",
+            "common usage:",
+            "  pei_vasp_univ_clean_big_files                      # dry run here, just report",
+            "  pei_vasp_univ_clean_big_files -dir ./construct_dataset",
+            "  pei_vasp_univ_clean_big_files -show 0              # list every match",
+            "  pei_vasp_univ_clean_big_files -names CHG CHGCAR vasprun.xml EIGENVAL IBZKPT",
+            "  pei_vasp_univ_clean_big_files -delete              # ask once, then delete",
+            "  pei_vasp_univ_clean_big_files -delete -yes         # no question asked",
+            "",
+            "notes:",
+            "  Deleting is opt-in. Run it once without -delete, read the 📊 table, then",
+            "  repeat the exact same command with -delete appended.",
+            "  Symlinks are reported but never deleted -- the data they point at lives",
+            "  outside the scanned tree, so removing the link frees nothing.",
+        ]
+    )
+
+
+### CLI
+parser = argparse.ArgumentParser(
+    prog="pei_vasp_univ_clean_big_files",
+    description=(
+        "Recursively find bulky VASP output files (CHG, CHGCAR, vasprun.xml by "
+        "default) below a directory and report the space they hold. Deletes only "
+        "when -delete is given."
+    ),
+    epilog=get_help_epilog(),
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+)
+parser.add_argument(
+    "-dir",
+    default=".",
+    help="Root directory to walk. Default: . (the current directory)",
+)
+parser.add_argument(
+    "-names",
+    nargs="+",
+    default=LNAME_DEFAULT,
+    help="File names to match; a name with * ? [ ] is treated as a glob, "
+    "anything else must match exactly. Default: " + " ".join(LNAME_DEFAULT),
+)
+parser.add_argument(
+    "-max_depth",
+    type=int,
+    default=-1,
+    help="Maximum directory depth below the root, -1 = unlimited. Default: -1",
+)
+parser.add_argument(
+    "-show",
+    type=int,
+    default=20,
+    help="How many of the largest matches to list, 0 = list all. Default: 20",
+)
+parser.add_argument(
+    "-delete",
+    action="store_true",
+    help="Actually delete the matches. Without it the script only reports.",
+)
+parser.add_argument(
+    "-yes",
+    action="store_true",
+    help="Skip the interactive confirmation of -delete (for batch / job scripts).",
+)
+parser.add_argument(
+    "-verbose",
+    action="store_true",
+    help="With -delete, print one ✅ line per deleted file instead of a progress line.",
+)
+args = parser.parse_args()
+
+path_root = check_dir(args.dir)
+imax_depth = check_max_depth(args.max_depth)
+if args.show < 0:
+    fail("show must be >= 0")
+### CLI to here
+
+
+### main
+print("================ 📁 scan")
+print("  root      : " + str(path_root))
+print("  names     : " + " ".join(args.names))
+print("  max_depth : " + ("unlimited" if imax_depth < 0 else str(imax_depth)))
+print("  mode      : " + ("🔥 DELETE" if args.delete else "👀 dry run (nothing is deleted)"))
+
+lhit = scan_files(path_root, args.names, imax_depth)
+
+if not lhit:
+    print("✅ no matching file found -- nothing to free")
+    raise SystemExit(0)
+
+print_group_summary(lhit, args.names)
+print_largest(lhit, path_root, args.show)
+
+# Symlinks are never deleted, so their blocks must not be promised as freed space.
+disk_total = sum(hit["disk"] for hit in lhit if not hit["is_link"])
+nlink = sum(1 for hit in lhit if hit["is_link"])
+if nlink:
+    warn(str(nlink) + " match(es) are symlinks and will not be deleted")
+
+if not args.delete:
+    print("================ 📊 summary")
+    print("  files     : " + str(len(lhit)))
+    print("  would free: " + get_size_human(disk_total) + " on disk")
+    print("  ▶️  to actually delete, re-run the same command with -delete appended")
+    raise SystemExit(0)
+
+# Deleting is irreversible and this script is pointed at whole dataset trees,
+# so make the user type the count once unless they opted out with -yes.
+if not args.yes:
+    if not sys.stdin.isatty():
+        fail("-delete without -yes needs a terminal to confirm on; add -yes for batch use")
+    print("================ ⚠️  about to delete " + str(len(lhit)) + " files, freeing " + get_size_human(disk_total))
+    answer = input("  type 'yes' to confirm: ").strip()
+    if answer != "yes":
+        print("❌ aborted, nothing deleted")
+        raise SystemExit(0)
+
+print("================ 🔥 deleting")
+dict_result = delete_files(lhit, path_root, args.verbose)
+
+print("================ 📊 summary")
+print("  matched   : " + str(len(lhit)))
+print("  deleted   : " + str(dict_result["ndone"]))
+print("  skipped   : " + str(dict_result["nskip"]) + " (symlinks)")
+print("  failed    : " + str(len(dict_result["lfail"])))
+print("  freed     : " + get_size_human(dict_result["disk_freed"]) + " on disk")
+for path_file, str_err in dict_result["lfail"]:
+    print("  ❌ " + str(path_file.relative_to(path_root)) + " -- " + str_err)
+### main to here
+
+if dict_result["lfail"]:
+    raise SystemExit(2)
+print("🎉 done")
+raise SystemExit(0)
