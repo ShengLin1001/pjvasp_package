@@ -10,7 +10,17 @@
 #   pei_slurm_univ_sbatch_retry sub.544.sh
 #   pei_slurm_univ_sbatch_retry sub.*
 #
-# 本脚本只管「提交」这一步，但管两件事：
+# 本脚本只管「提交」这一步，但管三件事：
+#   0) 去重（dedup）：**任何一次 sbatch 之前**（首次提交与每一次重投都算）先去 squeue 里查
+#      「这个脚本是不是已经有作业在跑/在排」。判据是脚本自带的去重标签，见下。查到就不再提交，
+#      于是「提交」变成幂等操作：同一个脚本重复跑多少遍都只有一个作业。
+#      去重命中不是「什么都不做就退出」，而是接管这次调用的语义（见 emit_reconciled_success）：
+#        · stdout 补一行 "Submitted batch job <id>" —— 调用方一律靠这个串判提交成功，不补的话
+#          去重命中会被误判成提交失败、整个子目录被记进 failed_dirs 跳过；
+#        · 原命令带 --wait 时轮询等这个作业跑完，再透传它的退出码，each_subdir 的串行节奏与
+#          按退出码判收敛都不受去重影响。
+#      重投前的核对还多走一道记账（sacct，限定本次 sbatch 之后）：作业秒挂 / 秒完时它早已离开
+#      squeue，只看队列会误判成「没落地」而重投。
 #   1) 限流（throttle）：提交前先用 squeue 数自己的在队作业数，超过闸门就轮询等待，等队列
 #      腾出位置再提交。集群对单用户有「最大在队作业数」硬限制（本机 70），撞上后 sbatch 会
 #      被直接拒掉（Job violates accounting/QOS policy … job submit limit），整批提交就此漏投。
@@ -19,15 +29,37 @@
 #      几乎同时提交时会一起把队列推高，缓冲正是用来吸收这个竞态的。
 #   2) 重试（retry）：提交没被 slurmctld 接住（暂态繁忙 / 超时 / 通信抖动）时轮询重投。
 #
+# ================ 去重标签（本脚本的安全基石）
+# 每个由 mymetal.slurm.submit 生成的 Slurm 脚本都盖了一行
+#     #SBATCH --comment=<100 位纯随机数字>
+# 本脚本提交前把它读出来（命令行显式 --comment 优先，其次解析脚本文件），再用
+#     squeue -u $USER -h -o '%i|%k'
+# 精确匹配。选 --comment 而非 JobName：本机该字段完全空闲，不进 squeue 默认视图（不影响肉眼
+# 读队列），也不破坏 scancel -n 的精确匹配；AccountingStoreFlags=job_comment 已开，sacct 可回溯。
+#
+# 为什么必须是标签而不是「WorkDir + 时间戳」：
+#   WorkDir 对子作业够用（每个算例一个目录），但父作业全都从同一个 slurm/ 目录提交，只能靠
+#   时间戳区分 —— 两个父作业若在时钟偏差窗口内提交就会互相误判。标签是显式声明的身份，
+#   没有这个模糊地带。没有标签的老脚本会退回 WorkDir+时间戳 的旧办法，并明确告警。
+#
+# 逃生口：PEI_SBATCH_SKIP_DEDUP=1 完全跳过去重检查（确实要对同一个脚本再投一份时用）。
+#
 # 与 pei_slurm_univ_launch_retry 的分工（两者互不重叠，可叠加使用）：
 #   launch_retry 包 srun / mpirun，处理「作业内并行启动器起不来」；
 #   本脚本包 sbatch，处理「提交这一步没被 slurmctld 接住」以及「队列已满得先等」。
 #
-# 为什么重试「提交」是安全的：
-#   提交失败意味着 slurmctld 没接住这次请求 —— 根本没有作业被创建，重试绝对安全：不会
-#   产生重复作业、不占任何计算分配、只花提交进程自己的时间。这与 launch_retry 截然不同
-#   （后者重试时握着整个分配空转、每次都在烧 walltime，故必须严格只在启动失败时重试）；
-#   sbatch 提交重试没有这层顾虑，所以默认倾向「除非明显是永久错误否则都重试」。
+# 关于「重投是否安全」——不要再靠错误串来判断：
+#   曾经的假设是「提交失败 = slurmctld 没接住 = 没有作业被创建 = 重投绝对安全」。这个假设
+#   对「连不上控制器」成立，对**回执丢失**不成立：
+#     sbatch: error: Batch job submission failed: Unexpected message received
+#   这条的真实含义是作业已经建好了，只是应答没回到客户端。2026-08-21 就是被它坑到的
+#   （FCC_111 的 11..16 各拿到两个作业号，两个 vasp_std 同时写一份 OUTCAR/CHGCAR/WAVECAR，
+#   数据静默作废且事后极难发现）。
+#
+#   Slurm 的错误串枚举不完，靠特征表挑出「危险的那些」注定漏判，而漏判是静默毁数据。所以
+#   本脚本不再让特征表承担安全职责：**任何一次 sbatch 之前一律先查去重标签**（见上），
+#   特征表降级成诊断与节奏控制（区分永久错误 / 在队上限 / 回执丢失，只影响日志措辞和等待
+#   策略，判错最多多等一轮，绝不会造成重复作业）。
 #
 # 提交成功判据（命中其一即算成功，绝不重试）：
 #   1) sbatch 退出码为 0 —— 不带 --wait 时提交成功即 0；--parsable 成功也是 0。
@@ -35,7 +67,7 @@
 #      作业已被创建，此刻的非 0 是作业本身的结果（VASP 不收敛 / 算崩 / 被杀），绝不能重投，
 #      否则会把一个必崩的算例重跑 99 遍、烧光机时。
 #   两条都不命中 → 这次提交没成：暂态错误（slurmctld 繁忙 / 超时 / 通信抖动）等待重试；
-#   永久性错误（分区名写错、脚本不存在等）立即放弃，不空转 99×10s。
+#   永久性错误（分区名写错、脚本不存在等）立即放弃，不空转 99×60s。
 #
 # ⚠️ 限流靠 squeue，所以本脚本天然适合跑在「有父作业一直守着」的场景（pei_slurm_univ_submit
 #    的三种 mode 现在都由 -N 1 -n 1 的编排作业承载循环）。在登录节点上直接跑整批提交，一旦
@@ -51,18 +83,33 @@
 
 # ================ ⚙️  可调参数（环境变量覆盖，无需改本文件）
 : "${PEI_SBATCH_RETRY_MAX:=99}"        # 提交失败最多尝试次数（含第一次）
-: "${PEI_SBATCH_RETRY_SLEEP:=10}"      # 提交失败 / squeue 查询失败后 sleep 的秒数
+: "${PEI_SBATCH_RETRY_SLEEP:=60}"      # 提交失败 / squeue 查询失败后 sleep 的秒数
 
 # —— 在队作业数限流 ——
 # PEI_SBATCH_MAX_JOBS=0 即完全关闭限流（不查 squeue、直接提交），留作应急逃生口。
 : "${PEI_SBATCH_MAX_JOBS:=70}"         # 集群对单用户的最大在队作业数（本机 70）
-: "${PEI_SBATCH_JOB_RESERVE:=5}"       # 预留缓冲；实际闸门 = MAX_JOBS - RESERVE
-: "${PEI_SBATCH_THROTTLE_SLEEP:=30}"   # 队列已满时的轮询间隔（等别人的作业跑完是分钟量级）
-: "${PEI_SBATCH_THROTTLE_MAX:=8640}"   # 队列已满最多轮询几次（8640×30s≈72h）后放行
+: "${PEI_SBATCH_JOB_RESERVE:=10}"       # 预留缓冲；实际闸门 = MAX_JOBS - RESERVE
+: "${PEI_SBATCH_THROTTLE_SLEEP:=60}"   # 队列已满时的轮询间隔（等别人的作业跑完是分钟量级）
+: "${PEI_SBATCH_THROTTLE_MAX:=8640}"     # 队列已满最多轮询几次（8640×60s≈6天）后放行
 : "${PEI_SBATCH_SQUEUE_MAX:=99}"       # squeue 连续查询失败几次后放弃限流、直接提交
+# slurmctld 被大批量提交冲出协议错位（squeue 报 "Unexpected message received"）后，后续
+# squeue 会在 socket 读上永久阻塞。没有超时的话本脚本会无声无息挂死，上面那套「失败几次就
+# 放行」的重试逻辑根本转不起来（进程压根没返回）。超时 -> exit 124 -> 按查询失败重试。
+: "${PEI_SBATCH_SQUEUE_TIMEOUT:=60}"   # 单次 squeue 最长等待秒数（超时按查询失败处理）
+
+# —— 提交前的去重核对 ——
+: "${PEI_SBATCH_RECONCILE_SLEEP:=60}"  # 重投前先等一分钟，给 slurmctld 把新作业露给 squeue 的时间
+: "${PEI_SBATCH_RECONCILE_MAX:=99}"    # 核对时 squeue 最多重查几次
+: "${PEI_SBATCH_SKIP_DEDUP:=0}"        # 置 1 完全跳过去重检查（确实要再投一份同脚本时用）
+
+# —— 去重命中后复刻 --wait 语义 ——
+# 去重命中时原作业已经在跑，本进程没有 sbatch --wait 可用，只能自己轮询等它跑完再取退出码。
+: "${PEI_SBATCH_WAIT_SLEEP:=60}"       # 等原作业跑完的轮询间隔
+: "${PEI_SBATCH_SACCT_MAX:=6}"         # 作业离队后 sacct 最多重查几次（记账写入有秒级延迟）
+: "${PEI_SBATCH_SACCT_SLEEP:=10}"      # sacct 重查间隔
 
 # 永久性提交错误特征表：命中任一条即刻放弃、不再重试（避免拿写错的分区 / 不存在的脚本空转
-# 99×10s）。这里用「黑名单」而非 launch_retry 的「白名单」：sbatch 提交重试很廉价（不占分配、
+# 99×60s）。这里用「黑名单」而非 launch_retry 的「白名单」：sbatch 提交重试很廉价（不占分配、
 # 只花提交进程的时间），漏判一个暂态错误反而会白白跳过整个子目录，故默认偏向「都重试」，
 # 只把明确不可恢复的配置错误挡在外面。新遇到的永久错误往这里加一行即可；临时补充可用
 # PEI_SBATCH_PERMANENT_EXTRA_PATTERNS（每行一条）而不必改本文件。
@@ -85,13 +132,28 @@ fi
 
 # 「在队作业数已达上限」特征表：这不是失败，是背压 —— 前面的限流闸门已经等过，仍被拒说明
 # 竞态（别的 worker 抢先填满）或闸门被调高了。这类情况必须用限流的长间隔去等队列腾空，且
-# 不能计入 PEI_SBATCH_RETRY_MAX：99×10s≈16.5min 根本等不到别人的作业跑完，一旦耗尽就会把
+# 不能计入 PEI_SBATCH_RETRY_MAX：99×60s≈99min 根本等不到别人的作业跑完，一旦耗尽就会把
 # 整个子目录判成提交失败漏投。所以命中后回到限流循环重等，用的是限流预算而非重试预算。
 SBATCH_LIMIT_PATTERNS=(
     "job submit limit"                 # Job violates accounting/QOS policy (job submit limit, …)
     "QOSMaxSubmitJobPerUserLimit"
     "AssocMaxSubmitJobLimit"
     "MaxSubmitJobsPerUser"
+)
+
+# 「提交结果未知」特征表：这类报错**不能**当成「没提交」。典型是
+#   sbatch: error: Batch job submission failed: Unexpected message received
+# slurmctld 已经收下并创建了作业，只是回执在网络上丢了，客户端才以非 0 退出。此时输出里
+# 自然也没有 "Submitted batch job"，于是会一路掉进兜底的「暂态失败」分支被重投 —— 同一个
+# 算例目录就此堆出多个作业。所以命中这类特征后先不重投，用 count_jobs_submitted_here 去
+# 队列里核对这次到底有没有落地：核到了就当成功原样退出，确认没落地才走重试预算。
+# 判定方向刻意偏保守（宁可漏投也不重投）：漏投重跑一次提交脚本即可补上，重复作业却会
+# 静默污染数据。新遇到的「结果未知」错误往这里加一行即可。
+SBATCH_AMBIGUOUS_PATTERNS=(
+    "Unexpected message received"                 # 回执丢失，作业很可能已创建
+    "Socket timed out on send/recv operation"     # 应答超时，同上
+    "Zero Bytes were transmitted or received"
+    "Connection timed out"
 )
 # to here ================
 
@@ -100,14 +162,17 @@ if (( $# < 1 )); then
     echo "❌ ERROR: 用法: pei_slurm_univ_sbatch_retry [sbatch args...]" >&2
     exit 1
 fi
-# sbatch 不在 PATH 就别进重试循环：否则每次都拿 127「command not found」空转 99×10s。
+# sbatch 不在 PATH 就别进重试循环：否则每次都拿 127「command not found」空转 99×60s。
 command -v sbatch >/dev/null 2>&1 || {
     echo "❌ ERROR: sbatch 不在 PATH 中，无法提交。" >&2
     exit 1
 }
 for knob_name in PEI_SBATCH_RETRY_MAX PEI_SBATCH_RETRY_SLEEP \
                  PEI_SBATCH_MAX_JOBS PEI_SBATCH_JOB_RESERVE \
-                 PEI_SBATCH_THROTTLE_SLEEP PEI_SBATCH_THROTTLE_MAX PEI_SBATCH_SQUEUE_MAX; do
+                 PEI_SBATCH_THROTTLE_SLEEP PEI_SBATCH_THROTTLE_MAX PEI_SBATCH_SQUEUE_MAX \
+                 PEI_SBATCH_SQUEUE_TIMEOUT \
+                 PEI_SBATCH_RECONCILE_SLEEP PEI_SBATCH_RECONCILE_MAX PEI_SBATCH_SKIP_DEDUP \
+                 PEI_SBATCH_WAIT_SLEEP PEI_SBATCH_SACCT_MAX PEI_SBATCH_SACCT_SLEEP; do
     if ! [[ "${!knob_name}" =~ ^[0-9]+$ ]]; then
         echo "❌ ERROR: $knob_name 必须是非负整数，收到: ${!knob_name}" >&2
         exit 1
@@ -159,7 +224,7 @@ match_first_pattern() {
 # ⚠️ 绝不能把查询失败当成 0 —— 那会让闸门形同虚设，一口气把队列灌满。
 count_queued_jobs() {
     local squeue_out
-    squeue_out="$(squeue -u "${USER:-$(whoami)}" -h -o '%i' 2>/dev/null)" || return 1
+    squeue_out="$(timeout "$PEI_SBATCH_SQUEUE_TIMEOUT" squeue -u "${USER:-$(whoami)}" -h -o '%i' 2>/dev/null)" || return 1
     # 空输出 = 队列里一个作业都没有。这里不能用 `wc -l <<< "$squeue_out"`：here-string 会给
     # 空串也补一个换行，数出来是 1，凭空多占一个名额。
     if [[ -z "$squeue_out" ]]; then
@@ -167,6 +232,198 @@ count_queued_jobs() {
         return 0
     fi
     grep -c '^' <<< "$squeue_out"
+}
+
+# 从本次 sbatch 的参数里找出目标脚本：第一个「确实存在的普通文件」参数即是。
+# sbatch 的选项值（分区名、时间、核数）都不会恰好是本地存在的文件，所以这个判据够稳。
+get_script_path() {
+    local arg
+    for arg in "$@"; do
+        [[ -f "$arg" ]] && { echo "$arg"; return 0; }
+    done
+    return 1
+}
+
+# 取出本次提交的去重标签，优先级：命令行显式 --comment > 脚本里的 #SBATCH --comment。
+# （与 sbatch 自身一致：命令行覆盖脚本内指令，实测确认。）取不到就回显空串，调用方据此
+# 退回 WorkDir+时间戳 的旧办法。
+get_comment_tag() {
+    local arg next_is_value=0 tag="" script line
+    for arg in "$@"; do
+        if (( next_is_value == 1 )); then
+            tag="$arg"; next_is_value=0; continue
+        fi
+        case "$arg" in
+            --comment=*) tag="${arg#--comment=}" ;;
+            --comment)   next_is_value=1 ;;
+        esac
+    done
+    if [[ -n "$tag" ]]; then
+        echo "$tag"
+        return 0
+    fi
+
+    script="$(get_script_path "$@")" || return 0
+    # 只认脚本顶部的 #SBATCH 指令行；同名指令出现多次时 sbatch 以最后一条为准，这里同样取末条。
+    line="$(grep -E '^[[:space:]]*#SBATCH[[:space:]]+--comment([= ])' "$script" 2>/dev/null | tail -n 1)"
+    [[ -z "$line" ]] && return 0
+    tag="${line#*--comment}"
+    tag="${tag#[= ]}"
+    # 去掉可能的引号与首尾空白
+    tag="${tag%\"}"; tag="${tag#\"}"
+    tag="${tag%\'}"; tag="${tag#\'}"
+    echo "$tag" | awk '{$1=$1; print $1}'
+}
+
+# 按去重标签查作业：把匹配到的作业号打到 stdout（空 = 没有），返回 0；squeue 查询失败返回 1。
+# ⚠️ 查询失败绝不能当成「没有」——那等于退回盲目提交，正是本函数要防的事。
+find_jobs_by_tag() {
+    local tag="$1" squeue_out
+    squeue_out="$(timeout "$PEI_SBATCH_SQUEUE_TIMEOUT" squeue -u "${USER:-$(whoami)}" -h -o '%i|%k' 2>/dev/null)" || return 1
+    [[ -z "$squeue_out" ]] && return 0
+    awk -F'|' -v t="$tag" '$2==t{printf "%s ", $1}' <<< "$squeue_out"
+}
+
+# 按去重标签查**记账历史**里的作业（squeue 之外的第二道核对）。
+# 为什么需要它：回执丢失时作业其实已经建好，但如果它秒挂或秒完（节点故障、脚本报错、算例极短），
+# 等本脚本睡完 PEI_SBATCH_RECONCILE_SLEEP 再去 squeue 查时它早已离队 —— 只看 squeue 会判成
+# 「没落地」而重投，正是本次改动要防的重复作业。
+# ⚠️ 必须限定 --starttime 到本次 sbatch 之前那一刻：标签是固化在脚本文件里的，同一个脚本的
+#    历史作业会一直留在 sacct 里（如 convergence.py 的 `cp CONTCAR POSCAR && sbatch sub.*` 续算
+#    重投，用的就是同一个脚本、同一个标签）。不限定时间就会把「上一轮早跑完的作业」当成
+#    「这次刚落地的作业」，把续算重投永久堵死。
+# 也因此本函数只在「已经提交过一次、正要重投」的路上调用，绝不参与首次提交前的常规去重。
+# 返回值分三种，调用方据此决定「未知」要不要升级成放弃：
+#   0 = 查成功（作业号在 stdout，空串 = 确实没有）
+#   1 = 查询失败（暂态：slurmdbd 繁忙 / 超时），重查还有希望
+#   2 = 本机没有 sacct / 时间戳算不出来（永久：这台机器根本没有记账这条路可走）
+find_jobs_by_tag_sacct() {
+    local tag="$1" since_epoch="$2" sacct_out since
+    command -v sacct >/dev/null 2>&1 || return 2
+    since="$(date -d "@$since_epoch" +%Y-%m-%dT%H:%M:%S 2>/dev/null)" || return 2
+    # -X 只要主作业（不要 .batch/.extern 步），-P 用 | 分隔且不截断字段。
+    sacct_out="$(timeout "$PEI_SBATCH_SQUEUE_TIMEOUT" sacct -u "${USER:-$(whoami)}" \
+                 --starttime="$since" -n -X -P -o JobID,Comment 2>/dev/null)" || return 1
+    [[ -z "$sacct_out" ]] && return 0
+    awk -F'|' -v t="$tag" '$2==t{printf "%s ", $1}' <<< "$sacct_out"
+}
+
+# 核对「刚才那次提交到底有没有落地」：数本目录下、提交时间不早于 mark_epoch 的本人作业数。
+# sbatch 把提交时的 cwd 记成作业的 WorkDir，而本包装器总是在目标算例目录里被调用，所以
+# 「WorkDir == 当前目录」就等于「这个算例的作业」。mark_epoch 用来把这次提交和目录里可能
+# 早就存在的旧作业区分开。
+# 成功：把匹配到的作业号打到 stdout（空 = 没有）并返回 0；squeue 查询失败：返回 1，由调用方
+# 按「未知」处理。返回作业号而非个数，是为了让去重命中后也能补出 "Submitted batch job <id>"
+# 并按 --wait 语义去等这个作业（见 emit_reconciled_success）。
+# ⚠️ 查询失败绝不能当成「没有」—— 那等于退回盲目重投，正是本函数要防的事。
+find_jobs_submitted_here() {
+    local mark_epoch="$1"
+    local squeue_out jobid workdir submit submit_epoch ids=""
+    # 路径可能含软链接：$PWD 是 shell 视角，pwd -P 是解析后的真实路径，两者都认。
+    local pwd_logical="$PWD" pwd_physical
+    pwd_physical="$(pwd -P)"
+
+    squeue_out="$(timeout "$PEI_SBATCH_SQUEUE_TIMEOUT" squeue -u "${USER:-$(whoami)}" -h -o '%i|%Z|%V' 2>/dev/null)" || return 1
+    [[ -z "$squeue_out" ]] && return 0
+    while IFS='|' read -r jobid workdir submit; do
+        [[ -z "$jobid" ]] && continue
+        [[ "$workdir" != "$pwd_logical" && "$workdir" != "$pwd_physical" ]] && continue
+        submit_epoch="$(date -d "$submit" +%s 2>/dev/null)" || submit_epoch=0
+        (( submit_epoch >= mark_epoch )) && ids+="$jobid "
+    done <<< "$squeue_out"
+    echo "$ids"
+}
+
+# 本次 sbatch 参数里带没带 --wait（-W 是它的短选项）。带了就说明调用方要的是「等作业跑完、
+# 拿作业自己的退出码」，去重命中时必须把这个语义补回来，否则父作业会不等就冲向下一个算例。
+has_wait_flag() {
+    local arg
+    for arg in "$@"; do
+        [[ "$arg" == "--wait" || "$arg" == "-W" ]] && return 0
+    done
+    return 1
+}
+
+# 从记账里取一个已结束作业的退出码，语义对齐 sbatch --wait：正常退出取 ExitCode 的 code 段，
+# 被信号打死取 128+signal，状态不是 COMPLETED 而 code 又是 0 时统一算失败（1）。
+# sacct 的记账写入有秒级延迟，故重查几次；始终取不到就回 0 并明确告警（提交这一步确实成功了，
+# 只是作业结果未知——把未知硬判成失败会让上层 summary 误报一片未收敛）。
+job_exit_code() {
+    local jobid="$1" poll=1 out state code sig
+    while (( poll <= PEI_SBATCH_SACCT_MAX )); do
+        if command -v sacct >/dev/null 2>&1 \
+           && out="$(timeout "$PEI_SBATCH_SQUEUE_TIMEOUT" sacct -n -X -P -j "$jobid" -o State,ExitCode 2>/dev/null)" \
+           && [[ -n "$out" ]]; then
+            out="$(head -n 1 <<< "$out")"
+            state="${out%%|*}"
+            code="${out#*|}"
+            sig="${code#*:}"
+            code="${code%%:*}"
+            [[ "$code" =~ ^[0-9]+$ ]] || code=0
+            [[ "$sig"  =~ ^[0-9]+$ ]] || sig=0
+            if (( sig > 0 )); then
+                echo "ℹ️  作业 $jobid 结束状态 $state（被信号 $sig 终止），按 $((128 + sig)) 透传。" >&2
+                return $((128 + sig))
+            fi
+            if (( code == 0 )) && [[ "$state" != COMPLETED* ]]; then
+                echo "ℹ️  作业 $jobid 结束状态 $state（ExitCode 0），按失败 1 透传。" >&2
+                return 1
+            fi
+            echo "ℹ️  作业 $jobid 结束状态 $state，退出码 $code。" >&2
+            return "$code"
+        fi
+        poll=$((poll + 1))
+        sleep "$PEI_SBATCH_SACCT_SLEEP"
+    done
+    echo "⚠️  sacct 取不到作业 $jobid 的退出码，无法判定作业结果，按 0 透传（提交本身是成功的）。" >&2
+    return 0
+}
+
+# 等一个**已经存在**的作业跑完（复刻 sbatch --wait：本进程没有 --wait 可用，只能自己轮询）。
+# 返回该作业的退出码。squeue 报 "Invalid job id" 就是作业已离队（记账里还查得到），不算查询失败。
+wait_for_job_done() {
+    local jobid="$1" poll=0 squeue_failed=0 sq_out rc
+    while :; do
+        sq_out="$(timeout "$PEI_SBATCH_SQUEUE_TIMEOUT" squeue -h -j "$jobid" -o '%i' 2>&1)"
+        rc=$?
+        if (( rc == 0 )); then
+            squeue_failed=0
+            [[ -z "$sq_out" ]] && break
+            poll=$((poll + 1))
+            (( poll == 1 )) && echo "⏳ 等待已有作业 $jobid 跑完（每 ${PEI_SBATCH_WAIT_SLEEP}s 查一次）…" >&2
+            sleep "$PEI_SBATCH_WAIT_SLEEP"
+            continue
+        fi
+        if grep -qiF "Invalid job id" <<< "$sq_out"; then
+            break
+        fi
+        squeue_failed=$((squeue_failed + 1))
+        if (( squeue_failed >= PEI_SBATCH_SQUEUE_MAX )); then
+            echo "⚠️  squeue 连续 $squeue_failed 次查不到作业 $jobid 的状态，停止等待，直接取记账退出码。" >&2
+            break
+        fi
+        echo "⚠️  [wait $squeue_failed/$PEI_SBATCH_SQUEUE_MAX] 查询作业 $jobid 状态失败，${PEI_SBATCH_RETRY_SLEEP}s 后重查…" >&2
+        sleep "$PEI_SBATCH_RETRY_SLEEP"
+    done
+    job_exit_code "$jobid"
+}
+
+# 去重命中（该脚本的作业已经在队 / 已经落地）时的统一出口，做两件事后直接退出本脚本：
+#   1) 往 stdout 补一行 "Submitted batch job <id>"。调用方（generate_loop 生成的 worker、各类
+#      提交脚本）一律靠这个串判「提交成功」，不补就会把去重命中误判成提交失败，整个子目录
+#      被记进 failed_dirs 并跳过 —— 而去重命中恰恰是回执丢失后重投核对的主路径。
+#   2) 原命令带 --wait 时继续复刻 --wait 的语义：轮询等这个作业跑完，再透传它的退出码。
+#      这样 each_subdir 的串行节奏与「按退出码判收敛」都不会因为去重而错位。
+emit_reconciled_success() {
+    local jobid="$1" reason="$2"
+    echo "Submitted batch job $jobid"
+    if (( if_wait == 1 )); then
+        echo "🔁 $reason，改为等待该作业（原命令带 --wait）: sbatch $sbatch_args_display" >&2
+        wait_for_job_done "$jobid"
+        exit $?
+    fi
+    echo "🔁 $reason，跳过提交: sbatch $sbatch_args_display" >&2
+    exit 0
 }
 
 # 提交前的限流闸门：轮询等到在队作业数低于闸门再返回。
@@ -197,7 +454,7 @@ wait_for_queue_slot() {
             continue
         fi
 
-        # squeue 自己也会暂态抖动：按 99×10s 快速重查，而不是拿限流的长间隔干等。
+        # squeue 自己也会暂态抖动：按 99×60s 快速重查，而不是拿限流的长间隔干等。
         squeue_failed=$((squeue_failed + 1))
         if (( squeue_failed >= PEI_SBATCH_SQUEUE_MAX )); then
             echo "⚠️  squeue 连续查询失败 $squeue_failed 次，无法统计在队作业数，本次跳过限流直接提交。" >&2
@@ -210,20 +467,138 @@ wait_for_queue_slot() {
 # ====== to here ======
 
 # ====== main ======
+# 本次提交的去重标签。取不到就退回 WorkDir+时间戳 的旧办法，并明确告警 —— 那条路对「同一个
+# 目录下的多个父作业」是有盲区的（只能靠时钟窗口区分），所以生成端应当给每个脚本盖标签。
+# 函数内的 $* 指的是函数自己的参数，所以日志里要引用「本次 sbatch 的参数」必须先存下来。
+sbatch_args_display="$*"
+if_wait=0
+has_wait_flag "$@" && if_wait=1
+comment_tag="$(get_comment_tag "$@")"
+if [[ -n "$comment_tag" ]]; then
+    echo "🔖 去重标签: $comment_tag" >&2
+elif (( PEI_SBATCH_SKIP_DEDUP == 1 )); then
+    echo "⚠️  已设 PEI_SBATCH_SKIP_DEDUP=1，跳过全部去重检查。" >&2
+else
+    echo "⚠️  未能从命令行或脚本中取到 #SBATCH --comment 去重标签（sbatch $*）。" >&2
+    echo "   退回 WorkDir+时间戳 判定：对同目录并发提交的多个作业存在误判风险。" >&2
+    echo "   建议给脚本补一行 #SBATCH --comment=<纯数字标签>（mymetal.slurm.submit 会自动盖）。" >&2
+fi
+
+# 提交前的去重闸门：**任何一次 sbatch 之前都必经此处**（首次提交与每一次重投都算）。
+# 返回 0 = 可以提交；查到已有作业 → 直接 exit 0；已提交过却无法判定 → 保守放弃、不重投。
+dedup_gate() {
+    (( PEI_SBATCH_SKIP_DEDUP == 1 )) && return 0
+
+    local poll=1 ids ids_hist rc_hist
+    while :; do
+        if [[ -n "$comment_tag" ]]; then
+            if ids="$(find_jobs_by_tag "$comment_tag")"; then
+                if [[ -n "$ids" ]]; then
+                    echo "✅ 该脚本已有在队作业（标签命中，作业号: ${ids% }）。" >&2
+                    emit_reconciled_success "${ids%% *}" "标签命中在队作业"
+                fi
+                # squeue 说队列里没有。首次提交前到此为止（就是没投过）；但**已经提交过一次**时
+                # 还不能下结论：上一次那个作业可能秒挂 / 秒完，等睡完 RECONCILE_SLEEP 再查时
+                # 它早已离队。此时再去记账里核对一次（只看本次 sbatch 之后的作业），核到就说明
+                # 作业其实落地了，绝不能重投。
+                if (( if_submitted_once == 1 )); then
+                    ids_hist="$(find_jobs_by_tag_sacct "$comment_tag" "$mark_epoch")"
+                    rc_hist=$?
+                    if (( rc_hist == 0 )); then
+                        if [[ -n "$ids_hist" ]]; then
+                            echo "✅ 本次提交其实已落地（记账命中，作业号: ${ids_hist% }），队列里查不到是因为它已经结束。" >&2
+                            emit_reconciled_success "${ids_hist%% *}" "记账命中本次提交的作业"
+                        fi
+                        # 队列没有、记账也没有 —— 两道都明确说「没落地」，这才允许重投。
+                        return 0
+                    fi
+                    if (( rc_hist == 2 )); then
+                        # 本机压根没有 sacct：核对不了「秒挂的短作业」是这台机器的固有短板，不是
+                        # 本次的未知状态。堵死重投会让所有回执丢失都变成漏投，故告警后按旧办法放行。
+                        echo "⚠️  本机无 sacct（或时间戳无法计算），无法核对「已结束的短作业」；本次仅凭 squeue 判定。" >&2
+                        return 0
+                    fi
+                    # sacct 暂态查询失败。只有上一次提交是**回执丢失**（作业很可能已经建好）时，
+                    # 才把「查不动」升级成放弃：此时队列说没有、记账查不动，作业到底在不在完全未知，
+                    # 拿未知去赌不会重复，赌输就是两个进程写同一份输出。普通暂态失败（连不上
+                    # slurmctld 之类，作业确实没被创建）不受此限，继续按重试预算重投。
+                    if (( if_ambiguous_last == 1 )); then
+                        if (( poll >= PEI_SBATCH_RECONCILE_MAX )); then
+                            echo "❌ 上次提交回执丢失，squeue 查不到该作业，sacct 又连续 $poll 次查询失败。" >&2
+                            echo "   作业是否已创建无法判定；宁可漏投也不重投。请手动确认后再决定: sbatch $sbatch_args_display" >&2
+                            echo "   确认命令: sacct -u \"${USER:-$(whoami)}\" --starttime=\"$(date -d "@$mark_epoch" +%Y-%m-%dT%H:%M:%S 2>/dev/null)\" -X -o JobID,JobName%20,State,Comment%20" >&2
+                            exit "${status:-1}"
+                        fi
+                        echo "⚠️  [reconcile $poll/$PEI_SBATCH_RECONCILE_MAX] 回执丢失后 sacct 查询失败，${PEI_SBATCH_RETRY_SLEEP}s 后重查…" >&2
+                        poll=$((poll + 1))
+                        sleep "$PEI_SBATCH_RETRY_SLEEP"
+                        continue
+                    fi
+                    echo "⚠️  sacct 查询失败；上次提交并非回执丢失（作业未被创建），按 squeue 判定继续重投。" >&2
+                fi
+                return 0
+            fi
+        else
+            # 无标签：只能用 WorkDir+时间戳，而它只有在本次已经提交过之后才有比较基准。
+            # 这条路没有记账兜底（sacct 不提供可靠的 WorkDir 过滤），秒挂的作业仍有窗口，
+            # 这也是生成端应当给每个脚本盖 --comment 标签的又一个理由。
+            (( if_submitted_once == 0 )) && return 0
+            if ids="$(find_jobs_submitted_here "$mark_epoch")"; then
+                if [[ -n "$ids" ]]; then
+                    echo "✅ 本目录已出现本次提交的作业（无标签，按 WorkDir+时间戳判定，作业号: ${ids% }），不重投。" >&2
+                    emit_reconciled_success "${ids%% *}" "WorkDir+时间戳命中本次提交的作业"
+                fi
+                return 0
+            fi
+        fi
+
+        # squeue 查不动。这里刻意做成不对称：还没提交过时以可用性优先（放行，最坏是撞上别的
+        # 并发提交）；已经提交过一次时以安全优先（放弃，绝不拿「不知道」去赌不会重复）。
+        if (( poll >= PEI_SBATCH_RECONCILE_MAX )); then
+            if (( if_submitted_once == 1 )); then
+                echo "❌ squeue 连续 $poll 次查询失败，已提交过一次却无法判断作业是否已存在。" >&2
+                echo "   宁可漏投也不重投（重投会造成重复作业）。请手动确认后再决定: sbatch $sbatch_args_display" >&2
+                echo "   确认命令: squeue -u \"${USER:-$(whoami)}\" -o '%.12i %.20j %Z %k'" >&2
+                exit "${status:-1}"
+            fi
+            echo "⚠️  squeue 连续 $poll 次查询失败，无法做提交前去重；本次尚未提交过，按可用性优先直接提交。" >&2
+            return 0
+        fi
+        echo "⚠️  [dedup $poll/$PEI_SBATCH_RECONCILE_MAX] squeue 查询失败，${PEI_SBATCH_RETRY_SLEEP}s 后重查…" >&2
+        poll=$((poll + 1))
+        sleep "$PEI_SBATCH_RETRY_SLEEP"
+    done
+}
+
 attempt=1
 limit_wait=0
+if_submitted_once=0
+if_ambiguous_last=0   # 上一次提交是不是「回执丢失」：决定核对查不动时要不要保守放弃
+mark_epoch=0
+status=1
+
 while :; do
-    # 提交前先过限流闸门；关掉限流（PEI_SBATCH_MAX_JOBS=0）时它直接返回、零开销。
+    # 重投前多等一会：给 slurmctld 把上一次可能已经创建的作业露给 squeue 的时间，
+    # 免得核对跑在作业出现之前、误判成「没落地」。首次提交不需要等。
+    (( if_submitted_once == 1 )) && sleep "$PEI_SBATCH_RECONCILE_SLEEP"
+
+    # 去重闸门放在循环顶部：limit / 暂态失败 / 回执丢失所有分支 continue 回来都必经它，
+    # 结构上不存在「不检查就重投」的路径。
+    dedup_gate
+
+    # 再过在队作业数限流闸门；关掉限流（PEI_SBATCH_MAX_JOBS=0）时它直接返回、零开销。
     wait_for_queue_slot
 
     # 诊断一律走 stderr，stdout 留给 sbatch 的原样输出（--parsable 的作业号也在其中）。
     echo "▶️  [attempt $attempt/$PEI_SBATCH_RETRY_MAX] sbatch $*" >&2
 
-    # 合并 stderr 到一起抓：成功信息 "Submitted batch job" 走 stdout、错误串走 stderr，判据
-    # 两者都要看。这里的 $(...) 捕获不会像 launch_retry 那样「憋住几十分钟输出」：sbatch 自己
-    # 只吐一行提交信息；即便 --wait，被投作业的 stdout 是进它自己的 slurm-*.out，不经这里。
+    # 无标签时的兜底判据需要这个时间戳，用来把「这次提交」和目录里的旧作业区分开。
+    # 减 2s 是给本机时钟与 slurmctld 记录的提交时间之间的偏差留余量。
+    mark_epoch=$(( $(date +%s) - 2 ))
+
     sbatch_out="$(sbatch "$@" 2>&1)"
     status=$?
+    if_submitted_once=1
     [[ -n "$sbatch_out" ]] && echo "$sbatch_out"
 
     if (( status == 0 )) || grep -qF "Submitted batch job" <<< "$sbatch_out"; then
@@ -234,6 +609,17 @@ while :; do
     if [[ -n "$matched" ]]; then
         echo "❌ 提交失败且命中永久性错误特征（$matched），不重试放弃: sbatch $*" >&2
         exit "$status"
+    fi
+
+    # 回执丢失：这里只负责把话说清楚，判定交给循环顶部的去重闸门 —— 特征表判错也不会
+    # 造成重复作业，最多是措辞不准。
+    # 每轮都重设：只有紧接着的这一次核对才该看它。
+    matched="$(match_first_pattern "$sbatch_out" "${SBATCH_AMBIGUOUS_PATTERNS[@]}")"
+    if [[ -n "$matched" ]]; then
+        if_ambiguous_last=1
+        echo "⚠️  提交回执丢失（$matched）—— 作业很可能已创建。回到顶部按标签核对，不会重复提交。" >&2
+    else
+        if_ambiguous_last=0
     fi
 
     # 撞上在队作业数上限：不算重试次数，回到限流闸门等队列腾空（闸门被显式关掉时也得等，

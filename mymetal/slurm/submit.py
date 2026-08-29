@@ -2,6 +2,9 @@
 
 Functions:
     check_wall_time: Validate an optional Slurm wall-time value.
+    generate_comment_tag: Mint the unique --comment de-duplication tag of one script.
+    stamp_comment_tag: Write that tag into an existing Slurm script.
+    read_comment_tag: Read back the tag of an existing script (regenerating keeps it).
     generate_slurm_script_base: Generate one calculation job script.
     generate_slurm_script_sequential: Generate one chunk worker (submitter or runner).
     generate_slurm_script_shared_parent: Generate one parent for chunk workers.
@@ -12,6 +15,7 @@ Functions:
 
 import os
 import re
+import secrets
 import shlex
 import textwrap
 from pathlib import Path
@@ -31,10 +35,101 @@ LAUNCH_RETRY_WRAPPER = "pei_slurm_univ_launch_retry"
 # 限流靠「等队列腾空」实现，动辄几十分钟，因此三种 mode 的提交循环都必须跑在 Slurm 作业里，
 # 不能留在登录节点上 —— 这正是 parallel 也要生成提交作业脚本的原因。
 SBATCH_RETRY_WRAPPER = "pei_slurm_univ_sbatch_retry"
+# 去重标签的位数。每个生成出来的 Slurm 脚本盖一个独立的纯数字标签，写进 #SBATCH --comment，
+# pei_slurm_univ_sbatch_retry 提交前后都按它去 squeue 里查「这个脚本是不是已经有作业了」。
+# 用 --comment 而不是 JobName：该字段本机完全空闲（AccountingStoreFlags=job_comment 已开，
+# sacct 可回溯），且不进 squeue 默认视图，不影响肉眼读队列，也不破坏 scancel -n 的精确匹配。
+COMMENT_TAG_DIGITS = 100
 CHUNK_PARENT_LAYOUTS = ["auto", "shared", "per_chunk"]
 WALL_TIME_PATTERN = re.compile(r"^[0-9]+(?:-[0-9]+)?(?::[0-9]+){0,2}$")
 
 # generate_script
+
+
+def generate_comment_tag(digits: int = COMMENT_TAG_DIGITS) -> str:
+    """Mint one script's de-duplication tag: a purely numeric random string.
+
+    Written into the script as ``#SBATCH --comment=<tag>`` and matched verbatim against
+    ``squeue -o '%k'``. Purely numeric so its shape alone separates it from any comment
+    another tool might write; ``secrets`` rather than ``random`` so parallel generators
+    seeded from the same clock cannot collide.
+
+    Args:
+        digits: Length of the tag in decimal digits.
+
+    Returns:
+        str: The tag.
+    """
+    return "".join(str(secrets.randbelow(10)) for _ in range(digits))
+
+
+def read_comment_tag(path_script: Path) -> str | None:
+    """Read back the ``#SBATCH --comment`` de-duplication tag of an existing script.
+
+    Counterpart of :func:`stamp_comment_tag`, and the reason regenerating a script in a
+    directory must NOT mint a fresh tag: the tag is the only thing that lets
+    ``pei_slurm_univ_sbatch_retry`` recognise a job of this very directory that is still
+    queued or running. Re-running a submission flow over a tree where some jobs are still
+    active (resubmitting only the unfinished cases, say) rewrites those scripts; minting a
+    new tag there would blind the de-duplication gate and put a second job into a directory
+    whose first job is still writing.
+
+    Mirrors sbatch's own precedence for repeated directives -- last one wins.
+
+    Args:
+        path_script: The script to read; missing / unreadable is not an error.
+
+    Returns:
+        str | None: The tag, or None if the script has no ``--comment`` directive.
+    """
+    path_script = Path(path_script)
+    try:
+        ltext = path_script.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+
+    tag = None
+    for line in ltext:
+        m = re.match(r"^\s*#SBATCH\s+--comment[= ]\s*(\S+)", line)
+        if m is not None:
+            tag = m.group(1).strip("\"'")
+    return tag or None
+
+
+def stamp_comment_tag(path_script: Path, tag: str = None) -> str:
+    """Give an existing Slurm script its own ``#SBATCH --comment`` de-duplication tag.
+
+    For scripts this package does not generate from scratch -- a ``sub.544.sh`` copied
+    into each calculation directory, say. Any ``--comment`` line already there is
+    replaced, so re-stamping is safe; the new line goes after the last ``#SBATCH``
+    directive so it stays inside the block sbatch actually parses (directives stop at
+    the first non-comment line).
+
+    Args:
+        path_script: The script to stamp, edited in place.
+        tag: Tag to write; ``None`` mints a fresh one.
+
+    Returns:
+        str: The tag written.
+    """
+    path_script = Path(path_script)
+    if tag is None:
+        tag = generate_comment_tag()
+
+    lline = path_script.read_text(encoding="utf-8").splitlines()
+    lline = [line for line in lline
+             if re.match(r"^\s*#SBATCH\s+--comment([= ])", line) is None]
+
+    # 插在最后一条 #SBATCH 之后：sbatch 只解析首个非注释行之前的指令，插到别处会被忽略。
+    index_last = max((i for i, line in enumerate(lline)
+                      if re.match(r"^\s*#SBATCH\s", line) is not None), default=None)
+    if index_last is None:
+        # 没有任何 #SBATCH：插在 shebang 之后，没有 shebang 就插在最前面。
+        index_last = 0 if (lline and lline[0].startswith("#!")) else -1
+    lline.insert(index_last + 1, "#SBATCH --comment=" + tag)
+
+    path_script.write_text("\n".join(lline) + "\n", encoding="utf-8", newline="\n")
+    return tag
 
 
 def _write_slurm_script(path_save: Path, content: str) -> None:
@@ -75,7 +170,8 @@ def generate_script_header(
         ncores: int,
         module_profile_type: str,
         MODULE_BLOCKS: dict[str, str],
-        wall_time: str = None) -> str:
+        wall_time: str = None,
+        comment_tag: str = None) -> str:
     """生成 Slurm 脚本头部和环境模块加载部分。
 
     Args:
@@ -85,6 +181,9 @@ def generate_script_header(
         module_profile_type: 环境模块配置类型，对应 MODULE_BLOCKS 中的键。
         MODULE_BLOCKS: 环境模块配置字典，键为配置类型，值为对应的 shell 代码块。
         wall_time: 可选的 Slurm 最大运行时间；None 时不生成 ``--time`` 行。
+        comment_tag: 写入 ``#SBATCH --comment`` 的去重标签；None 时现取一个新的。
+            重新生成一个已存在的脚本时应当传 :func:`read_comment_tag` 读回的原标签，
+            让标签跟着脚本路径走 —— 换新标签会让队列里那个还在跑的旧作业匹配不上去重闸门。
 
     Returns:
         生成的 Bash 脚本头部字符串。
@@ -97,11 +196,20 @@ def generate_script_header(
     if wall_time is not None:
         line_wall_time = "#SBATCH --time=" + wall_time + "\n"
 
+    # 去重标签：pei_slurm_univ_sbatch_retry 提交前会拿它查 squeue，已有同标签作业就跳过，
+    # 从而「同一个脚本重复提交多少次都只会有一个作业」。标签固化在脚本文件里，所以重复运行
+    # 提交流程是幂等的 —— 前提是**重新生成脚本时把原标签读回来沿用**（调用方传
+    # comment_tag=read_comment_tag(path_save)，见 generate_slurm_script_base）。这里现取新标签
+    # 只发生在该路径上还没有脚本、或调用方明确要一个新身份时。
+    if comment_tag is None:
+        comment_tag = generate_comment_tag()
+
     header = (
         "#!/bin/bash\n"
         "#SBATCH -p " + str(partition) + "\n"
         "#SBATCH -N " + str(nodes) + "\n"
         "#SBATCH -n " + str(ncores) + "\n"
+        "#SBATCH --comment=" + str(comment_tag) + "\n"
         + line_wall_time
     )
     module_block = MODULE_BLOCKS.get(module_profile_type)
@@ -186,9 +294,15 @@ def generate_slurm_script_base(partition: str, nodes: int, ncores: int, module_p
     Returns:
         生成的 Slurm 脚本内容字符串。
     """
+    # 复用目标路径上已有脚本的去重标签（没有就现取一个新的）。这一步是「重复运行提交流程
+    # 是幂等的」这句话真正成立的地方：脚本每次都会被重写，如果连标签一起换新，队列里那个
+    # 正在跑的旧作业就再也匹配不上，sbatch_retry 的去重闸门形同虚设 —— 只续投未跑完的算例
+    # 时，会给一个作业还在写的目录再投一个作业。同一个路径 = 同一个提交位置 = 同时只该有
+    # 一个作业，所以标签跟着路径走，而不是跟着这次生成走。
     line_header = generate_script_header(
         partition, nodes, ncores, module_profile_type, MODULE_BLOCKS,
         wall_time=wall_time,
+        comment_tag=read_comment_tag(path_save) if if_output else None,
     )
     line_launcher = generate_launcher_command(launcher, cmd, if_use_my_launcher)
     line_myheader = (
@@ -230,9 +344,15 @@ def generate_slurm_script_sequential(partition: str, nodes: int, ncores: int, mo
     Returns:
         生成的 Slurm 编排脚本内容字符串。
     """
+    # 复用目标路径上已有脚本的去重标签（没有就现取一个新的）。这一步是「重复运行提交流程
+    # 是幂等的」这句话真正成立的地方：脚本每次都会被重写，如果连标签一起换新，队列里那个
+    # 正在跑的旧作业就再也匹配不上，sbatch_retry 的去重闸门形同虚设 —— 只续投未跑完的算例
+    # 时，会给一个作业还在写的目录再投一个作业。同一个路径 = 同一个提交位置 = 同时只该有
+    # 一个作业，所以标签跟着路径走，而不是跟着这次生成走。
     line_header = generate_script_header(
         partition, nodes, ncores, module_profile_type, MODULE_BLOCKS,
         wall_time=wall_time,
+        comment_tag=read_comment_tag(path_save) if if_output else None,
     )
     line_launcher = generate_launcher_command(launcher, cmd, if_use_my_launcher)
     line_myheader = (
@@ -285,9 +405,12 @@ def generate_slurm_script_shared_parent(
     for path_worker in lpath_worker:
         check_absolute_path(path_worker)
 
+    # 同 generate_slurm_script_base：标签跟着脚本路径走，重新生成不换标签，否则上一轮还在
+    # 排队/运行的父作业会认不出来，被再投一份。
     line_header = generate_script_header(
         partition, 1, 1, module_profile_type, MODULE_BLOCKS,
         wall_time=wall_time,
+        comment_tag=read_comment_tag(path_save) if if_output else None,
     )
     line_myheader = (
         "# Auto-generated by pei_slurm_univ_submit (shared each_subdir parent). Do not edit by hand.\n"

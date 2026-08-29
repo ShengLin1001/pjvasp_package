@@ -52,6 +52,7 @@ from ase import Atoms
 from ase.io import read
 from ase.neighborlist import neighbor_list
 
+from mymetal.slurm.submit import stamp_comment_tag
 from mymetal.universal.print.print import fail, warn
 
 # Slip modes of pei_vasp_run_gsfe, as (bp1, bp2) in units of a11 / b22. Only used to
@@ -273,6 +274,12 @@ def write_image(path_image: Path = None, path_src: Path = None,
                 a3_new: np.ndarray = None) -> None:
     """Seed one image directory and point its ``a3`` at the new fault vector.
 
+    The copied ``sub.*`` scripts are each stamped with their own
+    ``#SBATCH --comment`` de-duplication tag, so ``pei_slurm_univ_sbatch_retry`` can tell
+    "this image already has a job" from "this image still needs one". Without it every
+    image would carry the byte-identical script copied out of ``y_full_relax`` and the
+    wrapper would have nothing but WorkDir and a clock to go on.
+
     Args:
         path_image (Path): Directory to create.
         path_src (Path): ``y_full_relax``, the source of the VASP inputs.
@@ -288,6 +295,7 @@ def write_image(path_image: Path = None, path_src: Path = None,
     for pattern in LGLOB_SEED:
         for path_file in glob.glob(str(path_src / pattern)):
             shutil.copy(path_file, str(path_image))
+            stamp_comment_tag(path_image / Path(path_file).name)
 
     path_poscar = path_image / "POSCAR"
     lline = path_poscar.read_text().splitlines(keepends=True)
