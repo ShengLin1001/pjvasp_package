@@ -11,7 +11,9 @@ Classes:
 Functions:
     - load_from_datafile(file_path): Load dataset from an existing NNP input data file
     - load_from_outcar(outcarfile, index, tag, comment_file): Load dataset from a VASP OUTCAR file
-    - write(outfile_name, append): Write the dataset to an NNP input data file
+    - write(outfile_name, append, sample_type): Write the dataset to an NNP
+      input data file; sample_type='train'/'test' pins the structure with
+      n2p2's ``begin set=train`` / ``begin set=test`` keyword
     - get_dict(): Get the internal dataset as a dictionary
     - read_dft_reference(dir_dft_root, ...): Batch-read DFT (VASP) reference
       stretch/cij/gsfe properties into one dict for comparison with NNP epoch scans.
@@ -19,6 +21,10 @@ Functions:
 Change Log:
     - 2025.10.19 Integrated all functions into the nnpdata class for better encapsulation.
     - 2026.06.23 Added read_dft_reference() to collect DFT property baselines.
+    - 2026.08.24 _read_vasp_out_robust() retries on a repaired copy when an
+      OUTCAR lost the blank line ASE's fixed-offset energy parser needs.
+    - 2026.08.24 write()/write_from_ase() accept sample_type to emit
+      ``begin set=train`` / ``begin set=test`` (explicit train/test split).
 """
 
 
@@ -26,6 +32,7 @@ from ase.calculators.singlepoint import SinglePointCalculator
 from ase.io.vasp import read_vasp_out
 from ase import Atoms
 import os
+import tempfile
 import numpy as np
 import pandas as pd
 import re
@@ -86,6 +93,52 @@ def _choose_inplane_rep(n0: int, size_top: int = 72, size_bottom: int = 36,
     return (nx, ny)
 
 
+def _read_vasp_out_robust(outcarfile: str = None, index: str = ':'):
+    """Read an OUTCAR with ASE, repairing the blank line ASE's parser relies on.
+
+    ASE's ``Energy`` chunk parser addresses the two energy lines by **fixed row
+    offsets** from ``FREE ENERGIE OF THE ION-ELECTRON SYSTEM`` (nskip=2 and 4,
+    ``ase/io/vasp_parsers/vasp_outcar_parsers.py``), so it silently assumes the
+    blank line VASP writes between ``free  energy   TOTEN`` and
+    ``energy  without entropy``. An OUTCAR whose blank lines were stripped
+    (e.g. by a post-processing/transfer step) makes nskip=4 land on the dashed
+    separator and raises ``IndexError: list index out of range``.
+
+    On any read failure this function retries once on a temporary copy with that
+    single blank line put back; the source file is never modified. The repair is
+    reported on screen so a silently patched OUTCAR never goes unnoticed.
+
+    Args:
+        outcarfile (str): Path to the OUTCAR file.
+        index (str): Frame selection handed to ``ase.io.vasp.read_vasp_out``.
+
+    Returns:
+        Whatever ``read_vasp_out`` returns (Atoms or list of Atoms).
+
+    Raises:
+        Exception: Re-raises the original ASE error if the repair does not help.
+    """
+    try:
+        return read_vasp_out(outcarfile, index=index)
+    except Exception as err_raw:
+        text = Path(outcarfile).read_text(errors='ignore')
+        needle = ' eV\n  energy  without entropy='
+        if needle not in text:
+            raise
+        with tempfile.NamedTemporaryFile('w', suffix='_OUTCAR', delete=False) as f:
+            f.write(text.replace(needle, ' eV\n\n  energy  without entropy='))
+            path_tmp = f.name
+        try:
+            outcar = read_vasp_out(path_tmp, index=index)
+        except Exception:
+            raise err_raw
+        finally:
+            os.unlink(path_tmp)
+        print(f"  ⚠️  {outcarfile}: blank line before 'energy without entropy' missing "
+              f"({type(err_raw).__name__}); read from a repaired temporary copy.")
+        return outcar
+
+
 class nnpdata:
     """A class for handling NNP input datasets.
 
@@ -100,7 +153,9 @@ class nnpdata:
     Methods:
         - load_from_datafile(file_path): Load dataset from an existing NNP input data file
         - load_from_outcar(outcarfile, index, tag, comment_file): Load dataset from a VASP OUTCAR file
-        - write(outfile_name, append): Write the dataset to an NNP input data file
+        - write(outfile_name, append, sample_type): Write the dataset to an NNP
+          input data file; sample_type='train'/'test' pins the structure with
+          n2p2's ``begin set=train`` / ``begin set=test`` keyword
         - get_dict(): Get the internal dataset as a dictionary
 
     Example:
@@ -134,6 +189,11 @@ class nnpdata:
         self.lfull_struct_numbers = []
         self.lforces = []
         self.lenergies = []
+        # n2p2 的 `begin set=train` / `begin set=test` 标记，逐结构一个：
+        # 'train' / 'test' / None（None = 裸 begin，由 test_fraction 随机抽）。
+        # 必须与结构一一对应地读进来再写回去，否则 load -> write 的往返会把
+        # 训练/测试划分**静默**抹平（n2p2 不会报错，只会按 test_fraction 重新随机分）。
+        self.lsample_types = []
 
         # Full content dict
         self.dict = {}
@@ -171,10 +231,24 @@ class nnpdata:
         lfull_struct_numbers = []
         lforces = []
         lenergies = []
+        lsample_types = []
 
         while i < n:
             line = lines[i].strip()
             if line.startswith("begin"):
+                # begin 行唯一的可选参数：set=train / set=test（libnnp/Structure.cpp:155-156）。
+                # 不解析就等于在 load -> write 的往返里把训练/测试划分丢掉。
+                sample_type = None
+                for word in line.split()[1:]:
+                    if word == 'set=train':
+                        sample_type = 'train'
+                    elif word == 'set=test':
+                        sample_type = 'test'
+                    else:
+                        raise ValueError(f"❌ Unknown keyword {word!r} on the begin line at "
+                                         f"line {i + 1} of {file_path}. n2p2 only accepts "
+                                         f"set=train / set=test there "
+                                         f"(libnnp/Structure.cpp:150-160).")
                 lattice = []
                 positions = []
                 forces = []
@@ -229,6 +303,7 @@ class nnpdata:
                 lfull_struct_numbers.append(full_struct_number)
                 lforces.append(np.array(atoms.get_forces(apply_constraint=False)))
                 lenergies.append(atoms.get_potential_energy())
+                lsample_types.append(sample_type)
             i = i+1
         
         self.latoms = latoms
@@ -239,6 +314,13 @@ class nnpdata:
         self.lfull_struct_numbers = lfull_struct_numbers
         self.lforces = lforces
         self.lenergies = lenergies
+        self.lsample_types = lsample_types
+
+        n_tr = sum(1 for t in lsample_types if t == 'train')
+        n_te = sum(1 for t in lsample_types if t == 'test')
+        n_un = len(lsample_types) - n_tr - n_te
+        print(f"  📊 load_from_datafile: {len(latoms)} structure(s) "
+              f"(set=train {n_tr}, set=test {n_te}, unmarked {n_un}) <- {file_path}")
 
         self.dict = {
             'latoms': latoms,
@@ -248,7 +330,8 @@ class nnpdata:
             'lstruct_numbers': lstruct_numbers,
             'lfull_struct_numbers': lfull_struct_numbers,
             'lforces': lforces,
-            'lenergies': lenergies
+            'lenergies': lenergies,
+            'lsample_types': lsample_types
         }
 
     # For one OUTCAR file, load dataset
@@ -271,7 +354,8 @@ class nnpdata:
         """
         # Read whole atoms configurations from OUTCAR
         # index=':' means read all configurations
-        outcar = read_vasp_out(outcarfile, index=index)
+        # 用鲁棒读取：个别 OUTCAR 的空行被剥掉过，ASE 的定行偏移解析会直接 IndexError
+        outcar = _read_vasp_out_robust(outcarfile, index=index)
         num = len(outcar)
 
         latoms = []
@@ -301,6 +385,8 @@ class nnpdata:
         self.lfull_struct_numbers = lfull_struct_numbers
         self.lforces = lforces
         self.lenergies = lenergies
+        # OUTCAR 不带 n2p2 的 set= 信息：全部留空，由调用方在 write() 时用 sample_type 指定。
+        self.lsample_types = [None] * len(latoms)
 
         self.dict = {
             'latoms': latoms,
@@ -310,7 +396,8 @@ class nnpdata:
             'lstruct_numbers': lstruct_numbers,
             'lfull_struct_numbers': lfull_struct_numbers,
             'lforces': lforces,
-            'lenergies': lenergies
+            'lenergies': lenergies,
+            'lsample_types': self.lsample_types
         }
 
     def adjust_size(self, size_top: int = 72, size_bottom: int = 36, size_close: int = 48):
@@ -363,33 +450,53 @@ class nnpdata:
             'lstruct_numbers': self.lstruct_numbers,
             'lfull_struct_numbers': self.lfull_struct_numbers,
             'lforces': self.lforces,
-            'lenergies': self.lenergies
+            'lenergies': self.lenergies,
+            'lsample_types': self.lsample_types
         }
 
     # OUTCAR to n2p2
     # It's always be a part of input.data
-    def write(self,  outfile_name: str=None, append: bool=False):
+    def write(self,  outfile_name: str=None, append: bool=False, sample_type: str = None):
         """Writes the loaded dataset to an NNP input data file.
 
         Args:
             outfile_name (str): Output filename, e.g., 'input.data'.
             append (bool, optional): If True, appends to an existing file; otherwise, overwrites it.
+            sample_type (str, optional): ``'train'`` / ``'test'`` **overrides** every
+                structure's set assignment. ``None`` (default) **preserves** each
+                structure's own ``self.lsample_types`` entry, i.e. whatever
+                ``begin set=...`` it was read with — structures that carried no
+                marker keep a bare ``begin``.
+
+        Note:
+            The None default is what makes ``load_from_datafile`` ->  ``write``
+            round-trip safe. n2p2 silently re-draws unmarked structures via
+            ``test_fraction``, so dropping the markers would quietly reshuffle
+            the train/test split without any error.
 
         Example:
-            >>> data.write("input.data", append=False)
+            >>> data.write("input.data", append=False)              # 原样保留 set=
+            >>> data.write("input.data", append=True, sample_type='test')   # 全部改判为 test
         """
         # remove the file if it exists
         if not append:
             open(outfile_name, 'w').close()
 
-        for atoms, struct_num, full_struct_num, files, tags, comment_files \
-                            in zip(self.latoms, self.lstruct_numbers, self.lfull_struct_numbers, self.lfiles, self.ltags, self.lcomment_files):
-            self.write_from_ase(outfile_name, atoms, struct_num= struct_num, full_struct_num = full_struct_num, file_name = files, 
-                                         tag = tags, comment_file = comment_files)
+        # 结构数与 lsample_types 长度对不上时（旧代码路径构造的对象）退回全 None，不报错。
+        lsample = (self.lsample_types
+                   if len(getattr(self, 'lsample_types', [])) == len(self.latoms)
+                   else [None] * len(self.latoms))
+
+        for atoms, struct_num, full_struct_num, files, tags, comment_files, st \
+                            in zip(self.latoms, self.lstruct_numbers, self.lfull_struct_numbers, self.lfiles, self.ltags, self.lcomment_files, lsample):
+            self.write_from_ase(outfile_name, atoms, struct_num= struct_num, full_struct_num = full_struct_num, file_name = files,
+                                         tag = tags, comment_file = comment_files,
+                                         sample_type = st if sample_type is None else sample_type)
 
     # ase to n2p2, only single frame
     def write_from_ase(self, fd: str=None, atoms: Atoms=None, struct_num: int = 1, full_struct_num: int = 1,
-                                file_name: str = '', tag: str = 'all', comment_file: str = None, append: bool = True):
+                                file_name: str = '', tag: str = 'all', comment_file: str = None, append: bool = True,
+                                sample_type: str = None):
         """Writes a single ASE Atoms object to NNP (n2p2) format.
 
         Args:
@@ -401,6 +508,16 @@ class nnpdata:
             tag (str, optional): Label tag for the dataset (e.g., 'train', 'test').
             comment_file (str, optional): External comment filename if applicable.
             append (bool, optional): If True, append to existing file.
+            sample_type (str, optional): ``'train'`` / ``'test'`` appends the
+                n2p2 ``set=train`` / ``set=test`` keyword to the ``begin`` line
+                (``libnnp/Structure.cpp:155-156``), which pins the structure to
+                the training or test set. Structures written without it keep
+                ``ST_UNKNOWN`` and are drawn randomly by ``test_fraction``
+                (``libnnptrain/Training.cpp:106-110``). None (default) keeps the
+                historical bare ``begin``.
+
+        Raises:
+            ValueError: sample_type is neither None, 'train' nor 'test'.
 
         Notes:
             This function is typically called by `write()` for batch writing.
@@ -408,6 +525,9 @@ class nnpdata:
         Example:
             >>> data.write_from_ase(fd="input.data", atoms=my_atoms, struct_num=1, full_struct_num=10)
         """
+        if sample_type not in [None, 'train', 'test']:
+            raise ValueError(f"❌ sample_type must be None, 'train' or 'test', got: {sample_type}")
+
         lattice = np.array(atoms.get_cell())
         # calculator/abc.py get_potential_energy() = calc.get_property('energy', atoms)
         # 'energy' in OUTCAR     : energy(sigma->0) =     -650.294848
@@ -427,7 +547,11 @@ class nnpdata:
             fd = open(fd, "a")
 
         # write to fd
-        fd.write("begin\n")
+        # begin 行的可选参数只有 set=train / set=test，其它词 n2p2 会直接抛异常
+        if sample_type is None:
+            fd.write("begin\n")
+        else:
+            fd.write("begin set={0:s}\n".format(sample_type))
         if comment_file not in [None, '']:
             file_name = comment_file
         fd.write("comment | tag={0:s} | frame={1:d}/{2:d} | file={3:s}\n"

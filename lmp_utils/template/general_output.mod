@@ -4,7 +4,7 @@ shell mkdir ../dump/
 if "${i} == 1" then "print 'jobn   mype1(eV)   EENTRO(eV)   -stress(kB)' append ../dump/y_post_data.txt"
 
 # Set format is necessary to avoid scientific notation in dump file
-write_dump all custom ../dump/movie.lammpstrj id type x y z modify append yes format line "%2d %2d %16.12e %16.12e %16.12e"
+write_dump all custom ../dump/movie.lammpstrj id type x y z modify append yes sort id format line "%2d %2d %16.12e %16.12e %16.12e"
 
 variable mype1 equal c_pe1
 

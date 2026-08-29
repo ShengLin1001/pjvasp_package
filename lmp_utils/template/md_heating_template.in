@@ -1,0 +1,44 @@
+###############################################################################
+# 升温 MD 采样：一个 in 文件跑完 FCC 与 HCP 两个体相
+#
+# 用途：n2p2 主动学习 Stage I（chap_4_TL.pdf）——用一组已训练好的势函数各自做升温
+# MD，把轨迹帧交给 committee 一致性筛选，挑出预测发散的构型送 DFT 标记后回灌训练集。
+#
+# 相之间用 clear 彻底重置：LAMMPS 的 clear 不清除 input script variables
+# （doc/src/clear.rst：“input script variables except for atomfile style”），
+# 所以 md_params.mod 里的 index 变量能跨 clear 存活，next + jump 即可推进到下一相；
+# 当 index 变量取尽时 LAMMPS 会删除该变量并**跳过紧随其后的 jump**，循环自然结束。
+#
+# 需要的模板文件（由 pei_lmp_run_md_heating 拷进作业目录并就地 sed）：
+#   md_params.mod            相列表 / 温度阶梯 / 采样节奏（工作流按轮次重写）
+#   md_seed.mod              ${md_seed}，作业里现取，不固定
+#   general_init.mod         单位、minimize 判据、boundary
+#   stretch_model.mod        建 fcc/hcp/bcc 盒子（runner 把 lat_template/aa_template
+#                            换成 ${latid}/${aa0}，从而由本文件的 index 变量驱动）
+#   general_potential.mod    pair_style/pair_coeff/mass/compute（runner sed 势函数）
+#   general_mass.mod         每类型质量（runner 按元素写入）
+#   md_heating.mod           弛豫 + 升温阶梯 + 采样
+###############################################################################
+
+# 相列表与每相的建模参数：必须在第一个 clear 之前读入（clear 保留变量，但得先存在）
+include md_params.mod
+include md_seed.mod
+
+label phase_loop
+
+# 释放上一相的原子/fix/compute；index 变量与 shell 工作目录不受影响
+clear
+
+include general_init.mod
+
+# 建模：stretch_model.mod 里的 lat/aa 已被 runner 指向本文件的 index 变量
+include stretch_model.mod
+
+# 超胞：常规胞太小时 NPT 的涨落不具代表性；倍数由 md_params.mod 逐相给出
+replicate ${nx} ${ny} ${nz}
+
+include general_potential.mod
+include md_heating.mod
+
+next phase latid aa0 nx ny nz
+jump SELF phase_loop

@@ -1,0 +1,147 @@
+#!/bin/bash
+
+# 单目录 runner：在当前目录跑一次「FCC + HCP 升温 MD 采样」。
+#
+# 与 pei_lmp_run_properties 同一套约定：Python（PeiN2p2MD.submit_md）只铺脚手架
+# （potential/ + md_params.mod），所有 sed 与实际运行都在作业里由本脚本完成，
+# 由 pei_slurm_univ_submit 的 each_subdir 模式以 cwd=作业目录的方式调用。
+#
+# 位置参数（不传则用默认值）：
+#   $1 pair_style          整串，如 "hdnnp 6.01 dir $(pwd)/potential showew no ..."
+#   $2 pair_coeff          元素串，如 "Au"（hdnnp 用元素名，不是势文件路径）
+#   $3 mass_content        写入 general_mass.mod 的内容，多行用 \n 连接
+#   $4 lmp_template_path   LAMMPS 模板目录，默认 ./template
+#
+# 环境变量旋钮：
+#   MD_SEED                固定随机种子（默认**不固定**：每次运行现取一个）
+#   LMP_MAX_TRY / LMP_RETRY_SLEEP   srun step 暂态失败的重试次数 / 间隔
+#
+# 退出码：0 = 两个相都跑完；1 = 有步骤失败（逐项列在 📊 Summary 里）。
+
+launcher="${MY_LAUNCHER:-srun}"
+myroot=$(pwd)
+
+pair_style="${1:-eam}"
+pair_coeff="${2:-${myroot}/potential/Au_u3.eam}"
+mass_content="${3:-mass 1 196.97}"
+lmp_template_path="${4:-${myroot}/template}"
+
+echo ""
+echo "================ 📁 ${myroot}"
+echo "📍 Current dir: $(pwd)"
+
+# 失败收集：每个步骤非 0 退出都记下「标签 (exit 码)」，最后汇总到 📊 Summary 并决定退出码。
+failed_steps=()
+record_fail () {   # $1=步骤标签  $2=退出码
+    failed_steps+=("$1 (exit $2)")
+    echo "❌ $1 失败 (exit $2)"
+}
+
+# 带重试退避地跑 lmp：只对「srun 创建 step 失败」这种瞬时错误重试（高并发提交时 slurmctld
+# 偶发 "srun: error: Unable to create step ...: Unexpected message received"）。
+# 真·LAMMPS 错误（输入错、势文件缺失等）立即返回，不浪费时间反复重试。
+LMP_MAX_TRY="${LMP_MAX_TRY:-99}"
+LMP_RETRY_SLEEP="${LMP_RETRY_SLEEP:-5}"
+run_lmp_retry () {   # 参数原样转给 lmp，例如：run_lmp_retry -in md_heating_template.in -screen none
+    local attempt=1 rc errlog
+    errlog="$(mktemp)"
+    while : ; do
+        $launcher lmp "$@" 2> "$errlog"
+        rc=$?
+        cat "$errlog" >&2          # 这次的 stderr 照常进 slurm-*.out，不吞日志
+        if (( rc == 0 )); then rm -f "$errlog"; return 0; fi
+        if (( attempt < LMP_MAX_TRY )) && grep -qE 'Unable to create step|Unexpected message received' "$errlog"; then
+            echo "⚠️  srun step 创建失败（第 ${attempt}/${LMP_MAX_TRY} 次尝试，exit ${rc}），${LMP_RETRY_SLEEP}s 后重试…"
+            sleep "${LMP_RETRY_SLEEP}"
+            (( attempt++ ))
+            continue
+        fi
+        rm -f "$errlog"
+        return "$rc"               # 非瞬时错误，或已达最大尝试次数 → 交给 record_fail
+    done
+}
+
+############ 1. 模板就位 ############
+echo ""
+echo "================ ▶️ 准备模板：${lmp_template_path} -> ${myroot}"
+for file in \
+    "${lmp_template_path}/md_heating_template.in" \
+    "${lmp_template_path}/md_heating.mod" \
+    "${lmp_template_path}/stretch_model.mod" \
+    "${lmp_template_path}/general_init.mod" \
+    "${lmp_template_path}/general_potential.mod";
+do
+    if [[ ! -f "${file}" ]]; then
+        record_fail "缺少模板 ${file}" 1
+        echo "📊 Summary: ${#failed_steps[@]} 个步骤失败"
+        printf '  - %s\n' "${failed_steps[@]}"
+        exit 1
+    fi
+    cp "${file}" "${myroot}/"
+    echo "  ✅ $(basename ${file})"
+done
+
+# md_params.mod 由 PeiN2p2MD.submit_md 逐作业写好放在这里；缺了才回退到模板里的默认值。
+if [[ -f "${myroot}/md_params.mod" ]]; then
+    echo "  ✅ md_params.mod (已由工作流写入，沿用)"
+else
+    cp "${lmp_template_path}/md_params.mod" "${myroot}/"
+    echo "  ⚠️  md_params.mod 未由工作流提供，回退到模板默认值"
+fi
+
+############ 2. 势函数与质量 sed ############
+echo ""
+echo "================ ▶️ 注入势函数与质量"
+sed -i "s|pair_style_template|${pair_style}|g" general_potential.mod
+sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
+printf '%b\n' "$mass_content" > general_mass.mod
+echo "  pair_style  ${pair_style}"
+echo "  pair_coeff  ${pair_coeff}"
+
+# stretch_model.mod 本是给 pei_lmp_run_properties 用的（逐相 sed 成具体数值）。
+# 这里改成指向 md_heating_template.in 的 index 变量，同一份建模逻辑就能被相循环驱动，
+# 不必再复制一份几乎相同的 model 文件。
+sed -i "s/lat_template/\${latid}/g" stretch_model.mod
+sed -i "s/aa_template/\${aa0}/g"    stretch_model.mod
+echo "  stretch_model.mod: lat_template -> \${latid}, aa_template -> \${aa0}"
+
+############ 3. 随机种子：每次运行现取，不固定 ############
+# LT 主动学习要求各条轨迹互相独立，种子一旦写死，同一条势函数重跑会得到完全相同的帧。
+# RANDOM 只有 15 位，拼两次再取模，落在 velocity 命令接受的正整数范围内。
+md_seed="${MD_SEED:-$(( (RANDOM * 32768 + RANDOM) % 900000000 + 1 ))}"
+cat > "${myroot}/md_seed.mod" <<EOF
+# 自动生成，请勿手改：每次 pei_lmp_run_md_heating 运行时覆盖
+# 种子刻意不固定（MD_SEED 环境变量可强制指定，仅用于复现调试）
+variable md_seed equal ${md_seed}
+EOF
+echo "  md_seed ${md_seed}"
+
+############ 4. 跑 MD ############
+echo ""
+echo "================ 🧪 md_heating — FCC + HCP 升温采样"
+echo "▶️  $launcher lmp -in md_heating_template.in"
+run_lmp_retry -in md_heating_template.in -screen none || record_fail "md_heating (lmp)" "$?"
+
+cd "${myroot}" || exit 1
+
+############ 5. 产物核对 ############
+echo ""
+echo "================ 📊 Summary — ${myroot}"
+for phase in fcc hcp; do
+    traj="${myroot}/y_md_${phase}.lammpstrj"
+    tempf="${myroot}/y_md_${phase}_temp.txt"
+    if [[ -s "${traj}" && -s "${tempf}" ]]; then
+        nframe=$(grep -c '^ITEM: TIMESTEP' "${traj}")
+        echo "  ✅ ${phase}: ${nframe} frame(s) in $(basename ${traj})"
+    else
+        record_fail "产物缺失 ${phase} (y_md_${phase}.lammpstrj / _temp.txt)" 1
+    fi
+done
+
+if (( ${#failed_steps[@]} > 0 )); then
+    echo "  ❌ ${#failed_steps[@]} 个步骤失败："
+    printf '     - %s\n' "${failed_steps[@]}"
+    exit 1
+fi
+echo "  🎉 md_heating 全部完成"
+exit 0

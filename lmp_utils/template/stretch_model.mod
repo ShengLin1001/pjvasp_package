@@ -1,9 +1,16 @@
 # Lattice parameters
 # initial lattice constant
 variable aa equal aa_template
-variable lat equal lat_template   # 1 - "hcp", 2 - "fcc", 3 - "bcc"
+variable lat equal lat_template   # 1 - "hcp", 2 - "fcc"(cubic), 3 - "bcc", 4 - "fcc_hex"
 variable shift equal 1e-5
 
+# ${lat_hex} = 1 表示六方框架（a2 与 a1 成 120°、盒子带 xy 倾斜、c 轴独立）。
+# 下游模板（md_heating.mod 的 box/relax 与 npt）靠它决定用 "couple xy + z 独立"
+# 还是 "iso"，而不是去硬编码某个 lat 编号 —— 否则每加一个六方相都要改一遍下游。
+variable lat_hex equal 0
+
+# ${aa} 的含义随 lat 变：立方相（2/3）是**常规立方胞的晶格常数**，
+# 六方相（1/4）是**面内最近邻距离**。两者差 √2 倍，传参时别弄混。
 print "Lattice type: ${lat}"
 
 if "${lat} == 1" then &
@@ -12,6 +19,8 @@ elif "${lat} == 2"    &
     "jump SELF fcc"     &
 elif "${lat} == 3"    &
     "jump SELF bcc"     &
+elif "${lat} == 4"    &
+    "jump SELF fcc_hex" &
 else &
     "print 'Unknown lattice type: ${lat}'"
 
@@ -57,6 +66,8 @@ jump SELF end_if
 
 # HCP
 label hcp
+variable lat_hex delete
+variable lat_hex equal 1
 variable a11 equal  1.0
 variable a22 equal 0.86602540378444
 variable a33 equal 1.63299316185545
@@ -71,6 +82,40 @@ lattice custom ${aa}   &
                  a3    0.00000000000000    0.00000000000000       ${a33}           &
                  basis 0.00000000000000    0.00000000000000       0.00000000000000 &
                  basis 0.33333333333333    0.66666666666666       0.50000000000000
+
+jump SELF end_if
+
+# FCC，但以密排面 (111) 为底的六方胞（3 原子 / 胞，ABC 堆垛）
+#
+# 为什么要这一支：常规立方 FCC 胞是 4 原子，最小超胞 2x2x2 = 32 原子；
+# 换成 (111) 为底的 3 原子胞后 2x2x2 = 24 原子，与 HCP 的 2x2x3 = 24 完全一致，
+# 也与初始训练集的原子数口径（[20,30] 逼近 24）对齐，DFT 代价直接降三成。
+# 附带好处：FCC 与 HCP 从此共用同一个六方框架、同一个面内 ${aa}，
+# 两相的盒子形状与 k 点网格都可比，相稳定性的对照更干净。
+#
+# 几何：${aa} = 面内最近邻距离（= a_cubic/sqrt(2)）。
+#   a3/aa = sqrt(6) = 2.449...：3 个 (111) 层的总厚度 = 3 * a_cubic/sqrt(3) = sqrt(3)*a_cubic，
+#                               除以 aa = a_cubic/sqrt(2) 即 sqrt(6)。
+#   basis 的三个横向偏移 (0,0) -> (1/3,2/3) -> (2/3,1/3) 就是 A -> B -> C 三个不同的
+#   三角子格位（与 HCP 的 A -> B -> A 只差第三层落在哪里）。
+label fcc_hex
+variable lat_hex delete
+variable lat_hex equal 1
+variable a11 equal  1.0
+variable a22 equal 0.86602540378444
+variable a33 equal 2.44948974968170
+
+variable a21 equal -0.5
+variable a31 equal 0.0
+variable a32 equal 0.0
+
+lattice custom ${aa}   &
+                 a1    ${a11}              0.00000000000000       0.00000000000000 &
+                 a2    ${a21}              ${a22}                 0.00000000000000 &
+                 a3    0.00000000000000    0.00000000000000       ${a33}           &
+                 basis 0.00000000000000    0.00000000000000       0.00000000000000 &
+                 basis 0.33333333333333    0.66666666666666       0.33333333333333 &
+                 basis 0.66666666666666    0.33333333333333       0.66666666666666
 
 jump SELF end_if
 

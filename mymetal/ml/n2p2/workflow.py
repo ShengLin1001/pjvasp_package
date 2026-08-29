@@ -9,6 +9,13 @@ pipeline on top of the lower-level helpers in this subpackage:
     -> post_training -> check_interface -> post_properties -> post_epoch_scan
     -> post_training_summary / post_check_interface_summary / post_epoch_scan_summary
 
+Three side entries plug into the same stages: ``generate_data_tree`` reads an
+irregular directory tree (one tag per top-level sub-directory, restart chains
+collapsed to their last finished OUTCAR) and can append a ``set=test`` batch to
+the very same ``input.data``; ``import_sf_from_file`` replaces the CUR/prune
+selection when the symmetry function set is pinned from an earlier stage;
+``check_input_data`` is the pre-training gate over the assembled input.data.
+
 The three ``post_*_summary`` steps are the only cross-run ones. They re-read the
 per-run tables under ``y_post/<run-id>/`` and reduce the training ensemble to a
 mean plus a min-max band (or mean +/- std), writing ``*_summary.txt/pdf`` beside
@@ -35,7 +42,7 @@ from mymetal.universal.plot.n2p2 import (my_plot_learning_curve, my_plot_compare
                                          my_plot_epoch_rmse, my_plot_check_interface, VERDICT_CODE)
 from mymetal.ml.n2p2.dataset import nnpdata, read_dft_reference
 from mymetal.io.general import general_write
-from mymetal.slurm.submit import pei_slurm_univ_submit
+from mymetal.slurm.submit import pei_slurm_univ_submit, read_comment_tag, stamp_comment_tag
 import numpy as np
 import pandas as pd
 import os
@@ -43,6 +50,7 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 import shlex
+import re
 import subprocess
 import time
 import getpass
@@ -119,9 +127,14 @@ class PeiN2p2:
 
     TODO:
         - 将初始训练集的每个atoms的原子数调整到36-72，离48最近
-        - 选取最后的势函数作MD升温模拟，挑选出某些结构，放到DFT中计算，并append到训练集，形成迭代式训练
         - 添加收集各个势函数的平衡结构
         - 将平衡结构用DFT再计算，并append到训练集，形成迭代式训练
+
+    Note:
+        「取末尾若干条势函数做升温 MD -> 按 committee 发散度挑结构 -> DFT 标记 ->
+        append 回训练集」这条 MD 主动学习支线已经实现在子类
+        :class:`mymetal.ml.n2p2.workflow_md.PeiN2p2MD`，本类不再扩展该方向；
+        重训仍走本类的 ``submit_train``（只换 dir_run 到 train/<round>/）。
     """
 
     def __init__(self, dir_data: Path = Path("./data"), dir_sf: Path = Path("./sf"), dir_train: Path = Path("./train"), dir_file: Path = Path("./file"),
@@ -176,11 +189,12 @@ class PeiN2p2:
         self.path_input_nn_selectedsf = self.dir_sf / 'file' / 'input.nn.selectedsf'
 
         # 除了data之外，其他都可以全部删除。
-        # if_clean=False 时不删除，避免重跑脚本时误删 sf/y_scaling 的 nnp-scaling 结果
+        # if_clean=False 时不删除，避免重跑脚本时误删 sf/y_scaling 的 nnp-scaling 结果。
+        # if_clean 本身就是显式授权，故按 force 走 _guard_rebuild_dir——目的是把删掉的
+        # 条目逐条打进日志，事后能追溯这一次到底清了什么。
         if if_clean:
             for d in [self.dir_sf, self.dir_train]:
-                if d.exists():
-                    shutil.rmtree(d)
+                self._guard_rebuild_dir(d, if_force_rebuild=True, label='workspace')
 
         os.makedirs(self.dir_data / 'train', exist_ok=True)
         os.makedirs(self.dir_data / 'test', exist_ok=True)
@@ -370,7 +384,8 @@ class PeiN2p2:
 
     def generate_data(self, dir_data_source: Path = None, data_tag_dict: dict = None,
                       if_adjust_size: bool = False, size_top: int = 72,
-                      size_bottom: int = 36, size_close: int = 48):
+                      size_bottom: int = 36, size_close: int = 48,
+                      sample_type: str = None, if_clean_old: bool = True):
         """从 VASP OUTCAR 生成 n2p2 训练数据。
 
         遍历 ``dir_data_source/<tag>/<subdir>/y_dir`` 下的每个子目录，用
@@ -394,6 +409,12 @@ class PeiN2p2:
             size_top: 原子数上限。原子数已超过此值的结构（如大平板）保持原样不复制。
             size_bottom: 原子数下限。
             size_close: 规整目标原子数，复制方案在区间内尽量逼近此值。
+            sample_type: ``'train'`` / ``'test'`` 时给每个结构写 ``begin set=train`` /
+                ``begin set=test``，由 n2p2 按标记划分（``Structure.cpp:155-156``），
+                ``test_fraction`` 只对没有标记的结构生效（``Training.cpp:106-110``）。
+                None（默认）写裸 ``begin``，保持历史行为。
+            if_clean_old: 是否先清空 ``data/train/`` 下已有的 ``input*.data``。默认 True；
+                往同一个 input.data 里追加第二批数据（如先 train 后 test）时传 False。
 
         Raises:
             FileNotFoundError: 某个数据子目录下缺少 y_dir。
@@ -407,10 +428,8 @@ class PeiN2p2:
         dir_data_source = Path(dir_data_source)
 
         # Important
-        # Clean old dataset files
-        for file in path_data_train.iterdir():
-            if file.is_file() and file.name.startswith("input") and file.suffix == ".data":
-                file.unlink()
+        # Clean old dataset files（if_clean_old=False 时保留，用于往同一份 input.data 追加第二批）
+        self._clean_old_data(path_data_train, if_clean_old=if_clean_old)
 
         lforces = []
         lenergies = []
@@ -440,24 +459,583 @@ class PeiN2p2:
                 for d in ldir_struct:
                     if d.is_dir():
                         comment_file = '/'.join(d.parts[8:])
-                        mynnpdata = nnpdata()
-                        mynnpdata.load_from_outcar(outcarfile=d / 'OUTCAR', index='-1', tag=tag, comment_file=comment_file)
-                        if if_adjust_size:
-                            mynnpdata.adjust_size(size_top=size_top, size_bottom=size_bottom, size_close=size_close)
-                        mynnpdata.write(outfile_name=path_data_train / f'input_{tag}.data', append=True)
-                        mynnpdata.write(outfile_name=path_data_train / 'input.data', append=True)
-                        mydict = mynnpdata.get_dict()
-                        # mydict['lforces']: 150 * 120 * 3, 150 structures
-                        # after vstack, (150*120) * 3
-                        # many frames
-                        lforces.append(np.vstack(mydict['lforces']))
-                        lenergies += mydict['lenergies']
+                        forces, energies = self._append_struct_to_data(
+                            path_struct=d, tag=tag, comment_file=comment_file,
+                            path_data_train=path_data_train,
+                            if_adjust_size=if_adjust_size, size_top=size_top,
+                            size_bottom=size_bottom, size_close=size_close,
+                            sample_type=sample_type)
+                        lforces.append(forces)
+                        lenergies += energies
 
-        lforces = np.vstack(lforces)
-        lenergies = np.array(lenergies)
+        self._save_data_npy(path_data_train, lforces, lenergies, sample_type)
 
-        np.save(path_data_train / 'forces.npy', lforces)
-        np.save(path_data_train / 'energy.npy', lenergies)
+
+    # ===== 产物目录的重建守卫（凡是会覆盖/清空已有产物的入口共用）=====
+    @staticmethod
+    def _guard_rebuild_dir(path_dir: Path = None, if_force_rebuild: bool = False,
+                           label: str = '') -> None:
+        """非空产物目录的重建守卫：默认拒绝覆盖，force 时才清空重建。
+
+        既有实现里多处直接 ``shutil.rmtree`` 或无条件覆盖，一次误跑就会把上一轮
+        结果冲掉。改成：目录不存在或为空 -> 直接放行；目录非空 -> 默认抛
+        ``FileExistsError`` 并把待删路径打出来，请作者自己确认后删除；只有显式
+        传 ``if_force_rebuild=True`` 才由本函数清空该目录后重建。
+
+        Note:
+            force 分支会整目录删除，属于显式授权的破坏性操作，因此删除前把目录内
+            容逐条打印出来，留在日志里可追溯。
+
+        Args:
+            path_dir: 待重建的产物目录。
+            if_force_rebuild: True 时强制清空重建；False（默认）时非空即报错。
+            label: 报错信息里的用途说明（如 ``training run``），便于定位是哪一步。
+
+        Raises:
+            FileExistsError: 目录非空且 ``if_force_rebuild`` 为 False。
+        """
+        path_dir = Path(path_dir)
+        if not path_dir.is_dir():
+            return
+        lentry = sorted(path_dir.iterdir())
+        if not lentry:
+            return
+
+        what = f"{label} dir " if label else "dir "
+        if not if_force_rebuild:
+            lshow = [e.name for e in lentry[:10]]
+            more = f" ... (+{len(lentry) - 10} more)" if len(lentry) > 10 else ""
+            raise FileExistsError(
+                f"❌ {what}{path_dir} is not empty ({len(lentry)} entries): "
+                f"{', '.join(lshow)}{more}. "
+                f"Refusing to overwrite existing results. "
+                f"Delete it yourself after checking, or pass if_force_rebuild=True to rebuild.")
+
+        print(f"⚠️ if_force_rebuild=True: removing {len(lentry)} existing entry(ies) in {path_dir}")
+        for entry in lentry:
+            print(f"     - {entry.name}")
+        shutil.rmtree(path_dir)
+
+
+    # ===== 产物的「已完成即跳过」阀门（与 _guard_rebuild_dir 配套，凡是可重跑的后处理入口共用）=====
+    @staticmethod
+    def _is_file_nonempty(path_file: Path = None) -> bool:
+        """标记文件是否「存在且非空」。
+
+        空文件一律判为**未完成**：上一轮把文件 open 出来就崩了、或作业被 Slurm 砍在
+        写盘中途，都会留下 0 字节残骸，按完成处理会把坏结果一路带进汇总表。
+
+        Args:
+            path_file: 待判定的标记文件。
+
+        Returns:
+            存在、是普通文件且大小 > 0 时为 True。
+        """
+        path_file = Path(path_file)
+        return path_file.is_file() and path_file.stat().st_size > 0
+
+    @classmethod
+    def _skip_done_stage(cls, lpath_marker: list = None, label: str = '',
+                         if_skip_if_done: bool = True) -> bool:
+        """完成阀门：标记文件全部非空则打印一行并让调用方直接跳过本步。
+
+        与 :meth:`_guard_rebuild_dir` 是一对：守卫管的是「非空目录不许覆盖」（报错），
+        阀门管的是「这步上一轮已经跑完了」（跳过）。两者叠加后，同一个 DO_POST 阶段可以
+        反复重跑而既不删已有结果、也不会因为半成品目录直接抛 FileExistsError。
+
+        Note:
+            标记文件必须是该步**最后**才落盘的产物，否则中途崩掉的目录会被误判成完成。
+
+        Args:
+            lpath_marker: 该步的完成标记文件列表，需全部存在且非空才算完成。
+            label: 打印信息里的用途说明（如 ``post_training <dir>``）。
+            if_skip_if_done: 阀门总开关；False 时本函数恒返回 False（永远重跑）。
+
+        Returns:
+            True 表示本步已完成、调用方应当直接返回。
+        """
+        if not if_skip_if_done:
+            return False
+        lpath_marker = [Path(p) for p in (lpath_marker or [])]
+        if not lpath_marker:
+            return False
+        lmiss = [p for p in lpath_marker if not cls._is_file_nonempty(p)]
+        if lmiss:
+            return False
+        print(f"⏭️ skip {label}: already done "
+              f"({len(lpath_marker)} marker file(s) present and non-empty, "
+              f"e.g. {lpath_marker[0].name}). Pass if_skip_if_done=False to redo it.")
+        return True
+
+    @classmethod
+    def _dir_covers_source(cls, dir_target: Path = None, dir_source: Path = None) -> bool:
+        """``dir_target`` 是否把 ``dir_source`` 里的每个文件都拷全了（按相对路径逐个核对）。
+
+        只核对「在不在」，不核对内容也不比大小：runner (``pei_lmp_run_properties``) 会在作业里
+        就地 sed epoch 目录中的 template，改完大小与源不同，比大小会把跑过的目录误判成没准备好。
+
+        Args:
+            dir_target: 目标目录（epoch 下的 template/ 或 post/）。
+            dir_source: 源目录（``dir_lmp_utils`` 下的同名目录）；为 None 或不存在时退回「非空即可」。
+
+        Returns:
+            源里每个文件在目标里都有对应文件时为 True。
+        """
+        dir_target = Path(dir_target)
+        if not dir_target.is_dir():
+            return False
+        dir_source = Path(dir_source) if dir_source is not None else None
+        if dir_source is None or not dir_source.is_dir():
+            return any(dir_target.iterdir())
+        for path_src in dir_source.rglob('*'):
+            if not path_src.is_file():
+                continue
+            if not (dir_target / path_src.relative_to(dir_source)).is_file():
+                return False
+        return True
+
+    @classmethod
+    def _epoch_dir_is_prepared(cls, dir_epoch: Path = None, dir_lmp_utils: Path = None) -> bool:
+        """单个 epoch 物性目录的**脚手架**是否已铺好（potential/ + template/ + post/）。
+
+        只看 :meth:`_prepare_epoch_dir` 落下的东西，不看 LAMMPS 有没有跑过：脚手架在、
+        结果不在，正是「上一轮准备好了但作业没提交成功」的状态，此时应当保留目录直接重投。
+
+        Note:
+            template/、post/ 要跟源目录逐文件核对，不能只看「目录非空」：``_prepare_epoch_dir``
+            最后一步正是整目录拷 post/，中途被打断（Ctrl-C、磁盘满）会留下一个只有几个文件、
+            却「看起来准备好了」的目录，被原样保留后投出去，runner 会因为缺脚本而失败。
+            没给 dir_lmp_utils 时退回旧判据（非空即可），以便单独调用。
+
+        Args:
+            dir_epoch: ``properties/y_epoch_scan/y_dir/<epoch>/``。
+            dir_lmp_utils: LAMMPS 模板与后处理工具源目录（template/、post/ 的来源）。
+
+        Returns:
+            势函数三件套齐全、且 template/、post/ 相对源目录拷全时为 True。
+        """
+        dir_epoch = Path(dir_epoch)
+        dir_potential = dir_epoch / 'potential'
+        if not all(cls._is_file_nonempty(dir_potential / fn) for fn in ['input.nn', 'scaling.data']):
+            return False
+        if not any(cls._is_file_nonempty(w) for w in dir_potential.glob('weights.*.data')):
+            return False
+        dir_lmp_utils = Path(dir_lmp_utils) if dir_lmp_utils is not None else None
+        return all(cls._dir_covers_source(dir_epoch / sub,
+                                          (dir_lmp_utils / sub) if dir_lmp_utils is not None else None)
+                   for sub in ['template', 'post'])
+
+    @staticmethod
+    def _epoch_dir_result_markers(dir_epoch: Path = None) -> list:
+        """单个 epoch 物性目录里 :meth:`post_epoch_scan` 会去读的全部结果文件。
+
+        路径与 post_epoch_scan 的读取逻辑一一对应（stretch 逐相、cij 逐相、gsfe 逐滑移系），
+        改那边的目录约定时这里必须同步改。
+
+        Args:
+            dir_epoch: ``properties/y_epoch_scan/y_dir/<epoch>/``。
+
+        Returns:
+            结果文件路径列表。
+        """
+        dir_epoch = Path(dir_epoch)
+        lpath = [dir_epoch / 'y_stretch' / lat / 'p_post_stretch.txt' for lat in _LATS]
+        lpath += [dir_epoch / 'y_Cij_energy' / lat / 'y_post_cij_energy.txt' for lat in _LATS]
+        lpath += [dir_epoch / 'y_gsfe' / phase / t / 'y_post_gsfe.txt'
+                  for phase, ltype in _GSFE_TYPES.items() for t in ltype]
+        return lpath
+
+    @classmethod
+    def _epoch_dir_is_done(cls, dir_epoch: Path = None) -> bool:
+        """单个 epoch 物性目录的 LAMMPS **结果**是否齐全（stretch + cij + gsfe 全部非空）。
+
+        Args:
+            dir_epoch: ``properties/y_epoch_scan/y_dir/<epoch>/``。
+
+        Returns:
+            三类结果文件全部存在且非空时为 True。
+        """
+        return all(cls._is_file_nonempty(p) for p in cls._epoch_dir_result_markers(dir_epoch))
+
+
+    # ===== 数据落盘的公共部件（generate_data 与 generate_data_tree 共用）=====
+    @staticmethod
+    def _clean_old_data(path_data_train: Path, if_clean_old: bool = True) -> None:
+        """清空 data/train/ 下已有的 input*.data。
+
+        Args:
+            path_data_train: data/train 目录。
+            if_clean_old: False 时直接返回（追加模式）。
+        """
+        if not if_clean_old:
+            print("  ↷ keep existing input*.data (append mode)")
+            return
+        for path_file in path_data_train.iterdir():
+            if path_file.is_file() and path_file.name.startswith("input") and path_file.suffix == ".data":
+                path_file.unlink()
+
+
+    def _append_struct_to_data(self, path_struct: Path = None, tag: str = None,
+                               comment_file: str = None, path_data_train: Path = None,
+                               if_adjust_size: bool = False, size_top: int = 72,
+                               size_bottom: int = 36, size_close: int = 48,
+                               sample_type: str = None) -> tuple:
+        """读一个结构目录的 OUTCAR 末帧，追加写入 input.data 与 input_<tag>.data。
+
+        Args:
+            path_struct: 含 OUTCAR 的结构目录。
+            tag: 该结构的 tag 标签（写进 comment 行）。
+            comment_file: comment 行里的溯源路径。
+            path_data_train: data/train 目录。
+            if_adjust_size: 是否做原子数规整。
+            size_top: 原子数上限。
+            size_bottom: 原子数下限。
+            size_close: 规整目标原子数。
+            sample_type: None / 'train' / 'test'，见 nnpdata.write_from_ase。
+
+        Returns:
+            ``(forces, lenergies)``：该结构的力数组（(n_atom, 3)）与能量列表。
+        """
+        mynnpdata = nnpdata()
+        mynnpdata.load_from_outcar(outcarfile=path_struct / 'OUTCAR', index='-1',
+                                   tag=tag, comment_file=comment_file)
+        if if_adjust_size:
+            mynnpdata.adjust_size(size_top=size_top, size_bottom=size_bottom, size_close=size_close)
+        mynnpdata.write(outfile_name=path_data_train / f'input_{tag}.data', append=True,
+                        sample_type=sample_type)
+        mynnpdata.write(outfile_name=path_data_train / 'input.data', append=True,
+                        sample_type=sample_type)
+        mydict = mynnpdata.get_dict()
+        # mydict['lforces']: n_frame × n_atom × 3；本流程只读末帧，vstack 后是 (n_atom, 3)
+        return np.vstack(mydict['lforces']), mydict['lenergies']
+
+
+    @staticmethod
+    def _save_data_npy(path_data_train: Path, lforces: list, lenergies: list,
+                       sample_type: str = None) -> None:
+        """把本批结构的力/能量落盘为 npy 备查。
+
+        文件名按 sample_type 区分，避免 train / test 两批互相覆盖：
+        None 与 'train' 都写 forces.npy / energy.npy（沿用历史命名），
+        'test' 写 forces_test.npy / energy_test.npy。
+
+        Args:
+            path_data_train: data/train 目录。
+            lforces: 每个结构的力数组列表。
+            lenergies: 每个结构的能量列表。
+            sample_type: None / 'train' / 'test'。
+        """
+        dict_suffix = {None: '', 'train': '', 'test': '_test'}
+        suffix = dict_suffix[sample_type]
+        if not lforces:
+            print(f"⚠️  no structure read for sample_type={sample_type}; "
+                  f"forces{suffix}.npy / energy{suffix}.npy not written.")
+            return
+        np.save(path_data_train / f'forces{suffix}.npy', np.vstack(lforces))
+        np.save(path_data_train / f'energy{suffix}.npy', np.array(lenergies))
+
+
+    @staticmethod
+    def _check_outcar_finished(path_outcar: Path) -> bool:
+        """判断 OUTCAR 是否正常跑完（末尾有 VASP 的计时段）。
+
+        只读文件尾部 4 kB，避免整读几十 MB 的 OUTCAR。
+
+        Args:
+            path_outcar: OUTCAR 路径。
+
+        Returns:
+            True 表示 OUTCAR 完整。
+        """
+        with open(path_outcar, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - 4096))
+            return b'General timing and accounting' in f.read()
+
+
+    @staticmethod
+    def _natural_sort_key(path: Path = None) -> tuple:
+        """路径的自然序排序 key：先按深度，再按各级目录名的「数字按数值比」顺序。
+
+        续算链的目录名就是 ``1``、``2``、…、``10``，纯字典序下 ``10`` 排在 ``2`` 前面，
+        取「最后一个」就会拿到 ``2`` 这个更早的 OUTCAR。把名字里的数字段抽出来按数值比才对。
+
+        Args:
+            path: 待排序的路径。
+
+        Returns:
+            可直接用于 ``sorted(key=...)`` 的元组。
+        """
+        def key_part(part: str) -> tuple:
+            # 数字段 -> (0, 数值, '')，非数字段 -> (1, 0, 原文)：三元组同形，任意两段都可比。
+            return tuple((0, int(tok), '') if tok.isdigit() else (1, 0, tok)
+                         for tok in re.split(r'(\d+)', part) if tok != '')
+        return (len(path.parts), tuple(key_part(part) for part in path.parts))
+
+
+    @classmethod
+    def _get_ldir_struct_tree(cls, path_tag: Path = None) -> list:
+        """递归找出一个 tag 目录下的全部结构目录，并处理重启续算链。
+
+        约定（对 ``construct_dataset/fulldataset`` 这种不规则目录树成立）：
+
+        - 目录里没有 OUTCAR -> 它只是层级目录，继续递归子目录；
+        - 目录里有 OUTCAR   -> 它是一个结构；其下所有子目录里的 OUTCAR 都是同一次
+          计算的重启续算（如 ``0.937/1``、``0.937/2``、``0.937/3``），整条链只算
+          **一个**结构，取链上最后一个跑完的 OUTCAR（按深度、再按目录名自然序）。
+
+        链上没有任何完整 OUTCAR 时该结构被跳过并告警，不抛异常——测试集缺一个点
+        不该让整条流水线停下。
+
+        Args:
+            path_tag: 一个 tag 的根目录。
+
+        Returns:
+            结构目录列表（每个目录直接含被选中的 OUTCAR），按路径排序。
+        """
+        ldir_struct = []
+        if (path_tag / 'OUTCAR').is_file():
+            # 整条续算链的候选：自己 + 所有后代目录里的 OUTCAR
+            lpath_outcar = sorted((path_tag / 'OUTCAR', *sorted(path_tag.rglob('OUTCAR'))),
+                                  key=cls._natural_sort_key)
+            lpath_outcar = list(dict.fromkeys(lpath_outcar))
+            lpath_done = [path_outcar for path_outcar in lpath_outcar
+                          if cls._check_outcar_finished(path_outcar)]
+            if not lpath_done:
+                print(f"⚠️  no finished OUTCAR in {path_tag} (chain of {len(lpath_outcar)}), skipped.")
+                return []
+            path_pick = lpath_done[-1]
+            if len(lpath_outcar) > 1:
+                print(f"  ↻ restart chain {path_tag.name}: {len(lpath_outcar)} OUTCAR(s) "
+                      f"-> use {path_pick.parent.name}")
+            return [path_pick.parent]
+
+        for path_sub in sorted(path_tag.iterdir()):
+            if path_sub.is_dir():
+                ldir_struct += cls._get_ldir_struct_tree(path_sub)
+        return ldir_struct
+
+
+    def generate_data_tree(self, dir_data_source: Path = None, ltag: list = None,
+                           if_adjust_size: bool = False, size_top: int = 72,
+                           size_bottom: int = 36, size_close: int = 48,
+                           sample_type: str = None, if_clean_old: bool = False):
+        """从层级不规则的目录树生成 n2p2 数据（``generate_data`` 的递归版）。
+
+        ``generate_data`` 要求 ``<tag>/<subdir>/y_dir/<point>/OUTCAR`` 的固定四层结构；
+        ``construct_dataset/fulldataset`` 下每个 tag 的层级各不相同（``A31-1/<点>/OUTCAR``、
+        ``A31-3/<厚度>/y_E_in_2_slab/y_dir/<点>/OUTCAR``、``A41-1/<相>/<层数>/<晶格>/
+        y_gsfe_basal/y_dir/<点>/OUTCAR`` …），故这里改为“递归找 OUTCAR”，
+        tag 取 ``dir_data_source`` 下的一级子目录名，续算链的处理见
+        :meth:`_get_ldir_struct_tree`。
+
+        comment 行的溯源路径取相对 ``dir_data_source`` 的路径（含 tag），
+        与 ``generate_data`` 的写法一致，后处理按 ``tag=`` 分组时两批数据可以直接混用。
+
+        Args:
+            dir_data_source: 数据根目录（其一级子目录即 tag）。
+            ltag: 要读的 tag 列表；None 表示全部一级子目录。
+            if_adjust_size: 是否把原子数规整到 [size_bottom, size_top] 并逼近 size_close。
+            size_top: 原子数上限。
+            size_bottom: 原子数下限。
+            size_close: 规整目标原子数。
+            sample_type: None / 'train' / 'test'，见 nnpdata.write_from_ase。
+            if_clean_old: 是否先清空 data/train/ 下的 input*.data。默认 False
+                （本方法通常在 generate_data 之后调用，往同一份 input.data 追加测试集）。
+
+        Returns:
+            ``{tag: 结构数}``。
+
+        Raises:
+            FileNotFoundError: dir_data_source 或某个指定 tag 目录不存在。
+        """
+        os.chdir(self.dir_root)
+        path_data_train = self.dir_data / 'train'
+        dir_data_source = Path(dir_data_source)
+        if not dir_data_source.is_dir():
+            raise FileNotFoundError(f"❌ Missing data source dir: {dir_data_source}")
+
+        if ltag is None:
+            ltag = sorted(path_sub.name for path_sub in dir_data_source.iterdir()
+                          if path_sub.is_dir())
+        for tag in ltag:
+            if not (dir_data_source / tag).is_dir():
+                raise FileNotFoundError(f"❌ Missing tag dir: {dir_data_source / tag}")
+
+        self._clean_old_data(path_data_train, if_clean_old=if_clean_old)
+
+        lforces = []
+        lenergies = []
+        dict_nstruct = {}
+        for tag in ltag:
+            ldir_struct = self._get_ldir_struct_tree(dir_data_source / tag)
+            print(f'========{tag} - {len(ldir_struct)} structures (recursive)')
+            for path_struct in ldir_struct:
+                comment_file = str(path_struct.relative_to(dir_data_source))
+                forces, energies = self._append_struct_to_data(
+                    path_struct=path_struct, tag=tag, comment_file=comment_file,
+                    path_data_train=path_data_train,
+                    if_adjust_size=if_adjust_size, size_top=size_top,
+                    size_bottom=size_bottom, size_close=size_close,
+                    sample_type=sample_type)
+                lforces.append(forces)
+                lenergies += energies
+            dict_nstruct[tag] = len(ldir_struct)
+
+        self._save_data_npy(path_data_train, lforces, lenergies, sample_type)
+        print(f"✅ generate_data_tree: {sum(dict_nstruct.values())} structures "
+              f"from {len(ltag)} tag(s), sample_type={sample_type}.")
+        return dict_nstruct
+
+
+    def import_sf_from_file(self, path_sf: Path = None, dict_expected: dict = None,
+                            if_copy_to_train: bool = True) -> list:
+        """把一份固化的对称函数文件接到干净的 input.nn.nosf 后，生成 train/input.nn。
+
+        用于“SF 集合已经在别处选好、本次直接复用”的场景（如 stage1 直接沿用
+        stage0 的 CUR + ``nnp-prune`` 结果），替代 :meth:`select_sf_by_cur` 的最后一步；
+        缩放（scaling.data）仍由各训练 run 在本 stage 的新数据上重算。
+
+        幂等：每次都从 ``input.nn.nosf`` 重新拼，不会重复追加。文件里的注释行
+        （``#`` 开头）只作说明，不会写进 input.nn。
+
+        Note:
+            绝不能拿训练跑完的 input.nn 当模板 —— nnp-train 会把归一化结果
+            （mean_energy / conv_energy / conv_length）写回 input.nn。
+
+        Args:
+            path_sf: 固化 SF 文件，每行一条 ``symfunction_short ...``。
+            dict_expected: ``{symfunction_type: 期望条数}``，如 ``{2: 24, 9: 9}``；
+                None 表示只统计、不核对。
+            if_copy_to_train: 是否写出 ``<dir_train>/input.nn``。
+
+        Returns:
+            被写入的 symfunction_short 行列表。
+
+        Raises:
+            FileNotFoundError: 缺少固化 SF 文件或 input.nn.nosf。
+            ValueError: 文件里没有 SF 行，或分类型条数与 dict_expected 不符。
+        """
+        os.chdir(self.dir_root)
+        path_sf = Path(path_sf)
+        if not path_sf.is_file():
+            raise FileNotFoundError(f"❌ Missing pinned symmetry function file: {path_sf}")
+        if not self.path_input_nn_nosf.is_file():
+            raise FileNotFoundError(f"❌ Missing {self.path_input_nn_nosf}.")
+
+        lsf = [line for line in path_sf.read_text(encoding='utf-8').splitlines(keepends=True)
+               if line.split('#', 1)[0].split()[:1] == ['symfunction_short']]
+        if not lsf:
+            raise ValueError(f"❌ No symfunction_short line found in {path_sf}.")
+
+        dict_count = {}
+        for sf in lsf:
+            sftype = int(sf.split('#', 1)[0].split()[2])
+            dict_count[sftype] = dict_count.get(sftype, 0) + 1
+        if dict_expected is not None and dict_count != dict_expected:
+            raise ValueError(f"❌ Symmetry function count by type mismatch: got {dict_count}, "
+                             f"expected {dict_expected}.")
+
+        path_selected = self.dir_sf / 'file' / 'input.nn.selectedsf'
+        os.makedirs(path_selected.parent, exist_ok=True)
+        shutil.copy(self.path_input_nn_nosf, path_selected)
+        with open(path_selected, 'a', encoding='utf-8') as f:
+            f.writelines(lsf)
+        shutil.copy(path_sf, self.dir_sf / 'file' / 'SFs_selected.dat')
+
+        if if_copy_to_train:
+            shutil.copy(path_selected, self.dir_train / 'input.nn')
+            print(f"✅ Imported {len(lsf)} sfs {dict_count} from {path_sf.name} "
+                  f"-> {self.dir_train / 'input.nn'}")
+        else:
+            print(f"✅ Imported {len(lsf)} sfs {dict_count} from {path_sf.name} -> {path_selected}")
+        return lsf
+
+
+    def check_input_data(self, path_input_data: Path = None, dict_nstruct_expected: dict = None,
+                         n_struct_expected: int = None, n_atom_expected: int = None,
+                         dict_nstruct_test_expected: dict = None) -> bool:
+        """核对生成好的 input.data：总量、逐 tag 结构数、train/test 划分标记。
+
+        训练前的关口检查：数据是不是按设计建出来的，只读不改。逐 tag 期望值不符时
+        逐项打 ❌ 并在末尾给 summary，返回 False（由调用方决定是否终止）。
+
+        Args:
+            path_input_data: 待检查的 input.data。
+            dict_nstruct_expected: ``{tag: 期望结构数}``；None 表示只打印实际值。
+            n_struct_expected: 期望总结构数；None 表示不核对。
+            n_atom_expected: 期望总原子数；None 表示不核对。
+            dict_nstruct_test_expected: ``{tag: 期望结构数}``，标了 ``set=test`` 的部分；
+                None 表示不单独核对测试集。
+
+        Returns:
+            全部核对通过为 True。
+
+        Raises:
+            FileNotFoundError: input.data 不存在。
+        """
+        path_input_data = Path(path_input_data)
+        if not path_input_data.is_file():
+            raise FileNotFoundError(f"❌ Missing {path_input_data}. Run generate_data first.")
+
+        # 一次扫完：结构数、原子数、每个结构的 tag 与 set= 标记
+        ltag, lset = [], []
+        n_atom = 0
+        tag, sample_type = 'all', 'unset'
+        with open(path_input_data, 'r', encoding='utf-8') as f:
+            for line in f:
+                lfield = line.split()
+                if not lfield:
+                    continue
+                if lfield[0] == 'begin':
+                    tag, sample_type = 'all', 'unset'
+                    for field in lfield[1:]:
+                        if field.startswith('set='):
+                            sample_type = field.split('=', 1)[1]
+                elif lfield[0] == 'comment' and 'tag=' in line:
+                    tag = line.split('tag=', 1)[1].split('|')[0].strip()
+                elif lfield[0] == 'atom':
+                    n_atom += 1
+                elif lfield[0] == 'end':
+                    ltag.append(tag)
+                    lset.append(sample_type)
+
+        df = pd.DataFrame({'tag': ltag, 'set': lset})
+        n_struct = len(df)
+        n_bad = 0
+
+        print(f"================ 📊 {path_input_data}")
+        print(f"  structures {n_struct}" + (f" (期望 {n_struct_expected})" if n_struct_expected else ''))
+        print(f"  atoms      {n_atom}" + (f" (期望 {n_atom_expected})" if n_atom_expected else ''))
+        for sample_type, n in df['set'].value_counts().items():
+            print(f"  set={sample_type}: {n} structures")
+        if n_struct_expected is not None and n_struct != n_struct_expected:
+            print(f"  ❌ 结构总数不符"); n_bad += 1
+        if n_atom_expected is not None and n_atom != n_atom_expected:
+            print(f"  ❌ 原子总数不符"); n_bad += 1
+
+        mask_all = pd.Series(True, index=df.index)
+        for dict_expected, mask, label in [(dict_nstruct_expected, mask_all, 'all'),
+                                           (dict_nstruct_test_expected, df['set'] == 'test', 'set=test')]:
+            if dict_expected is None:
+                continue
+            print(f"---------------- 逐 tag 结构数（{label}）")
+            dict_count = df[mask]['tag'].value_counts().to_dict()
+            for tag in sorted(set(dict_expected) | set(dict_count)):
+                n_act, n_exp = dict_count.get(tag, 0), dict_expected.get(tag)
+                if n_exp is None:
+                    print(f"  ❌ {tag:8s} {n_act:6d} / {'-':>6s}  # 期望表里没有这个 tag"); n_bad += 1
+                elif n_act != n_exp:
+                    print(f"  ❌ {tag:8s} {n_act:6d} / {n_exp:6d}"); n_bad += 1
+                else:
+                    print(f"  ✅ {tag:8s} {n_act:6d} / {n_exp:6d}")
+
+        if n_bad == 0:
+            print("================ 🎉 input.data 全部核对通过。")
+            return True
+        print(f"================ ❌ {n_bad} 项不符，先查 data_tag_dict / 源目录再往下走。")
+        return False
 
 
     def generate_lsf(self, lrc_dict: dict = None, n_dict: dict = None, lrs_dict: dict = None, llambd: list = None, lzeta: list = None,
@@ -678,48 +1256,230 @@ class PeiN2p2:
 
 
     # ===== 1 核常驻控制器的 child 作业编排（提交即捕获作业号，阶段末统一阻塞等待）=====
+    # 「提交结果未知」的 sbatch 报错特征：这类失败**不能**当成「作业没被创建」。slurmctld 已经
+    # 收下并建好了作业，只是回执在网络上丢了，客户端才以非 0 退出。与
+    # pei_slurm_univ_sbatch_retry 的 SBATCH_AMBIGUOUS_PATTERNS 保持一致，改一处要同步另一处。
+    LPATTERN_SBATCH_AMBIGUOUS = (
+        'Unexpected message received',
+        'Socket timed out on send/recv operation',
+        'Zero Bytes were transmitted or received',
+        'Connection timed out',
+    )
+
     @staticmethod
-    def _sbatch_capture(script: str, cwd: Path, retries: int = 99, retry_interval: int = 10) -> str:
+    def _find_jobid_by_tag_squeue(tag: str = None, timeout: int = 60) -> tuple:
+        """按去重标签在**队列**里找作业号。
+
+        Args:
+            tag: ``#SBATCH --comment`` 去重标签。
+            timeout: 单次 squeue 的超时秒数。
+
+        Returns:
+            ``(if_ok, jobid)``：if_ok 为 False 表示查询失败（**不是**「没有」）；
+            if_ok 为 True 时 jobid 为作业号字符串，或 None 表示队列里确实没有。
+        """
+        user = os.environ.get('USER') or getpass.getuser()
+        try:
+            out = subprocess.run(['squeue', '-u', user, '-h', '-o', '%i|%k'],
+                                 capture_output=True, text=True, timeout=timeout)
+        except Exception:
+            return False, None
+        if out.returncode != 0:
+            return False, None
+        for line in out.stdout.splitlines():
+            jobid, _, comment = line.partition('|')
+            if comment.strip() == tag:
+                return True, jobid.strip()
+        return True, None
+
+    @staticmethod
+    def _find_jobid_by_tag_sacct(tag: str = None, since_epoch: float = None,
+                                 timeout: int = 60) -> tuple:
+        """按去重标签在**记账历史**里找作业号（队列之外的第二道核对）。
+
+        回执丢失时作业其实已经建好，但如果它秒挂或秒完，等核对跑起来时它早已离队 ——
+        只看 squeue 会判成「没落地」而重投，那就是两个进程写同一份输出。
+
+        Note:
+            必须限定 ``--starttime`` 到本次 sbatch 之前那一刻：标签固化在脚本文件里，同一个
+            脚本的历史作业会一直留在 sacct 里，不限定时间就会把上一轮早跑完的作业当成这次刚
+            落地的作业，把重投永久堵死。
+
+        Args:
+            tag: ``#SBATCH --comment`` 去重标签。
+            since_epoch: 本次 sbatch 之前的时间戳（epoch 秒）。
+            timeout: 单次 sacct 的超时秒数。
+
+        Returns:
+            ``(status, jobid)``：status 为 ``'ok'``（jobid 为作业号或 None＝确实没有）、
+            ``'fail'``（暂态查询失败，重查还有希望）或 ``'absent'``（本机没有 sacct，
+            记账这条路走不通）。
+        """
+        user = os.environ.get('USER') or getpass.getuser()
+        since = datetime.fromtimestamp(since_epoch).strftime('%Y-%m-%dT%H:%M:%S')
+        try:
+            out = subprocess.run(['sacct', '-u', user, f'--starttime={since}',
+                                  '-n', '-X', '-P', '-o', 'JobID,Comment'],
+                                 capture_output=True, text=True, timeout=timeout)
+        except FileNotFoundError:
+            return 'absent', None
+        except Exception:
+            return 'fail', None
+        if out.returncode != 0:
+            return 'fail', None
+        for line in out.stdout.splitlines():
+            jobid, _, comment = line.partition('|')
+            if comment.strip() == tag:
+                return 'ok', jobid.strip()
+        return 'ok', None
+
+    @classmethod
+    def _reconcile_jobid_by_tag(cls, tag: str = None, since_epoch: float = None,
+                                retries: int = 9, retry_interval: int = 10,
+                                timeout: int = 60, if_strict: bool = False) -> str | None:
+        """核对「刚才那次 sbatch 到底有没有把作业投出去」，返回落地的作业号。
+
+        队列与记账两道都明确说「没有」才返回 None（此时重投是安全的）。
+
+        Note:
+            两道都查不动时怎么办取决于 ``if_strict``，而它取决于上一次提交的失败**性质**：
+            回执丢失 / 超时（作业很可能已经建好）时必须 ``if_strict=True``，查不动就抛错，
+            绝不拿「不知道」去赌不会重复；而「连不上 slurmctld」这类失败作业确实没被创建，
+            此时核对查不动多半只是同一个 slurmctld 还没缓过来，把它升级成致命错误会让最常见的
+            暂态失败直接打断整条流水线，故 ``if_strict=False`` 时告警后返回 None 放行重投。
+
+        Args:
+            tag: ``#SBATCH --comment`` 去重标签。
+            since_epoch: 本次 sbatch 之前的时间戳（epoch 秒）。
+            retries: 核对查询失败时的重试次数。
+            retry_interval: 每次重试前等待的秒数。
+            timeout: 单次查询的超时秒数。
+            if_strict: 查不动时是否抛错（True）而不是放行重投（False）。
+
+        Returns:
+            作业号字符串；None 表示确认没有作业落地（或非严格模式下核对不了）。
+
+        Raises:
+            RuntimeError: ``if_strict`` 且队列与记账连续查询失败，作业是否已创建无法判定。
+        """
+        last_err = ''
+        for attempt in range(1, retries + 1):
+            if_ok, jobid = cls._find_jobid_by_tag_squeue(tag, timeout=timeout)
+            if if_ok:
+                if jobid:
+                    return jobid
+                status, jobid = cls._find_jobid_by_tag_sacct(tag, since_epoch, timeout=timeout)
+                if status == 'ok':
+                    return jobid
+                if status == 'absent':
+                    # 本机压根没有 sacct：核对不了「秒挂的短作业」是这台机器的固有短板，不是
+                    # 本次的未知状态。告警后按队列判定放行，否则所有回执丢失都会变成漏投。
+                    print("  ⚠️  no sacct on this machine; reconciled by squeue only "
+                          "(a job that crashed within seconds cannot be seen).")
+                    return None
+                last_err = 'sacct query failed'
+            else:
+                last_err = 'squeue query failed'
+            if attempt < retries:
+                print(f"  ⚠️  reconcile failed (attempt {attempt}/{retries}): {last_err}; "
+                      f"retry in {retry_interval}s")
+                time.sleep(retry_interval)
+        if not if_strict:
+            print(f"  ⚠️  could not reconcile (tag {tag}) after {retries} attempts: {last_err}; "
+                  f"the failed submission was not an ambiguous one (no job created), so retrying.")
+            return None
+        raise RuntimeError(
+            f"❌ Could not reconcile submission (tag {tag}) after {retries} attempts: {last_err}. "
+            f"The submission may have been accepted (lost receipt / timeout) and whether the job "
+            f"exists is unknown; refusing to re-submit (a duplicate job would silently corrupt the "
+            f"outputs). Check manually: "
+            f"sacct -u $USER --starttime=<submit time> -X -o JobID,State,Comment%20")
+
+    @classmethod
+    def _sbatch_capture(cls, script: str, cwd: Path, retries: int = 99, retry_interval: int = 10,
+                        timeout: int = 120) -> str:
         """在 cwd 下 sbatch 单个脚本并返回作业号（--parsable，确定性捕获）。
 
-        提交偶发失败（slurmctld 繁忙 / 超时 / 通信抖动）时 returncode 非 0、拿不到作业号。
-        这类失败意味着作业根本没被创建，重试绝对安全（不会产生重复作业），故轮询重试而不是
-        立刻抛错中断整条流水线；重试用尽仍失败才抛 RuntimeError。与 _snapshot_jobids 的
-        squeue 重试同一套 99×10s 策略。
+        提交偶发失败（slurmctld 繁忙 / 超时 / 通信抖动）时 returncode 非 0、拿不到作业号，
+        故轮询重试而不是立刻抛错中断整条流水线（与 _snapshot_jobids 同一套 99×10s 策略）。
+
+        Note:
+            **重投之前一律先核对**。曾经的假设是「提交失败 = slurmctld 没接住 = 没有作业被
+            创建 = 重投绝对安全」，这对「连不上控制器」成立，对**回执丢失**不成立：
+            ``Batch job submission failed: Unexpected message received`` 的真实含义是作业已经
+            建好了，只是应答没回到客户端；sbatch 超时同理（Slurm 可能已经收下）。这里提交的是
+            nnp-scaling / nnp-train，重复作业会同时写同一份 scaling.data / weights.*.out /
+            learning-curve.out，数据静默作废且事后极难发现。所以每次失败后先按去重标签去
+            squeue + sacct 核对（:meth:`_reconcile_jobid_by_tag`），核到就当成功返回它的作业号，
+            确认没落地才重投。判定方向刻意偏保守：漏投重跑一次即可，重复作业不可逆。
+
+            标签取自脚本自带的 ``#SBATCH --comment``（这些 sub.* 是从模板拷来的，第一次调用时
+            现盖一个）；已有标签一律沿用，重跑流程才认得出上一轮还在跑的作业。
 
         Args:
             script: 提交脚本文件名（相对 cwd）。
             cwd: 提交目录（作业的工作目录即此目录）。
             retries: 提交失败时的重试次数。
             retry_interval: 每次重试前等待的秒数。
+            timeout: 单次 sbatch 的超时秒数。
 
         Returns:
             Slurm 作业号字符串。
 
         Raises:
-            RuntimeError: 重试用尽仍无法提交，或提交成功却未解析到作业号。
+            RuntimeError: 重试用尽仍无法提交、提交成功却未解析到作业号，或作业是否已创建
+                无法判定（此时绝不重投）。
         """
+        path_script = Path(cwd) / str(script)
+        tag = read_comment_tag(path_script) or stamp_comment_tag(path_script)
+
         last_err = ''
         for attempt in range(1, retries + 1):
-            out = subprocess.run(['sbatch', '--parsable', str(script)], cwd=str(cwd),
-                                 capture_output=True, text=True)
-            # returncode==0 才算提交成功：--parsable 无 --wait，提交成功即 0、stdout 是作业号。
-            if out.returncode == 0:
-                # --parsable 输出 "<jobid>" 或 "<jobid>;<cluster>"
-                jobid = out.stdout.strip().split(';')[0]
-                if not jobid:
-                    raise RuntimeError(f"❌ Could not parse jobid from sbatch in {cwd}: {out.stdout!r}")
-                print(f"  submitted job {jobid}: {cwd}/{script}")
+            # 减 2s 给本机时钟与 slurmctld 记录的提交时间之间的偏差留余量。
+            mark_epoch = time.time() - 2
+            if_ambiguous = False
+            # 同 _snapshot_jobids：sbatch 也会在 slurmctld 异常时永久阻塞，必须给 timeout。
+            try:
+                out = subprocess.run(['sbatch', '--parsable', str(script)], cwd=str(cwd),
+                                     capture_output=True, text=True, timeout=timeout)
+            except subprocess.TimeoutExpired:
+                # 超时 = 提交结果未知：Slurm 可能已经收下并建好了作业。
+                last_err = f'sbatch timed out after {timeout}s (job may or may not have been queued)'
+                if_ambiguous = True
+            else:
+                # returncode==0 才算提交成功：--parsable 无 --wait，提交成功即 0、stdout 是作业号。
+                if out.returncode == 0:
+                    # --parsable 输出 "<jobid>" 或 "<jobid>;<cluster>"
+                    jobid = out.stdout.strip().split(';')[0]
+                    if not jobid:
+                        raise RuntimeError(f"❌ Could not parse jobid from sbatch in {cwd}: {out.stdout!r}")
+                    print(f"  submitted job {jobid}: {cwd}/{script}")
+                    return jobid
+                last_err = out.stderr.strip() or out.stdout.strip()
+                # 回执丢失类报错：作业很可能已经建好，核对查不动时必须停下而不是重投。
+                if_ambiguous = any(pattern.lower() in last_err.lower()
+                                   for pattern in cls.LPATTERN_SBATCH_AMBIGUOUS)
+
+            # 失败/超时后先核对这次到底有没有落地，核到就是成功，绝不重投。
+            jobid = cls._reconcile_jobid_by_tag(tag, mark_epoch,
+                                                retries=retries if if_ambiguous else 9,
+                                                retry_interval=retry_interval,
+                                                if_strict=if_ambiguous)
+            if jobid:
+                print(f"  ✅ submission actually landed as job {jobid} despite the error "
+                      f"({last_err}); not re-submitting: {cwd}/{script}")
                 return jobid
-            last_err = out.stderr.strip() or out.stdout.strip()
+
             if attempt < retries:
-                print(f"  ⚠️  sbatch submit failed (attempt {attempt}/{retries}) in {cwd}: {last_err}; retry in {retry_interval}s")
+                print(f"  ⚠️  sbatch submit failed (attempt {attempt}/{retries}) in {cwd}: "
+                      f"{last_err}; reconciled as not queued, retry in {retry_interval}s")
                 time.sleep(retry_interval)
         raise RuntimeError(f"❌ sbatch failed after {retries} attempts in {cwd}: {last_err}")
 
 
     @staticmethod
-    def _snapshot_jobids(retries: int = 99, retry_interval: int = 10) -> set:
+    def _snapshot_jobids(retries: int = 99, retry_interval: int = 10,
+                         timeout: int = 60) -> set:
         """当前用户排队/运行中的全部作业号集合。
 
         用于捕获经第三方提交器（如 pei_slurm_univ_submit）提交、无法直接拿到作业号的
@@ -745,8 +1505,12 @@ class PeiN2p2:
         last_err = ''
         for attempt in range(1, retries + 1):
             try:
+                # 必须给 timeout：slurmctld 被大批量提交冲出协议错位（squeue 报
+                # "Unexpected message received"）后，后续 squeue 会在 socket 读上永久阻塞，
+                # 没有 timeout 的 subprocess.run 会把整个控制器一起拖死，重试循环根本转不起来。
+                # TimeoutExpired 由下面的 except Exception 接住 -> 走正常重试路径。
                 out = subprocess.run(['squeue', '-u', user, '-h', '-o', '%i'],
-                                     capture_output=True, text=True)
+                                     capture_output=True, text=True, timeout=timeout)
             except Exception as e:
                 # try 发生异常走这里
                 last_err = repr(e)
@@ -798,14 +1562,18 @@ class PeiN2p2:
 
     def submit_train(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
                      lfile: list = ['input.data', 'sub.n2p2.train.sh'], if_sbatch: bool = False,
-                     random_seed: int = None, sed_overrides: dict = None):
+                     random_seed: int = None, sed_overrides: dict = None,
+                     if_force_rebuild: bool = False):
         """准备单次 n2p2 训练目录并可选提交作业。
 
         在 ``dir_run`` 下汇齐最终 input.nn（CUR 选出的 SF）、input.data 和提交脚本后
         sbatch。作业内会先用该 input.nn 重新跑 ``nnp-scaling`` 生成 scaling.data
         （nnp-train 必读；逐函数 scaling 阶段每条 SF 单独的 scaling.data 不能复用），
-        再跑 ``nnp-train``。为防覆盖已有训练，目标目录若已存在 scaling.data /
-        learning-curve.out 会直接报错——重训请换一个 dir_run（如 y_dir/002）。
+        再跑 ``nnp-train``。为防覆盖已有训练，``dir_run`` 只要非空就直接报错——不再
+        只看 scaling.data / learning-curve.out 这两个产物：作业已排队但还没落盘任何
+        产物时，旧实现会把 input.nn / input.data 悄悄换掉，实际跑的和以为跑的不是
+        一份输入。重训请换一个 dir_run（如 y_dir/007），确实要就地重建才传
+        ``if_force_rebuild=True``（会先清空 dir_run）。
 
         Args:
             dir_run: 本次训练运行目录。
@@ -817,10 +1585,12 @@ class PeiN2p2:
                 改写本 run input.nn 的对应标量关键词（如 {'force_weight': 0.6,
                 'short_force_fraction': 0.04}）。参数扫描由此外部控制（各 dir_run 用不同超参、
                 同一 random_seed）。改后立即校验，未命中即报错以防扫描退化为同一参数。
+            if_force_rebuild: dir_run 非空时是否强制清空重建。默认 False（非空即报错，
+                请作者自己确认后删除）。
 
         Raises:
             FileNotFoundError: 缺少 input.nn、input.data 或提交脚本。
-            FileExistsError: 目标训练目录中已存在训练产物。
+            FileExistsError: dir_run 非空且未传 if_force_rebuild。
             RuntimeError: sed 改写 random_seed / sed_overrides 失败或未生效。
         """
 
@@ -838,11 +1608,9 @@ class PeiN2p2:
         if not path_sub.is_file():
             raise FileNotFoundError(f"❌ Missing submit script: {path_sub}.")
 
-        # 防止覆盖已完成/进行中的训练，重训请换一个 dir_run（如 y_dir/002）
-        for fname in ['scaling.data', 'learning-curve.out']:
-            if (dir_run / fname).is_file():
-                raise FileExistsError(f"❌ {dir_run / fname} already exists. "
-                                      f"Use a new dir_run to avoid overwriting a previous training run.")
+        # 防止覆盖已完成 / 进行中 / 已排队的训练：整目录非空即拒绝，不再只看两个产物文件
+        # （作业排队期间目录里只有 input.nn / input.data / sub 脚本，旧判据一律放行）。
+        self._guard_rebuild_dir(dir_run, if_force_rebuild=if_force_rebuild, label='training run')
 
         os.makedirs(dir_run, exist_ok=True)
         shutil.copy(path_input_nn, dir_run / 'input.nn')
@@ -922,17 +1690,21 @@ class PeiN2p2:
 
 
     # y_n2p2_train/y_dir
-    def post_training(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'), epoch: int = None) -> Path:
+    def post_training(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'), epoch: int = None,
+                      if_skip_if_done: bool = True) -> Path:
         """后处理 n2p2 训练结果并生成误差表格和图像。
 
         ``y_post/<run-id>/`` 与 ``y_dir/<run-id>`` 的训练一一对应；本方法生成
         ``training/`` 下的全部产物（均为物理单位）：
 
-        - ``p_post_learning_curve.txt/pdf``：epoch vs 能量/力 RMSE（meV/atom、meV/Å）。
+        - ``p_post_learning_curve.txt/pdf``：epoch vs 能量/力 RMSE（meV/atom、meV/Å）；
+          有留出测试集时额外带 ``*_test`` 两列与虚线曲线。
         - ``epoch.txt``：选定 epoch（默认末 epoch；可手改后用 ``epoch=`` 重跑）。
         - ``trainpoints/trainforces.data``：选定 epoch 的 DFT-vs-NNP 对照，附 tag。
         - ``p_post_rmse.txt/pdf``：总体 E/F 的 RMSE、ME（表）+ 按 tag 着色的散点图（原 dncompare）。
         - ``p_post_rmse_by_tag.txt/pdf``：按 tag 拆分的能量/力误差（表 + 柱状图）。
+        - 若该 epoch 有 ``testpoints/testforces.*.out``（input.data 里标了 ``set=test``
+          或 ``test_fraction`` > 0），再写一套同名带 ``_test`` 后缀的表与图。
 
         Note:
             训练开了 ``normalize_data_set``，故 trainpoints/trainforces 是训练单位，须用
@@ -943,13 +1715,16 @@ class PeiN2p2:
         Args:
             dir_run: 训练运行目录。
             epoch: 需要分析的 epoch；为 None 时使用最后一个 epoch。
+            if_skip_if_done: 完成阀门。True（默认）时若 ``training/p_post_learning_curve.txt``
+                与 ``training/epoch.txt`` 均已非空（且 ``epoch`` 未指定、或与 epoch.txt 一致），
+                直接返回不重算；改了绘图/统计代码想重出图时传 False。
 
         Returns:
             本次训练对应的后处理目录。
 
         Raises:
             FileNotFoundError: 缺少 learning-curve、指定 epoch 的预测文件或权重文件。
-            ValueError: input.data 中结构数与 trainpoints 中结构数不一致。
+            ValueError: 对照文件里的结构序号越出 input.data 的范围。
         """
         os.chdir(self.dir_root)
         dir_run = Path(dir_run)
@@ -961,17 +1736,39 @@ class PeiN2p2:
         # 目录骨架：training/ 是本步产物；properties/ 由 post_properties 整体组装，这里不再预建
         dir_post = dir_run.parent.parent / 'y_post' / dir_run.name
         dir_training = dir_post / 'training'
+        # 完成阀门：学习曲线 + epoch.txt 都在就直接返回。指定了 epoch 时还要求与 epoch.txt 一致，
+        # 否则换个 epoch 重跑会被上一轮的标记挡掉。
+        path_epoch_txt = dir_training / 'epoch.txt'
+        if_same_epoch = epoch is None or (
+            self._is_file_nonempty(path_epoch_txt)
+            and int(path_epoch_txt.read_text(encoding='utf-8').strip()) == int(epoch))
+        if if_same_epoch and self._skip_done_stage(
+                [dir_training / 'p_post_learning_curve.txt', path_epoch_txt],
+                f'post_training {dir_training}', if_skip_if_done=if_skip_if_done):
+            return dir_post
         os.makedirs(dir_training, exist_ok=True)
 
-        # 1. 训练曲线（col2/col10 为物理单位 pu (eV/atom, eV/Å)）
+        # 1. 训练曲线（0 起列号：col1/col9 = train E/F，col2/col10 = test E/F，均为物理单位 pu）
         lc = read_learning_curve(path_lc)
         epochs = lc[:, 0].astype(int)
         e_rmse_mev = lc[:, 1] * 1e3
         f_rmse_mev = lc[:, 9] * 1e3
-        df_lc = pd.DataFrame({'epoch': epochs, 'E_RMSE_meV/at': e_rmse_mev, 'F_RMSE_meV/A': f_rmse_mev})
+        dict_lc = {'epoch': epochs, 'E_RMSE_meV/at': e_rmse_mev, 'F_RMSE_meV/A': f_rmse_mev}
+        # test_fraction 0 且无 set=test 标记时这两列是 '-NAN' -> 全 NaN，此时不写、不画
+        e_rmse_mev_test = lc[:, 2] * 1e3
+        f_rmse_mev_test = lc[:, 10] * 1e3
+        has_test = not (np.all(np.isnan(e_rmse_mev_test)) and np.all(np.isnan(f_rmse_mev_test)))
+        if has_test:
+            dict_lc['E_RMSE_test_meV/at'] = e_rmse_mev_test
+            dict_lc['F_RMSE_test_meV/A'] = f_rmse_mev_test
+        df_lc = pd.DataFrame(dict_lc)
         self._write_table(dir_training / 'p_post_learning_curve.txt',
-                          ['# Training-set RMSE per epoch, physical units'], df_lc, float_format='14.6f')
-        my_plot_learning_curve(epochs, e_rmse_mev, f_rmse_mev, dir_training / 'p_post_learning_curve.pdf')
+                          ['# RMSE per epoch, physical units'
+                           + ('; *_test columns are the held-out test set' if has_test else '')],
+                          df_lc, float_format='14.6f')
+        my_plot_learning_curve(epochs, e_rmse_mev, f_rmse_mev, dir_training / 'p_post_learning_curve.pdf',
+                               e_rmse_mev_test=e_rmse_mev_test if has_test else None,
+                               f_rmse_mev_test=f_rmse_mev_test if has_test else None)
 
         # 2. 选 epoch（默认末 epoch；写出文件的间隔由 input.nn 的 write_weights_epoch 决定）
         if epoch is None:
@@ -981,60 +1778,110 @@ class PeiN2p2:
         lweights = sorted(dir_run.glob(f'weights.*.{epoch:06d}.out'))
         if not path_tp.is_file() or not path_tf.is_file() or not lweights:
             raise FileNotFoundError(f"❌ Missing trainpoints/trainforces/weights for epoch {epoch} in {dir_run}.")
+        # 有测试集时 n2p2 把 test 写成另一对文件（Training.cpp:1434-1447），可选
+        path_tp_test = dir_run / f'testpoints.{epoch:06d}.out'
+        path_tf_test = dir_run / f'testforces.{epoch:06d}.out'
+
+        # 3. tag：用 nnpdata 的轻量方法解析 input.data（单一数据来源、~30x 快于 load_from_datafile）。
+        #    trainpoints/trainforces 第 1 列 index = input.data 中 0 起的**全局**结构序号
+        #    （Dataset.cpp:816-852），有 test 划分时 trainpoints 只含训练结构，故这里只能
+        #    做越界检查，不能要求等长（README stage1 §8.2）。
+        ltag = nnpdata.read_tags_from_datafile(dir_run / 'input.data')
+        norm = read_normalization(dir_run / 'input.nn')
+
+        e_rmse, f_rmse = self._write_error_tables(dir_training, ltag, norm, epoch,
+                                                  path_tp, path_tf, prefix='train')
+        msg_test = ''
+        if path_tp_test.is_file() and path_tf_test.is_file():
+            e_rmse_test, f_rmse_test = self._write_error_tables(dir_training, ltag, norm, epoch,
+                                                                path_tp_test, path_tf_test,
+                                                                prefix='test')
+            msg_test = (f"; test E_RMSE {e_rmse_test * 1e3:.3f} meV/atom, "
+                        f"F_RMSE {f_rmse_test * 1e3:.3f} meV/A")
+
+        # epoch.txt 最后才写：它是本步完成阀门的两个标记之一（另一个是 p_post_learning_curve.txt，
+        # 第 1 步就落地了）。早写的话，一旦第 3 步在解析对照文件 / 出 RMSE 图时抛异常，两个标记
+        # 都已存在，下次默认调用就会永久跳过本步，RMSE 表和图再也补不出来。
         with open(dir_training / 'epoch.txt', 'w', encoding='utf-8') as f:
             f.write(f'{epoch:06d}\n')
 
-        # 3. 训练单位 -> 物理单位. Training units -> physical units.
-        mean_energy, conv_energy, conv_length = read_normalization(dir_run / 'input.nn')
-        tp = read_trainpoints(path_tp)
-        tf = read_trainforces(path_tf)
+        print(f"Post-processed training in {dir_training}: epoch {epoch:06d}, "
+              f"train E_RMSE {e_rmse * 1e3:.3f} meV/atom, F_RMSE {f_rmse * 1e3:.3f} meV/A{msg_test}.")
+        return dir_post
+
+
+    def _write_error_tables(self, dir_training: Path = None, ltag: list = None, norm: tuple = None,
+                            epoch: int = None, path_points: Path = None, path_forces: Path = None,
+                            prefix: str = 'train') -> tuple:
+        """把一对 {train,test}points/forces 文件换算成物理单位并写出误差表与图。
+
+        train 与 test 走完全相同的表格/图件流程，只有文件名前缀不同：
+        ``prefix='train'`` 写 ``trainpoints.data`` / ``p_post_rmse{,_by_tag}.txt|pdf``
+        （历史命名，post_training_summary 读的就是这两张表）；``prefix='test'``
+        写 ``testpoints.data`` / ``p_post_rmse{,_by_tag}_test.txt|pdf``。
+
+        Args:
+            dir_training: y_post/<run-id>/training 目录。
+            ltag: input.data 里逐结构的 tag（全局顺序，train/test 共用同一份）。
+            norm: ``(mean_energy, conv_energy, conv_length)``，来自 run 的 input.nn。
+            epoch: 该组对照文件对应的 epoch。
+            path_points: {train,test}points.NNNNNN.out。
+            path_forces: {train,test}forces.NNNNNN.out。
+            prefix: ``'train'`` 或 ``'test'``。
+
+        Returns:
+            ``(e_rmse, f_rmse)``，物理单位（eV/atom、eV/Å）。
+
+        Raises:
+            ValueError: 对照文件里的结构序号越出 input.data 的范围。
+        """
+        mean_energy, conv_energy, conv_length = norm
+        tp = read_trainpoints(path_points)
+        tf = read_trainforces(path_forces)
         e_ref = tp[:, 1] / conv_energy + mean_energy
         e_nnp = tp[:, 2] / conv_energy + mean_energy
         f_ref = tf[:, 2] * conv_length / conv_energy
         f_nnp = tf[:, 3] * conv_length / conv_energy
 
-        # tag：用 nnpdata 的轻量方法解析 input.data（单一数据来源、~30x 快于 load_from_datafile），
-        # trainpoints/trainforces 第 1 列 index = input.data 中 0 起的结构顺序号（已验证）
-        ltag = nnpdata.read_tags_from_datafile(dir_run / 'input.data')
-        if len(ltag) != tp.shape[0]:
-            raise ValueError(f"❌ Structure count mismatch: {len(ltag)} in input.data, "
-                             f"{tp.shape[0]} in {path_tp}.")
+        n_struct = tp.shape[0]
+        if n_struct > len(ltag) or (n_struct and int(tp[:, 0].max()) >= len(ltag)):
+            raise ValueError(f"❌ Structure index out of range: {len(ltag)} structures in input.data, "
+                             f"but {path_points} has {n_struct} rows with max index "
+                             f"{int(tp[:, 0].max()) if n_struct else -1}.")
         tag_e = np.array([ltag[int(i)] for i in tp[:, 0]])
         tag_f = np.array([ltag[int(i)] for i in tf[:, 0]])
 
+        suffix = '' if prefix == 'train' else f'_{prefix}'
+        head = f'# Epoch {epoch:06d}, {prefix} set, physical units'
+
         df_tp = pd.DataFrame({'index': tp[:, 0].astype(int), 'tag': tag_e,
                               'E_dft_eV/at': e_ref, 'E_nnp_eV/at': e_nnp})
-        self._write_table(dir_training / 'trainpoints.data',
-                          [f'# Epoch {epoch:06d}, physical units'], df_tp, float_format='16.8f')
+        self._write_table(dir_training / f'{prefix}points.data', [head], df_tp, float_format='16.8f')
         df_tf = pd.DataFrame({'index_s': tf[:, 0].astype(int), 'index_a': tf[:, 1].astype(int), 'tag': tag_f,
                               'F_dft_eV/A': f_ref, 'F_nnp_eV/A': f_nnp})
-        self._write_table(dir_training / 'trainforces.data',
-                          [f'# Epoch {epoch:06d}, physical units'], df_tf, float_format='16.8f')
+        self._write_table(dir_training / f'{prefix}forces.data', [head], df_tf, float_format='16.8f')
 
-        # 4. 按 tag 拆分误差（ME = mean(NNP - DFT)），并可视化
+        # 按 tag 拆分误差（ME = mean(NNP - DFT)），并可视化
         df_tag = build_rmse_by_tag_df(e_ref, e_nnp, tag_e, f_ref, f_nnp, tag_f)
-        self._write_table(dir_training / 'p_post_rmse_by_tag.txt',
-                          [f'# Epoch {epoch:06d}, physical units. E per structure (per atom), F per component.',
+        self._write_table(dir_training / f'p_post_rmse_by_tag{suffix}.txt',
+                          [f'{head}. E per structure (per atom), F per component.',
                            '# ME = mean(NNP - DFT)'], df_tag, float_format='12.3f')
-        my_plot_rmse_by_tag(df_tag, dir_training / 'p_post_rmse_by_tag.pdf')
+        my_plot_rmse_by_tag(df_tag, dir_training / f'p_post_rmse_by_tag{suffix}.pdf')
 
-        # 5. 总体 RMSE/ME（表 p_post_rmse.txt）+ 能量/力散点图（图 p_post_rmse.pdf，原 dncompare）
+        # 总体 RMSE/ME（表）+ 能量/力散点图（原 dncompare）
         e_rmse, e_me = rmse_me(e_ref, e_nnp)
         f_rmse, f_me = rmse_me(f_ref, f_nnp)
         df_rmse = pd.DataFrame({'quantity': ['E_meV/at', 'F_meV/A'],
                                 'RMSE': [e_rmse * 1e3, f_rmse * 1e3],
                                 'ME': [e_me * 1e3, f_me * 1e3]})
-        self._write_table(dir_training / 'p_post_rmse.txt',
-                          [f'# Epoch {epoch:06d}, overall DFT-vs-NNP error, physical units.',
+        self._write_table(dir_training / f'p_post_rmse{suffix}.txt',
+                          [f'{head}, overall DFT-vs-NNP error.',
                            '# E per structure (per atom), F per component. ME = mean(NNP - DFT)'],
                           df_rmse, float_format='12.3f')
-        my_plot_compare(e_ref, e_nnp, tag_e, f_ref, f_nnp, tag_f, dir_training / 'p_post_rmse.pdf',
+        my_plot_compare(e_ref, e_nnp, tag_e, f_ref, f_nnp, tag_f, dir_training / f'p_post_rmse{suffix}.pdf',
                      text_e=f'RMSE = {e_rmse * 1e3:.3f} meV/atom\nME = {e_me * 1e3:.3f} meV/atom',
                      text_f=f'RMSE = {f_rmse * 1e3:.3f} meV/$\\mathrm{{\\AA}}$\nME = {f_me * 1e3:.3f} meV/$\\mathrm{{\\AA}}$')
-
-        print(f"Post-processed training in {dir_training}: epoch {epoch:06d}, "
-              f"E_RMSE {e_rmse * 1e3:.3f} meV/atom, F_RMSE {f_rmse * 1e3:.3f} meV/A.")
-        return dir_post
+        return e_rmse, f_rmse
 
 
     def _prepare_epoch_dir(self, dir_epoch: Path, dir_run: Path, lw: list, dir_lmp_utils: Path) -> None:
@@ -1087,6 +1934,8 @@ class PeiN2p2:
             布尔值也按 ``-key True`` / ``-key False`` 输出，不做 store_true 式的省略；
             CLI 侧 ``-if_sbatch`` / ``-if_use_my_launcher`` 用
             ``type=parse_bool, nargs="?", const=True`` 接收，故能正确解析这种带值写法。
+            list / tuple 渲染成 ``-key v1 v2 …``（对应 CLI 的 ``nargs="*"``，如 ``-lsubdir``）；
+            直接 ``str(list)`` 会写成 ``"['001']"`` 这种 Python 字面量，CLI 侧解析不了。
 
         Args:
             dict_args: 参数名到参数值的映射。
@@ -1096,7 +1945,10 @@ class PeiN2p2:
         """
         parts = []
         for key, value in dict_args.items():
-            parts.append(f'-{key} {shlex.quote(str(value))}')
+            if isinstance(value, (list, tuple)):
+                parts.append(f'-{key} ' + ' '.join(shlex.quote(str(v)) for v in value))
+            else:
+                parts.append(f'-{key} {shlex.quote(str(value))}')
         return ' '.join(parts)
 
 
@@ -1109,6 +1961,8 @@ class PeiN2p2:
                                                      'ncores': 1,
                                                      'launcher_type': 'srun',
                                                      'if_use_my_launcher': True,},
+                        if_force_rebuild: bool = False,
+                        if_skip_if_done: bool = True,
                         ) -> Path:
         """准备并可选提交跨 epoch 的 LAMMPS hdnnp 物性测试。
 
@@ -1134,19 +1988,34 @@ class PeiN2p2:
             dir_run: n2p2 训练运行目录。
             if_sbatch: 是否真正提交 Slurm 作业。
             dict_args_to_submit: 传递给通用 Slurm 提交器的参数字典。
+            if_force_rebuild: properties/ 非空时是否强制清空重建。默认 False（非空即报错，
+                请作者自己确认后删除）——逐 epoch 物性动辄上千个目录，误重建代价很高。
+            if_skip_if_done: 完成阀门，默认 True，逐 epoch 生效：
+
+                - 每个 epoch 目录**结果**齐全（stretch + cij + gsfe 均非空）-> 全部齐全时
+                  连提交都跳过，直接返回；
+                - 结果不全但**脚手架**已铺好（potential/ + template/ + post/）-> 保留原目录
+                  不重铺（不触发 :meth:`_guard_rebuild_dir` 的非空报错，也不删任何东西），
+                  照常提交 Slurm 作业。这正是「上一轮准备好了但作业没投出去」的补投路径。
+
+                传 False 时退回旧行为：properties/ 非空即报错，除非 ``if_force_rebuild=True``。
 
         Returns:
             物性测试根目录。
 
         Raises:
             FileNotFoundError: 缺少训练输入、scaling.data、权重文件或 LAMMPS 工具目录。
+            FileExistsError: properties/ 非空且未传 if_force_rebuild。
         """
         os.chdir(self.dir_root)
         dir_run = Path(dir_run)
         dir_post = dir_run.parent.parent / 'y_post' / dir_run.name
         dir_props = dir_post / 'properties'
-        if dir_props.is_dir():
-            shutil.rmtree(dir_props)
+        # 旧实现无条件 rmtree，一次误跑就把上一轮所有 epoch 的物性结果冲掉。
+        # 阀门开着时不在这里守卫：properties/ 常处于「脚手架已铺、结果没跑完」的中间态，
+        # 顶层守卫会把这种半成品一律判成非法；粒度下沉到 3. 的逐 epoch 判断。
+        if not if_skip_if_done:
+            self._guard_rebuild_dir(dir_props, if_force_rebuild=if_force_rebuild, label='properties')
 
         os.makedirs(dir_props, exist_ok=True)
 
@@ -1165,16 +2034,32 @@ class PeiN2p2:
         if not lepoch:
             raise FileNotFoundError(f"❌ No weights.*.*.out in {dir_run}. Training not finished?")
 
-        # 3. 脚手架：建 y_epoch_scan/y_dir/<epoch>/（已存在则删除，遵守不递归删除约束）
+        # 3. 脚手架：建 y_epoch_scan/y_dir/<epoch>/（非空即报错，除非 if_force_rebuild）
         dir_epoch_scan_root = dir_props / 'y_epoch_scan'
-        for epoch in lepoch:
-            dir_epoch = dir_epoch_scan_root / 'y_dir' / epoch
-            if dir_epoch.is_dir():
-                shutil.rmtree(dir_epoch)
+        ldir_epoch = [dir_epoch_scan_root / 'y_dir' / epoch for epoch in lepoch]
+        ldir_done = [d for d in ldir_epoch if self._epoch_dir_is_done(d)] if if_skip_if_done else []
+        if if_skip_if_done and len(ldir_done) == len(ldir_epoch):
+            print(f"⏭️ skip post_properties {dir_props}: all {len(ldir_epoch)} epoch dir(s) already "
+                  f"carry complete stretch/cij/gsfe results. "
+                  f"Pass if_skip_if_done=False to redo them.")
+            self.last_jobids = []
+            return dir_props
+
+        n_kept = 0
+        for epoch, dir_epoch in zip(lepoch, ldir_epoch):
+            # 脚手架已铺好就原样保留：避免 _guard_rebuild_dir 把「准备好但没投出去」判成非法，
+            # 更要避免任何形式的删目录——已跑出的结果都在这些子目录里。
+            if if_skip_if_done and self._epoch_dir_is_prepared(dir_epoch, self.dir_lmp_utils):
+                n_kept += 1
+                continue
+            # dir_props 已经过守卫，正常路径下这里必为空；保留守卫是为了单独调用时同样安全。
+            self._guard_rebuild_dir(dir_epoch, if_force_rebuild=if_force_rebuild,
+                                    label=f'epoch {epoch}')
             lw = sorted(dir_run.glob(f'weights.*.{epoch}.out'))
             self._prepare_epoch_dir(dir_epoch, dir_run, lw, self.dir_lmp_utils)
-        print(f"Prepared {len(lepoch)} epoch dir(s) under {dir_epoch_scan_root} "
-              f"(hdnnp cutoff {cutoff:.2f}, pair_coeff {' '.join(self.lele)}).")
+        print(f"Prepared {len(lepoch) - n_kept} epoch dir(s) under {dir_epoch_scan_root} "
+              f"(kept {n_kept} already-prepared, {len(ldir_done)} of them with complete results; "
+              f"hdnnp cutoff {cutoff:.2f}, pair_coeff {' '.join(self.lele)}).")
 
 
         # 4. 生成 pei_lmp_run_properties 的运行参数（脚本据此 sed 模板 + 写 general_mass.mod，cwd=本 epoch 目录）：
@@ -1206,6 +2091,17 @@ class PeiN2p2:
                           'dir_root': './y_dir',
                           'if_sbatch': True if if_sbatch else False,
                           }
+        # 只把**未完成**的 epoch 交给提交引擎。get_lsubdir 不给 -lsubdir 就会扫遍 y_dir 下的
+        # 全部子目录，已经算完的 epoch 会被一起重投、把 stretch/cij/gsfe 的结果覆盖掉（这些
+        # 结果每个都要几十分钟到几小时）。epoch 目录的 basename 在唯一的 y_dir 下不重名，
+        # 正好可以直接作为 -lsubdir 的过滤器。
+        ldir_done_set = set(ldir_done)
+        ldir_todo = [d for d in ldir_epoch if d not in ldir_done_set]
+        if ldir_done:
+            args_to_submit['lsubdir'] = [d.name for d in ldir_todo]
+            print(f"  submit only {len(ldir_todo)} incomplete epoch dir(s) "
+                  f"(skip {len(ldir_done)} already complete): "
+                  f"{' '.join(d.name for d in ldir_todo)}")
         cli_args = self._dict_to_cli_args({**args_to_submit})
 
 
@@ -1393,7 +2289,8 @@ class PeiN2p2:
 
 
     def check_interface(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
-                        epoch: int = None, if_run: bool = False) -> Path:
+                        epoch: int = None, if_run: bool = False,
+                        if_skip_if_done: bool = True) -> Path:
         """检查 nnp-predict 与 LAMMPS hdnnp 的单点预测一致性（接口一致性检查 C0）。
 
         对同一结构分别用 nnp-predict（训练工具链，n2p2 2.3.0）和 LAMMPS
@@ -1412,6 +2309,8 @@ class PeiN2p2:
             dir_run: n2p2 训练运行目录。
             epoch: 用于检查的 epoch；为 None 时读取 post_training 写出的 epoch。
             if_run: 是否直接运行接口检查脚本并解析结果。
+            if_skip_if_done: 完成阀门。``if_run=True`` 且 ``check_interface/p_post_check_interface.txt``
+                已非空（= 上一轮已经跑完并写了结论）时直接返回，不重铺目录、不重跑单点。
 
         Returns:
             接口检查目录。
@@ -1426,6 +2325,12 @@ class PeiN2p2:
         dir_run = Path(dir_run)
         dir_post = dir_run.parent.parent / 'y_post' / dir_run.name
         dir_chk = dir_post / 'check_interface'
+        # 完成阀门：结论文件非空 = 上一轮 if_run=True 已经跑完。if_run=False 只是铺目录给人工跑，
+        # 不受阀门管（此时本来就没有结论文件可写）。
+        if if_run and self._skip_done_stage([dir_chk / 'p_post_check_interface.txt'],
+                                            f'check_interface {dir_chk}',
+                                            if_skip_if_done=if_skip_if_done):
+            return dir_chk
         dnnp, dlmp = dir_chk / 'nnp', dir_chk / 'lmp'
         os.makedirs(dnnp, exist_ok=True)
         os.makedirs(dlmp, exist_ok=True)

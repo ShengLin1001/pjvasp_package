@@ -80,8 +80,9 @@ def _format_plain(value: float, digits: int = 2) -> str:
 
 def my_plot_learning_curve(epochs: np.ndarray = None, e_rmse_mev: np.ndarray = None,
                         f_rmse_mev: np.ndarray = None, file_path: str = None,
-                        label: str = 'Train') -> tuple:
-    """Plot energy/force training RMSE versus epoch (log-y).
+                        label: str = 'Train', e_rmse_mev_test: np.ndarray = None,
+                        f_rmse_mev_test: np.ndarray = None, label_test: str = 'Test') -> tuple:
+    """Plot energy/force RMSE versus epoch (log-y), train and optional test.
 
     Args:
         epochs: Epoch numbers.
@@ -89,6 +90,9 @@ def my_plot_learning_curve(epochs: np.ndarray = None, e_rmse_mev: np.ndarray = N
         f_rmse_mev: Force RMSE in meV/Angstrom.
         file_path: Output figure path (e.g. learning_curve.pdf).
         label: Legend label for the curve (e.g. 'Train' or 'Validation').
+        e_rmse_mev_test: Held-out test energy RMSE in meV/atom; None skips it.
+        f_rmse_mev_test: Held-out test force RMSE in meV/Angstrom; None skips it.
+        label_test: Legend label for the test curves.
     """
     fig, ax = my_plot(fig_subp=[1, 2], fig_sharex=True)
     ax[0].semilogy(epochs, e_rmse_mev, '-', label=label.capitalize())
@@ -97,6 +101,11 @@ def my_plot_learning_curve(epochs: np.ndarray = None, e_rmse_mev: np.ndarray = N
     ax[1].semilogy(epochs, f_rmse_mev, '-', label=label.capitalize())
     ax[1].set_xlabel('Epoch (-)')
     ax[1].set_ylabel(r'Force RMSE (meV/$\mathrm{\AA}$)')
+    # 有留出测试集时叠一条虚线；两条曲线共用同一坐标轴，便于直接看过拟合的张口
+    if e_rmse_mev_test is not None:
+        ax[0].semilogy(epochs, e_rmse_mev_test, '--', label=label_test.capitalize())
+    if f_rmse_mev_test is not None:
+        ax[1].semilogy(epochs, f_rmse_mev_test, '--', label=label_test.capitalize())
     for a in ax:
         general_modify_legend(a.legend(loc='upper right', bbox_to_anchor=(0.95, 0.95)))
     fig.savefig(file_path)
