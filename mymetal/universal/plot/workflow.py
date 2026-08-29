@@ -229,6 +229,11 @@ def my_plot_cij_energy(
         axes[i, 1].set_ylabel('Stress (GPa)')
 
     general_modify_legend(axes[0, 1].legend(loc='upper left', ncol=2))
+    # general_axes() stamps a placeholder 'X-axis Label' on every panel; with a
+    # shared x-axis only the bottom row's label should remain visible.
+    for row in range(axes.shape[0] - 1):
+        axes[row, 0].set_xlabel('')
+        axes[row, 1].set_xlabel('')
     axes[-1, 0].set_xlabel('Strain')
     axes[-1, 1].set_xlabel('Strain')
     axes[0, 0].text(
@@ -280,6 +285,10 @@ def my_plot_gsfe(
     axes[2].plot(x_tau, tau, '-o')
     axes[2].plot([xi.min(), xi.max()], [0, 0], '--k')
 
+    # general_axes() stamps a placeholder 'X-axis Label' on every panel; with a
+    # shared x-axis only the bottom panel's label should remain visible.
+    axes[0].set_xlabel('')
+    axes[1].set_xlabel('')
     axes[0].set_ylabel('GSFE (mJ/m$^2$)')
     axes[1].set_ylabel('Inelastic normal displacement ($\\mathrm{\\AA}$)')
     axes[2].set_xlabel('Normalized slip vector')
@@ -381,6 +390,9 @@ def my_plot_relax_convergence(
     lenergy_rel = [abs(energy - lenergy[-1]) * scale for energy in lenergy]
     lforce_abs = [abs(force) for force in lforce]
 
+    # general_axes() stamps a placeholder 'X-axis Label' on every panel; with a
+    # shared x-axis only the bottom panel's label should remain visible.
+    axes[0].set_xlabel('')
     axes[0].set_ylabel(r'$|\Delta E|$ (meV/atom)')
     axes[0].plot(lframe, lenergy_rel, '-o')
     _apply_relax_yscale(axes[0], lenergy_rel, yscale)
