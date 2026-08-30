@@ -145,8 +145,7 @@ def cal_strain_matrix(deformation_matrix: np.array = None) -> list:
     """To calculate the lagrangian and euler strain matrix.
 
     Args:
-        initial_atoms (Atoms): initial configuration
-        deformed_atoms (Atoms): deformed configuration
+        deformation_matrix (np.array): the 3x3 deformation gradient F.
 
     Raises:
         ValueError: Input matrix cannot be None.
@@ -176,7 +175,7 @@ def cal_strain_matrix(deformation_matrix: np.array = None) -> list:
     # left Cauchy-Green deformation tensor
     rc = np.dot(F, F.T)
     # Euler strain tensor
-    # ε = 1/2 * (I - F * F^T)
+    # ε = 1/2 * (I - (F * F^T)^{-1})
     e = 0.5 * (np.eye(F.shape[0]) - np.linalg.inv(rc))
     
     return [E, e]

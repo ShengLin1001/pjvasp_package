@@ -90,3 +90,10 @@ Au FCC 的真实 VASP 收敛测试结果，展示 ENCUT 和 KPOINTS 收敛曲线
 * :func:`mymetal.post.convergence.my_write_convergence`
 * :func:`mymetal.post.convergence.my_read_convergence`
 * :func:`mymetal.post.general.my_sort`
+
+下一步
+------
+
+* :doc:`post_stretch_analysis` — 类似的后处理流程，用于拉伸计算；
+* :doc:`post_cij_comparison` — 比较不同方法得到的弹性常数；
+* :doc:`../api/post` — 完整的后处理 API 参考。

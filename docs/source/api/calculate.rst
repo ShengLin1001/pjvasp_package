@@ -79,7 +79,8 @@ Mechanics and mismatch
 用途
    基于 ``hetbuilder.Interface`` 的超胞匹配结果，计算 bottom/top 层相对于
    heterostructure stack 的主应变方向拉伸因子。``cal_relative_stretch``
-   返回 ``[factor - 1, direction]``，``cal_stretch`` 返回绝对值。
+   返回 ``[[factor_bottom - 1, factor_top - 1], direction]``，
+   ``cal_stretch`` 返回绝对值。
 
 .. note::
 
@@ -226,7 +227,7 @@ Higher-order elastic constants (HOEC)
 
       model = get_model('cubic')
       modes = get_hoec_modes('cubic')
-      xi_list = get_strain_list(window=0.06)
+      xi_list = get_strain_list(emax=0.06)
 
 Related tutorials
    :doc:`../tutorials/strain_deformation`、

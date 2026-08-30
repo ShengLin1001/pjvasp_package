@@ -87,3 +87,10 @@ E_in_1/2 (in-plane 1/2) 变形是六方晶系的双轴变形模式，独立扫�
 * :func:`mymetal.post.E_in_1_2_bulk.post_E_in_1_2_bulk`
 * :func:`mymetal.post.E_in_1_2_bulk.my_write_E_in_1_2_bulk`
 * :func:`mymetal.post.E_in_1_2_bulk.my_read_E_in_1_2_bulk`
+
+下一步
+------
+
+* :doc:`post_stretch_analysis` — 单轴拉伸后处理；
+* :doc:`biaxial_stretch` — 双轴应变的结构构建；
+* :doc:`../api/post` — 完整的后处理 API 参考。

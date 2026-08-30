@@ -73,3 +73,10 @@
 * :func:`mymetal.universal.plot.plotting.periodic_table_heatmap`
 * :func:`mymetal.universal.plot.plotting.van_arkel_triangle`
 * :func:`mymetal.universal.plot.plotting.format_formula`
+
+下一步
+------
+
+* :doc:`plot_gallery_plotting` — 更多绘图工具示例；
+* :doc:`plot_gallery` — 绘图画廊总览；
+* :doc:`../api/universal` — 通用工具 API 参考。
