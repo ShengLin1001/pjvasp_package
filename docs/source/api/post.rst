@@ -201,8 +201,26 @@ Relax convergence post-processing
 Related tutorials
    :doc:`../tutorials/post_relax_convergence`
 
-E_in_1_2_bulk post-processing
+General post-processing helpers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.post.general
+   :members:
+   :show-inheritance:
+
+用途
+   ``my_ployfit`` 对数据做多项式拟合并返回系数；
+   ``my_read_y_dir_contcar`` 从 ``y_dir`` 子目录读取 CONTCAR；
+   ``my_sort`` 按自然排序排列字符串列表（``"10"`` 排在 ``"2"`` 之后）；
+   ``get_structure_info`` 提取结构的 cell 和原子数信息。
+
+.. note::
+
+   这些函数不依赖 VASP 可执行文件，但 ``my_read_y_dir_contcar`` 需要磁盘
+   上存在 CONTCAR 文件。
+
+E_in_1_2_bulk post-processing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. automodule:: mymetal.post.E_in_1_2_bulk
    :members: post_E_in_1_2_bulk, my_write_E_in_1_2_bulk

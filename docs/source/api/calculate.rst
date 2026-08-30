@@ -193,6 +193,45 @@ Related tutorials
 
 .. automodule:: mymetal.calculate.material_science.schmid
 
+Higher-order elastic constants (HOEC)
+-------------------------------------
+
+.. automodule:: mymetal.calculate.calmechanics.hoec
+   :members:
+   :show-inheritance:
+
+用途
+   基于 Wang & Li (PRB 79, 224102, 2009) 的 energy-strain 方法，计算任意点群
+   对称性的二阶/三阶/四阶弹性常数。核心思想：应变能密度按
+   engineering-Voigt Green-Lagrange 应变 ``eta`` 展开，点群对称性把完全对称
+   的 Brugger 常数缩减为独立集合（立方：3/6/11，六方：5/10/19）。
+
+关键概念
+   * ``eta`` 是 engineering-Voigt 应变（``eta4=2*eps_yz`` 等）；
+   * 单参数变形模式 ``eta = xi * d`` 下，``[U(xi)-U(0)]/V0 = P2*xi² + P3*xi³ + P4*xi⁴``；
+   * 每个 ``P_n`` 是独立 ``n`` 阶常数的固定线性组合（``B_n_k`` 系数）；
+   * ``HOECModel`` 缓存每个对称性的缩减模型，``get_model`` 返回缓存实例；
+   * ``get_deformation_gradient`` 给出 ``xi * d`` 对应的对称变形梯度 ``F``；
+   * ``get_mode_strain_lists`` 按各模式 severity 预算分配 ``xi`` 列表。
+
+.. note::
+
+   此模块仅依赖 ``numpy`` 和 Python 标准库，不需要 VASP 或外部可执行文件。
+   ``selftest_hoec`` 可验证立方对称性下的系数是否与 Wang-Li Table I 一致。
+
+最小示例
+   .. code-block:: python
+
+      from mymetal.calculate.calmechanics.hoec import get_model, get_hoec_modes, get_strain_list
+
+      model = get_model('cubic')
+      modes = get_hoec_modes('cubic')
+      xi_list = get_strain_list(window=0.06)
+
+Related tutorials
+   :doc:`../tutorials/strain_deformation`、
+   :doc:`../tutorials/post_hoec_energy`
+
 Electronic structure
 --------------------
 

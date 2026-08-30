@@ -103,6 +103,24 @@ Checks and transformations
    :members:
    :show-inheritance:
 
+.. automodule:: mymetal.universal.search.find
+   :members:
+   :show-inheritance:
+
+.. automodule:: mymetal.universal.print.print
+   :members:
+   :show-inheritance:
+
+.. automodule:: mymetal.universal.print.printafter
+   :members:
+   :show-inheritance:
+
+用途
+   ``pr`` / ``er`` / ``warn`` / ``fail`` 是带 emoji 前缀的输出助手；
+   ``fail`` 会 raise ``SystemExit(1)``。``find_line_position`` /
+   ``extract_line_at_position`` 按标记从文本文件提取行，供 OUTCAR 等
+   parser 使用。
+
 Plotting
 --------
 
@@ -268,6 +286,22 @@ Related tutorials
 
 Related tutorials
    :doc:`../tutorials/plot_gallery_ppt`、
+   :doc:`../tutorials/plot_gallery`
+
+DOS and band plotting
+~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.universal.plot.oldplotdos
+   :members:
+   :show-inheritance:
+
+用途
+   旧版 DOS/能带绘图工具：``my_plot_complete_dos`` 绘制总态密度，
+   ``my_plot_idos`` 绘制分波态密度，``my_plot_element_spd_dos`` 绘制
+   元素 s/p/d 分轨道 DOS。依赖可选的 ``pymatgen`` DOS 数据结构。
+
+Related tutorials
+   :doc:`../tutorials/plot_gallery_oldplotdos`、
    :doc:`../tutorials/plot_gallery`
 
 .. automodule:: mymetal.universal.plot.workflow

@@ -48,6 +48,27 @@ n2p2 training workflow
    文件和 ``myvasp`` 包。该模块的 docstring 当前包含 RST 格式问题，暂不
    自动渲染完整 API；类和方法签名详见源码 ``mymetal/ml/n2p2/workflow.py``。
 
+MD active-learning workflow
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. automodule:: mymetal.ml.n2p2.workflow_md
+   :members:
+   :show-inheritance:
+
+用途
+   ``PeiN2p2MD`` 封装 n2p2 + LAMMPS 主动学习迭代训练流程。每轮迭代从
+   LAMMPS MD 轨迹中提取高不确定度结构，用 VASP 重新计算，加入训练集，
+   重新训练 NNP 势函数。``read_temp_ladder`` 读取温度梯度配置，
+   ``read_lammps_dump`` 解析 LAMMPS dump 轨迹。
+
+.. note::
+
+   此模块依赖 n2p2 可执行文件、LAMMPS 和 ``myvasp`` 包。文档构建时
+   ``myvasp`` 被 mock。
+
+Related guides
+   :doc:`../manual/n2p2_utils`
+
 Optional image-model helpers
 ----------------------------
 

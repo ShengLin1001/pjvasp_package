@@ -11,13 +11,15 @@ MD 主动学习（chap_4_TL.pdf Stage I）的调度器：把「已训练好的�
 
 一轮（iround）的完整链路：
 
+.. code-block:: text
+
     collect_potentials      train/.../y_n2p2_train/y_dir/<run>/ 的最后 n_last 条势
                             -> potentials/<run>/<epoch>/
     submit_md               每条势一个 LAMMPS 升温 MD 作业
                             -> data_md/<iround>/y_dir/<run>_<epoch>/
     collect_md_frames       所有轨迹的帧汇成一份 n2p2 数据集
                             -> data_md/<iround>/y_frames/input.data.frames
-    submit_compare          每条势对**整条**帧集跑一次 nnp-dataset
+    submit_compare          每条势对整条帧集跑一次 nnp-dataset
                             -> data_md/<iround>/y_compare/y_dir/<run>_<epoch>/energy.comp.*
     collect_compare         逐帧汇总各势预测 -> y_compare/y_compare_data_md.txt
     select_md_structures    按 committee 发散度挑结构 -> y_compare/input.data.md
@@ -26,10 +28,10 @@ MD 主动学习（chap_4_TL.pdf Stage I）的调度器：把「已训练好的�
     append_to_train         input.data.ini + 各轮 input.data.dft -> data/train/input.data
     （随后照常 PeiN2p2.submit_train(dir_run=train/<iround>/y_n2p2_train/y_dir/<run>)）
 
-为什么用 ``nnp-dataset`` 而不是 ``nnp-predict``：nnp-predict 一次只算 input.data 里的
-**一个**结构，逐帧逐势建目录会变成「帧数 × 势数」个工作目录（1 万帧 × 120 条势 = 120 万个
+为什么用 nnp-dataset 而不是 nnp-predict：nnp-predict 一次只算 input.data 里的
+一个结构，逐帧逐势建目录会变成「帧数 × 势数」个工作目录（1 万帧 × 120 条势 = 120 万个
 目录、上百 GB 势函数副本），在共享文件系统上不可行。nnp-dataset 一次吃完整份 input.data，
-按结构逐行写 ``energy.comp.%04d``（index / N / Eref_phys / Ennp_phys），信息完全等价，
+按结构逐行写 energy.comp.%04d（index / N / Eref_phys / Ennp_phys），信息完全等价，
 目录数降到「势数」量级。
 
 目录约定刻意贴着 ``pei_slurm_univ_submit`` 的发现规则：该引擎递归找出任意深度的每个
@@ -731,17 +733,17 @@ class PeiN2p2MD(PeiN2p2):
                           stride: int = 1, n_max_frame: int = None,
                           dict_md_params: dict = None, tag_prefix: str = 'MD',
                           if_skip_if_done: bool = True) -> Path:
-        """把本轮所有 MD 轨迹的帧汇成**一份** n2p2 数据集，供 committee 逐帧对比。
+        """把本轮所有 MD 轨迹的帧汇成一份 n2p2 数据集，供 committee 逐帧对比。
 
-        每帧的 ``energy`` / 力写的是**产生它的那条势函数**的 LAMMPS 预测值，只作占位与
-        溯源：committee 比较用的是各势的 ``Ennp_phys``（nnp-dataset 现算），真正的
+        每帧的 energy / 力写的是产生它的那条势函数的 LAMMPS 预测值，只作占位与
+        溯源：committee 比较用的是各势的 Ennp_phys（nnp-dataset 现算），真正的
         参考值要等 :meth:`collect_dft` 的 VASP 静态结果。
 
         Args:
             iround: MD 扩充轮次。
             lpotential: ``[(run, epoch), ...]``；为 None 时读 potentials 的清单。
             stride: 逐轨迹的抽帧步长（1 = 全取）。
-            n_max_frame: 汇总后的帧数上限；超出时在**全局**再做一次均匀抽样。
+            n_max_frame: 汇总后的帧数上限；超出时在全局再做一次均匀抽样。
                 帧数直接决定后面每条势的 nnp-dataset 代价，务必按预算设上限。
             dict_md_params: 用于取相列表（需与 :meth:`submit_md` 那轮一致）。
             tag_prefix: 帧的 tag 前缀，最终 tag 形如 ``MD0-fcc``。
@@ -836,9 +838,9 @@ class PeiN2p2MD(PeiN2p2):
                        if_force_rebuild: bool = False, if_skip_if_done: bool = True) -> Path:
         """准备并可选提交 committee 一致性对比作业（每条势函数一个 nnp-dataset）。
 
-        每个作业目录是一份自包含的 nnp 运行环境：势函数三件套 + **整份**
-        ``input.data``（= 本轮全部 MD 帧）。``nnp-dataset 0`` 逐结构写
-        ``energy.comp.%04d``（index / N / Eref_phys / Ennp_phys），一次跑完所有帧。
+        每个作业目录是一份自包含的 nnp 运行环境：势函数三件套 +
+        input.data（= 本轮全部 MD 帧）。nnp-dataset 0 逐结构写
+        energy.comp.%04d（index / N / Eref_phys / Ennp_phys），一次跑完所有帧。
 
         Note:
             ``0`` 是 shuffle 开关，必须为 0：开了洗牌后各 rank 拿到的结构顺序被打乱，
@@ -1002,7 +1004,7 @@ class PeiN2p2MD(PeiN2p2):
         彼此接近的能量；预测越发散，说明该构型在势能面上的表达越不足，越值得补进训练集。
 
         产物 ``y_compare/y_compare_data_md.txt`` 逐帧一行：帧的溯源信息 + 统计量
-        （mean / std / spread）+ **每条势函数一列**的预测能量（eV/atom）。
+        （mean / std / spread）+ 每条势函数一列的预测能量（eV/atom）。
 
         Args:
             iround: MD 扩充轮次。

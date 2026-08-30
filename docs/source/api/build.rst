@@ -230,3 +230,36 @@ Related tutorials
 
 .. automodule:: mymetal.build.workflow.kpar_ncore
    :members:
+
+GSFE workflow extension
+-----------------------
+
+.. automodule:: mymetal.build.workflow.gsfe
+   :members:
+   :show-inheritance:
+
+用途
+   把 bash workflow ``pei_vasp_run_gsfe`` 默认铺设的部分滑移段（``N1=10``
+   images）扩展到一个完整滑移周期。从已有 ``y_dir/NN`` 目录读取剪切步长，
+   检测对称等价 images，只为真正不等价的 image 创建新计算目录。
+
+关键函数
+   ``get_gsfe_line`` 读取已有目录并返回参考结构和剪切步；
+   ``get_gsfe_period`` 计算完整周期索引和等价组；
+   ``generate_gsfe_extend_dirs`` 创建缺失目录和提交脚本。
+
+.. note::
+
+   此模块不需要 VASP 运行时，但 ``generate_gsfe_extend_dirs`` 会在文件系统
+   创建目录和脚本文件。仅在 dry-run 或有明确输入目录时调用。
+
+General workflow utilities
+--------------------------
+
+.. automodule:: mymetal.build.workflow.general
+   :members:
+   :show-inheritance:
+
+用途
+   ``cp_vaspfiles`` 批量复制 VASP 输入文件到 y_dir 子目录；
+   ``rm_i`` 清理中间文件；``compare_three_lattices`` 对比三个结构的 cell 参数。
