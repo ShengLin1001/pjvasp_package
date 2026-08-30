@@ -15,6 +15,7 @@ Tutorials
    schmid_factor
    neighbor_distances
    atom_manipulation
+   surface_passivation
    strain_deformation
    gsfe_models
    cubic_cell_and_stretch

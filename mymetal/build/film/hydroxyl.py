@@ -412,7 +412,7 @@ def passivate_surface_custom(bulk: Atoms = None,
         
         # bulk 中相同位置原子的配位数（使用相同 index）
         idx_bulk = find_matching_atom_in_bulk(slab.positions[idx], bulk.positions)
-        if idx_bulk:
+        if idx_bulk >= 0:
             indices_bulk, offset_bulk, distance_bulk = get_neighbors(idx_bulk, bulk.positions, bulk.get_cell(), bulk_pbc, cutoff)
             # 检查配位数是否一致
             # 对比目标配位数, also can compare with the bulk's
