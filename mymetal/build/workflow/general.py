@@ -4,7 +4,15 @@ import shutil
 import glob
 
 def cp_vaspfiles(cpfiles = ["CONTCAR", "KPOINTS", "INCAR", "POTCAR", "Y_CONSTR_LATT"], globfiles = ["sub*"], oldir = "y_full_relax/", newdir = "y_full_relax_temp/"):
+    """Copy VASP input files from one workflow directory to another.
 
+    Args:
+        cpfiles (list): Exact filenames to copy from ``oldir`` to ``newdir``.
+        globfiles (list): Glob patterns (e.g. ``"sub*"``) for files to copy
+            from ``oldir``.
+        oldir (str): Source directory (relative to cwd).
+        newdir (str): Destination directory (relative to cwd).
+    """
     for file in cpfiles:
         if os.path.isfile(os.path.join(oldir, file)):
             shutil.copy(os.path.join(oldir, file), newdir)
@@ -16,6 +24,12 @@ def cp_vaspfiles(cpfiles = ["CONTCAR", "KPOINTS", "INCAR", "POTCAR", "Y_CONSTR_L
             shutil.copy(file, newdir)
 
 def rm_i(workdir = None):
+    """Interactively delete a workflow directory after user confirmation.
+
+    Args:
+        workdir (str): Directory to delete. If it exists, prompts the user
+            with ``[y/n]``; only deletes on ``y``.
+    """
     if os.path.exists(workdir):
         ans = input(f"The directory {workdir} already exists. Do you want to delete it? (y/n): ").strip().lower()
         if ans == "y":
@@ -25,6 +39,17 @@ def rm_i(workdir = None):
             print("Keeping the old directory. No changes made.")
 
 def compare_three_lattices(lattice_before, lattice_after, lattice_after_adjusted):
+    """Print a side-by-side comparison of three 3x3 lattice matrices.
+
+    Reports cell matrices, volumes, row-vector lengths and column-vector
+    lengths, with percentage changes. Used to verify stretch + volume
+    conservation adjustments.
+
+    Args:
+        lattice_before (np.ndarray): Original 3x3 cell (row vectors).
+        lattice_after (np.ndarray): Stretched cell.
+        lattice_after_adjusted (np.ndarray): Stretched + adjusted cell.
+    """
 
     print("\nLattices")
     print("Original:\n", lattice_before)

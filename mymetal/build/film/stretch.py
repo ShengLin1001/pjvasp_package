@@ -401,12 +401,42 @@ def stretch_along_direction_to_cell(atoms: Atoms = None ,stretch_factor: float =
     return atoms_copy
 
 def print_after_what(char_name = '', variable = None,calling_function = '', specified_blank = '', character = '||', after_what = 'none'):
+    """Print a diagnostic line about a variable's state (used in stretch workflows).
+
+    Args:
+        char_name (str): Variable name being reported.
+        variable: The variable's value.
+        calling_function (str): Name of the calling function for context.
+        specified_blank: Value to return (usually a default/blank).
+        character (str): Delimiter character for formatting.
+        after_what (str): State descriptor (e.g. ``'none'``).
+
+    Returns:
+        The ``specified_blank`` value.
+    """
     # print(f"the value is None! - {calling_function}")
     print(f"the {character} {char_name} {variable} {character} is {after_what}! - {calling_function}")
     return specified_blank
 
 # useless
 def file_name(dir_path: str = None, base_name: str = None, special_name: str = None, format_type: str = None) -> str:
+    """Build a filename from directory, base name, and special suffix.
+
+    .. deprecated::
+        This function has a bug (returns the function itself instead of the
+        filename string) and is marked ``# useless`` in source. Do not use;
+        kept only for historical compatibility.
+
+    Args:
+        dir_path (str): Directory prefix.
+        base_name (str): Base filename.
+        special_name (str): Special suffix or identifier.
+        format_type (str): Format string for the special name.
+
+    Returns:
+        str: Intended filename (but currently returns the function object
+        due to a name-shadowing bug).
+    """
     formatted_factor = format_type % special_name
     filename = f'{dir_path}{base_name}{special_name}'
     return file_name
