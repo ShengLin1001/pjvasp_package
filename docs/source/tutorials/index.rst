@@ -17,6 +17,7 @@ Tutorials
    atom_manipulation
    surface_passivation
    strain_deformation
+   hoec_modes
    gsfe_models
    cubic_cell_and_stretch
    deformation_and_hnf
