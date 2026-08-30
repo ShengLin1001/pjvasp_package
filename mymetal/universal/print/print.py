@@ -4,15 +4,23 @@ from pathlib import Path
 
 
 def pr(text=""):
+    """Print a plain message (alias of ``print``)."""
     print(text)
 
 def er(text=""):
+    """Print an error-line message without exiting (see :func:`fail`)."""
     print(text)
 
 def warn(msg):
+    """Print a warning message prefixed with a warning emoji."""
     print(f"⚠️  {msg}")
 
 def fail(msg):
+    """Print an error message prefixed with a cross emoji, then raise ``SystemExit(1)``.
+
+    Use this for unrecoverable errors where continuing would produce
+    misleading output. The message is printed to stdout before the exit.
+    """
     print(f"❌ ERROR: {msg}")
     raise SystemExit(1)
 

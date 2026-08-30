@@ -126,6 +126,24 @@ def create_hcp_prism2(a: float = None, c: float = None, size: tuple = (1, 1, 1),
 # so the produced model is identical to vf.create_supercell.
 def create_supercell_fast(latt: np.ndarray, motif: np.ndarray,
                           ncell) -> Atoms:
+    """Build a supercell by tiling a primitive lattice + motif basis.
+
+    Vectorized drop-in replacement for ``myvasp.vasp_create.create_supercell``.
+    Preallocates and broadcasts instead of vstack inside a 4-deep Python loop,
+    reducing runtime from O(N²) memory copies to O(N) while keeping the exact
+    same atom ordering (cell index k-slow, j, i-fast outermost; motif index m
+    innermost) as the original.
+
+    Args:
+        latt (np.ndarray): 3×3 lattice matrix, row vectors (Å).
+        motif (np.ndarray): (nmotif, 3) fractional basis positions.
+        ncell (array-like): (nx, ny, nz) tiling factors.
+
+    Returns:
+        ase.Atoms: supercell with PBC=[1,1,1] and chemical symbols set to
+        the default (element 1). The caller is responsible for assigning
+        real symbols.
+    """
     latt = np.asarray(latt, dtype=float)
     motif = np.asarray(motif, dtype=float)
     nx, ny, nz = (int(ncell[0]), int(ncell[1]), int(ncell[2]))
@@ -172,6 +190,26 @@ def create_supercell_fast(latt: np.ndarray, motif: np.ndarray,
 # vasp_create_hcp_pyr2(a, ca, np.array([1, 1, 10]) )
 
 def vasp_create_hcp_basal(a, ca, ncell, bp=33):
+    """Build an HCP (0001) basal-plane supercell via lattice + motif.
+
+    Uses the primitive hexagonal lattice (a, sqrt(3)/2, ca) with a 2-atom
+    motif at (0,0,0) and (1/3, 2/3, 1/2). The ``bp`` flag shifts atoms
+    in +z by 0.1*a (bp=33) or not (bp=0) to avoid surface atoms sitting
+    on the boundary.
+
+    Args:
+        a (float): HCP lattice constant a (Å).
+        ca (float): c/a ratio (dimensionless); c = ca * a.
+        ncell (np.ndarray): (nx, ny, nz) tiling factors.
+        bp (int): boundary-position flag; 33 shifts +z, 0 does not.
+
+    Returns:
+        ase.Atoms: HCP basal supercell. ``atoms.pos_a0`` stores the
+        reference lattice constant.
+
+    Note:
+        Depends on the optional ``myvasp`` companion package.
+    """
     print('==> create hcp basal plane: ')
     print(a, ca, ncell, bp)
 
@@ -197,6 +235,24 @@ def vasp_create_hcp_basal(a, ca, ncell, bp=33):
     #vf.my_write_vasp(atoms, filename='POSCAR', vasp5=True)
 
 def vasp_create_hcp_basal_ortho(a, ca, ncell, bp=33):
+    """Build an orthorhombic HCP (0001) basal-plane supercell.
+
+    Uses an orthorhombic lattice (a, sqrt(3)*a, ca*a) with a 4-atom motif,
+    equivalent to two primitive cells. Suitable for LAMMPS which prefers
+    orthogonal boxes.
+
+    Args:
+        a (float): HCP lattice constant a (Å).
+        ca (float): c/a ratio (dimensionless).
+        ncell (np.ndarray): (nx, ny, nz) tiling factors.
+        bp (int): boundary-position flag; 33 shifts +z, 0 does not.
+
+    Returns:
+        ase.Atoms: orthorhombic HCP basal supercell.
+
+    Note:
+        Depends on the optional ``myvasp`` companion package.
+    """
     print('==> create hcp basal_ortho plane: ')
     print(a, ca, ncell, bp)
 
@@ -224,6 +280,26 @@ def vasp_create_hcp_basal_ortho(a, ca, ncell, bp=33):
     #vf.my_write_vasp(atoms, filename='POSCAR', vasp5=True)
 
 def vasp_create_hcp_prism1(a, ca, ncell, bp=33):
+    """Build an HCP (10-10) prism I supercell.
+
+    Starts from the basal cell, then applies ``make_SFP_xy`` (surface
+    frame projection) and ``make_a3_ortho`` to reorient the cell so
+    that a3 points along the prism direction. The ``bp`` flag selects
+    wide (bp=33, +0.1*a shift) or narrow (bp=-33, -0.05*a shift).
+
+    Args:
+        a (float): HCP lattice constant a (Å).
+        ca (float): c/a ratio (dimensionless).
+        ncell (np.ndarray): (nx, ny, nz) tiling factors for the *basal*
+            cell; internally swapped for prism orientation.
+        bp (int): 33 = wide, -33 = narrow, 0 = no shift.
+
+    Returns:
+        ase.Atoms: HCP prism I supercell.
+
+    Note:
+        Depends on the optional ``myvasp`` companion package.
+    """
     print('==> create hcp prism plane: ')
     print(a, ca, ncell, bp)
 
@@ -252,6 +328,24 @@ def vasp_create_hcp_prism1(a, ca, ncell, bp=33):
     #vf.my_write_vasp(atoms, filename='POSCAR', vasp5=True)
 
 def vasp_create_hcp_pyr1(a, ca, ncell, bp=33):
+    """Build an HCP (10-11) pyramidal I supercell.
+
+    Uses a triclinic lattice with a3 tilted to mix basal and c-directions.
+    Applies ``make_SFP_xy`` and ``make_a3_ortho`` after construction.
+    The ``bp`` flag selects wide (bp=33, +0.1*a) or narrow (bp=-33, -0.05*a).
+
+    Args:
+        a (float): HCP lattice constant a (Å).
+        ca (float): c/a ratio (dimensionless).
+        ncell (np.ndarray): (nx, ny, nz) tiling factors.
+        bp (int): 33 = wide, -33 = narrow, 0 = no shift.
+
+    Returns:
+        ase.Atoms: HCP pyramidal I supercell.
+
+    Note:
+        Depends on the optional ``myvasp`` companion package.
+    """
     print('==> create hcp basal pyr1: ')
     print(a, ca, ncell, bp)
 
@@ -290,6 +384,23 @@ def vasp_create_hcp_pyr1(a, ca, ncell, bp=33):
     # vf.my_write_vasp(atoms, filename='POSCAR', vasp5=True)
 
 def vasp_create_hcp_pyr2(a, ca, ncell, bp=33):
+    """Build an HCP (10-12) pyramidal II supercell.
+
+    Uses an orthorhombic base lattice with a3 tilted. 4-atom motif.
+    Applies ``make_SFP_xy`` and ``make_a3_ortho`` after construction.
+
+    Args:
+        a (float): HCP lattice constant a (Å).
+        ca (float): c/a ratio (dimensionless).
+        ncell (np.ndarray): (nx, ny, nz) tiling factors.
+        bp (int): 33 shifts +z, 0 does not.
+
+    Returns:
+        ase.Atoms: HCP pyramidal II supercell.
+
+    Note:
+        Depends on the optional ``myvasp`` companion package.
+    """
     print('==> create hcp basal pyr2: ')
     print(a, ca, ncell, bp)
 
@@ -330,6 +441,23 @@ def vasp_create_hcp_pyr2(a, ca, ncell, bp=33):
 # https://github.com/BinglunYin/myalloy_package/blob/master/myvasp/vasp_create_fcc.py
 
 def vasp_create_fcc_100(a, ncell, bp=33):
+    """Build an FCC (100) supercell via lattice + motif.
+
+    Uses a cubic lattice (a, a, a) with a 4-atom FCC motif at
+    (0,0,0), (0.5,0.5,0), (0.5,0,0.5), (0,0.5,0.5).
+    The ``bp`` flag shifts atoms in +z by 0.1*a.
+
+    Args:
+        a (float): FCC lattice constant (Å).
+        ncell (np.ndarray): (nx, ny, nz) tiling factors.
+        bp (int): 33 shifts +z, 0 does not.
+
+    Returns:
+        ase.Atoms: FCC (100) supercell.
+
+    Note:
+        Depends on the optional ``myvasp`` companion package.
+    """
     print('==> create fcc 100 plane: ')
     print(a, ncell, bp)
 
