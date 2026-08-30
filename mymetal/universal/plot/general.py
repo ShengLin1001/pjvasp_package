@@ -47,6 +47,11 @@ from itertools import cycle
 from adjustText import adjust_text
 
 def check_font_size(ax: plt.Axes):
+    """Print the font size of axis labels and tick labels for debugging.
+
+    Args:
+        ax (plt.Axes): The matplotlib axes to inspect.
+    """
     x_label_fontsize = ax.xaxis.get_label().get_fontsize()
     y_label_fontsize = ax.yaxis.get_label().get_fontsize()
     print(f"Font size of x-axis label: {x_label_fontsize}")
@@ -66,6 +71,12 @@ def check_font_size(ax: plt.Axes):
         print(f"Font size of the first major tick label on the y-axis: {y_tick_font.get_size()}")
 
 def check_axes_size(fig, ax1):
+    """Print the physical size (inches) of an axes within a figure.
+
+    Args:
+        fig: The matplotlib Figure.
+        ax1: The axes to measure.
+    """
      # 1. 获取 ax1 在 Figure 中的位置和大小（归一化坐标，单位 0~1）
     bbox = ax1.get_position()
     print("ax1 in figure (relative):", bbox)
@@ -83,10 +94,17 @@ def check_axes_size(fig, ax1):
     print(f"ax1 size in pixels: {ax1_w_inch * dpi:.1f} x {ax1_h_inch * dpi:.1f}")
 
 def check_all_rcParams():
+    """Print all current matplotlib rcParams key-value pairs for debugging."""
     for key, value in plt.rcParams.items():
         print(f"{key:40} = {value}")
 
 def get_ploted_figure():
+    """Return the current figure, axes, and their axis limits.
+
+    Returns:
+        tuple: (fig, ax, xlim, ylim) where xlim/ylim are the current
+        x/y axis limits of ``plt.gca()``.
+    """
     fig = plt.gcf()
     ax = plt.gca()
     xlim = ax.get_xlim()
@@ -476,6 +494,14 @@ def general_adjust_text(texts: list = None, ax=None, x: list = None, y: list = N
         **kwargs)
 
 def general_modify_band_plot(ax: plt.Axes) -> plt.Axes:
+    """Style a band-structure plot: hide x-tick labels, add minor ticks.
+
+    Args:
+        ax (plt.Axes): The band-structure axes to style.
+
+    Returns:
+        plt.Axes: The modified axes (same object).
+    """
     xticks = ax.get_xticks()
     xticklabels = ax.get_xticklabels()
     xlabels = ax.get_xlabel()
@@ -572,6 +598,23 @@ def general_modify_line(ax: plt.Axes,
                     cmap_color: str = 'coolwarm',
                     if_change_color: bool = False,
                     ):
+    """Modify line appearance: remove dashed lines, recolor, or apply gradient.
+
+    Args:
+        ax (plt.Axes): The axes whose lines to modify.
+        remove_dashed_line (bool): If True, remove lines with styles in
+            ``remove_line_style``.
+        remove_line_style (list): Line styles to remove (default ``['--', ':']``).
+        color_list (list): Ordered color names to assign to remaining lines.
+        if_gradient_color (bool): If True, use a gradient instead of color_list.
+        gradient_colors (list): Two endpoint colors for the gradient.
+        if_cmap_color (bool): If True, use a colormap instead of color_list.
+        cmap_color (str): Colormap name (default ``'coolwarm'``).
+        if_change_color (bool): If True, recolor existing lines.
+
+    Returns:
+        plt.Axes: The modified axes.
+    """
     all_lines = ax.get_lines()
     all_index = [index for index, line in enumerate(all_lines)]
     removed_index = []
@@ -600,6 +643,21 @@ def general_add_vlines_hlines(  ax: plt.Axes,
                                 zorder_vlines: list = [-1],
                                 zorder_hlines: list = [-1],
                                 linestyle: str='--'):
+    """Add vertical and horizontal reference lines to an axes.
+
+    Args:
+        ax (plt.Axes): The axes to modify.
+        vlines (list): X positions for vertical lines.
+        hlines (list): Y positions for horizontal lines.
+        vlines_colors (list): Colors for vertical lines (cycled).
+        hlines_colors (list): Colors for horizontal lines (cycled).
+        zorder_vlines (list): Z-order values for vertical lines (cycled).
+        zorder_hlines (list): Z-order values for horizontal lines (cycled).
+        linestyle (str): Line style (default ``'--'``).
+
+    Returns:
+        plt.Axes: The modified axes.
+    """
     # add vlines, hlines
     color_cycle = cycle(vlines_colors)
     zorder_cycles=cycle(zorder_vlines)
