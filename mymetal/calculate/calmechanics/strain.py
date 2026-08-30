@@ -164,7 +164,7 @@ def cal_strain_matrix(deformation_matrix: np.array = None) -> list:
     F = deformation_matrix
 
     # For small defoemation
-    # left Cauchy-Green deformation tensor
+    # right Cauchy-Green deformation tensor
     # C = F^T * F
     lc = np.dot(F.T, F)
     # Lagrangian strain tensor
@@ -173,7 +173,7 @@ def cal_strain_matrix(deformation_matrix: np.array = None) -> list:
 
 
     # For large deformation
-    # right Cauchy-Green deformation tensor
+    # left Cauchy-Green deformation tensor
     rc = np.dot(F, F.T)
     # Euler strain tensor
     # ε = 1/2 * (I - F * F^T)
