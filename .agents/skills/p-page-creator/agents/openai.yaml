@@ -1,0 +1,4 @@
+interface:
+  display_name: "P Page Creator"
+  short_description: "创建并发布 Sphinx manual 风格的 package 文档站点"
+  default_prompt: "Use $p-page-creator to update and deploy this package's Sphinx manual website through GitHub Pages."

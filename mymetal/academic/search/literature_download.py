@@ -30,6 +30,7 @@ JOURNAL_ABBREVIATIONS = {
     "Cell": "CELL",
     "Chemical Society Reviews": "CHEM-SOC-REV",
     "Communications in Mathematical Physics": "COMMUN-MATH-PHYS",
+    "Communications of the ACM": "COMMUN-ACM",
     "Computational Materials Science": "COMP-MATER-SCI",
     "Frontiers in Neuroscience": "FRONT-NEUROSCI",
     "IEEE Transactions on Information Theory": "IEEE-TIT",

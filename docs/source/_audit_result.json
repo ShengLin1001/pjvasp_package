@@ -1,0 +1,289 @@
+{
+  "dead_ends": [
+    {
+      "file": "tutorials/cij_energy_fitting.rst",
+      "issue": "line 105: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/deformation_and_hnf.rst",
+      "issue": "line 97: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/io_extxyz_and_general.rst",
+      "issue": "line 84: no '下一步/next steps' section; has 1 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/miller_index_and_density.rst",
+      "issue": "line 84: no '下一步/next steps' section; has 1 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/periodic_table_and_arkel.rst",
+      "issue": "line 76: no '下一步/next steps' section AND no outbound :doc: links anywhere — complete navigation dead-end",
+      "fix": "Add a '下一步' section with :doc: links to related tutorials and :doc:`../api` for the API functions used"
+    },
+    {
+      "file": "tutorials/plot_gallery.rst",
+      "issue": "line 108: no '下一步/next steps' section; has 10 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_atominfo.rst",
+      "issue": "line 75: no '下一步/next steps' section; has 1 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_energy.rst",
+      "issue": "line 68: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_general.rst",
+      "issue": "line 218: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_n2p2.rst",
+      "issue": "line 127: no '下一步/next steps' section; has 1 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_oldplotdos.rst",
+      "issue": "line 94: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_plot.rst",
+      "issue": "line 113: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_plotting.rst",
+      "issue": "line 130: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_ppt.rst",
+      "issue": "line 56: no '下一步/next steps' section; has 1 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_render.rst",
+      "issue": "line 63: no '下一步/next steps' section; has 1 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/plot_gallery_workflow.rst",
+      "issue": "line 185: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/post_cij_comparison.rst",
+      "issue": "line 105: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/post_convergence.rst",
+      "issue": "line 93: no '下一步/next steps' section AND no outbound :doc: links anywhere — complete navigation dead-end",
+      "fix": "Add a '下一步' section with :doc: links to related tutorials and :doc:`../api` for the API functions used"
+    },
+    {
+      "file": "tutorials/post_e_in_1_2_bulk.rst",
+      "issue": "line 90: no '下一步/next steps' section AND no outbound :doc: links anywhere — complete navigation dead-end",
+      "fix": "Add a '下一步' section with :doc: links to related tutorials and :doc:`../api` for the API functions used"
+    },
+    {
+      "file": "tutorials/post_gsfe_analysis.rst",
+      "issue": "line 95: no '下一步/next steps' section AND no outbound :doc: links anywhere — complete navigation dead-end",
+      "fix": "Add a '下一步' section with :doc: links to related tutorials and :doc:`../api` for the API functions used"
+    },
+    {
+      "file": "tutorials/post_hoec_energy.rst",
+      "issue": "line 178: no '下一步/next steps' section; has 1 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/post_kpar_ncore.rst",
+      "issue": "line 94: no '下一步/next steps' section AND no outbound :doc: links anywhere — complete navigation dead-end",
+      "fix": "Add a '下一步' section with :doc: links to related tutorials and :doc:`../api` for the API functions used"
+    },
+    {
+      "file": "tutorials/post_relax_convergence.rst",
+      "issue": "line 84: no '下一步/next steps' section AND no outbound :doc: links anywhere — complete navigation dead-end",
+      "fix": "Add a '下一步' section with :doc: links to related tutorials and :doc:`../api` for the API functions used"
+    },
+    {
+      "file": "tutorials/post_stretch_analysis.rst",
+      "issue": "line 123: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/reciprocal_lattice.rst",
+      "issue": "line 90: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    },
+    {
+      "file": "tutorials/slurm_script_generation.rst",
+      "issue": "line 85: no '下一步/next steps' section; has 2 outbound :doc: link(s) but no structured next-steps section",
+      "fix": "Add a '下一步' section at the end consolidating links to related tutorials and :doc:`../api`"
+    }
+  ],
+  "broken_links": [],
+  "missing_cross_refs": [
+    {
+      "tutorial": "tutorials/atom_manipulation.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/biaxial_stretch.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/cij_energy_fitting.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/cubic_cell_and_stretch.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/deformation_and_hnf.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/eos_curve.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/gsfe_models.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/io_extxyz_and_general.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/kpoints_sampling.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/miller_index_and_density.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/neighbor_distances.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/outcar_batch.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/periodic_table_and_arkel.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_atominfo.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_energy.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_general.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_n2p2.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_oldplotdos.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_plot.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_plotting.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_ppt.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_render.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/plot_gallery_workflow.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_cij_comparison.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_convergence.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_e_in_1_2_bulk.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_gsfe_analysis.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_hoec_energy.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_kpar_ncore.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_relax_convergence.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/post_stretch_analysis.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/reciprocal_lattice.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/schmid_factor.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/slurm_script_generation.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/strain_deformation.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/surface_energy.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    },
+    {
+      "tutorial": "tutorials/surface_passivation.rst",
+      "missing_api_link": "uses :func:/:class:/:mod: roles for mymetal.* but has no :doc:`../api` link to the API reference page"
+    }
+  ]
+}
