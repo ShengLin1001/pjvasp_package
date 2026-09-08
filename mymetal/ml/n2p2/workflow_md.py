@@ -48,6 +48,7 @@ Functions:
 
 from mymetal.ml.n2p2.workflow import PeiN2p2
 from mymetal.ml.n2p2.dataset import nnpdata
+from mymetal.universal.atom.order import get_closepacked_phase, QL_IDEAL
 from mymetal.ml.n2p2.calculate.sf import get_largest_rc_from_input_nn
 
 from ase import Atoms
@@ -104,6 +105,7 @@ _COLS_COMPARE_STAT = ['index', 'phase', 'T_set_K', 'natoms',
                       'E_mean_eV/at', 'E_std_meV/at', 'E_spread_meV/at', 'n_pot']
 _COLS_SELECT = ['rank', 'index', 'phase', 'T_set_K', 'natoms',
                 'E_std_meV/at', 'E_spread_meV/at', 'tag']
+_COLS_PHASE = ['index', 'run', 'phase', 'T_set_K', 'step', 'measured', 'q4', 'q6', 'msd_A2']
 
 # LAMMPS dump 的列名 -> 本模块内部字段名。改 md_heating.mod 的 dump 列时这里同步改。
 _DUMP_COLS_REQUIRED = ['id', 'type', 'x', 'y', 'z', 'fx', 'fy', 'fz', 'c_peatom1']
@@ -832,6 +834,101 @@ class PeiN2p2MD(PeiN2p2):
         return path_frames
 
 
+    def check_md_frame_phase(self, iround: int = 0, tol: float = 0.25,
+                             if_skip_if_done: bool = True) -> Path:
+        """逐帧实测「它还是不是自己被建成的那个相」，写成一张可供 select 过滤的表。
+
+        MD 用的是**连续升温**（不重置速度、构型跨温度档继承），所以某一档一旦发生结构
+        重排，之后所有更高温度档继承的都是已经变掉的结构 —— 而这些帧仍然带着建胞时的
+        ``phase`` 标签。stage2/0 首轮实测：6/6 条 HCP 轨迹在 210–315 K 之间就重排了，
+        FCC 则撑到 490 K 以上。
+
+        两个互相独立的量一起写：
+
+        - ``msd_A2``：相对同一条轨迹最低温首帧的均方位移（分数坐标最小镜像、去整体平移）。
+          纯几何量，回答「动过没有」——本体系纯热振动是 0.02–0.05 Å²。
+        - ``q4``/``q6``/``measured``：平均型 Steinhardt 参数与据此判定的相，
+          回答「变成了什么」。用平均型是因为原始型扛不住热噪声。
+
+        Args:
+            iround: MD 扩充轮次。
+            tol: 传给 :func:`get_closepacked_phase` 的相窗半宽（占 FCC/HCP q4 间距的份额）。
+            if_skip_if_done: 完成阀门。
+
+        Returns:
+            ``data_md/<iround>/y_frames/p_post_frames_phase.txt``。
+
+        Raises:
+            FileNotFoundError: 缺帧集或帧索引表。
+        """
+        os.chdir(self.dir_root)
+        dir_frames = self.dir_data_md / str(iround) / 'y_frames'
+        path_out = dir_frames / 'p_post_frames_phase.txt'
+        if self._skip_done_stage([path_out], f'check_md_frame_phase {dir_frames}',
+                                 if_skip_if_done=if_skip_if_done):
+            return path_out
+
+        path_index = dir_frames / 'p_post_frames.txt'
+        path_frames = dir_frames / 'input.data.frames'
+        if not self._is_file_nonempty(path_index) or not self._is_file_nonempty(path_frames):
+            raise FileNotFoundError(f"❌ Missing {path_index} or {path_frames}. "
+                                    f"Run collect_md_frames first.")
+        df = pd.read_csv(path_index, sep=r'\s+', comment='#')
+        data = nnpdata()
+        data.load_from_datafile(str(path_frames))
+        if len(data.latoms) != len(df):
+            raise ValueError(f"❌ {path_frames} holds {len(data.latoms)} structure(s) but "
+                             f"{path_index} lists {len(df)}.")
+
+        # 每条轨迹的参考帧 = 该 (run, phase) 步号最小的那一帧（最低温档的第一帧）
+        dict_ref = df.loc[df.groupby(['run', 'phase'])['step'].idxmin()]
+        dict_ref = {(row['run'], row['phase']): int(row['index'])
+                    for _, row in dict_ref.iterrows()}
+
+        lrow = []
+        for i, row in df.iterrows():
+            atoms = data.latoms[int(row['index'])]
+            measured, q4, q6 = get_closepacked_phase(atoms, tol=tol)
+            atoms_ref = data.latoms[dict_ref[(row['run'], row['phase'])]]
+            lrow.append({'index': int(row['index']), 'run': row['run'],
+                         'phase': row['phase'], 'T_set_K': row['T_set_K'],
+                         'step': int(row['step']), 'measured': measured,
+                         'q4': q4, 'q6': q6, 'msd_A2': self._msd(atoms, atoms_ref)})
+        df_out = pd.DataFrame(lrow)[_COLS_PHASE]
+
+        n_match = int((df_out['measured'] == df_out['phase']).sum())
+        self._write_table(path_out,
+                          ['# measured structure of every MD frame (does it still hold '
+                           'the phase it was built as?)',
+                           f'# round      {iround}',
+                           '# msd_A2     vs the lowest-T frame of the same trajectory; '
+                           'thermal level is 0.02-0.05 A^2 for bulk Au',
+                           '# q4/q6      averaged (Lechner-Dellago) Steinhardt parameters; '
+                           f'ideal FCC {QL_IDEAL["fcc"]}, HCP {QL_IDEAL["hcp"]}',
+                           '# measured   phase from q4 (fcc / hcp / other)',
+                           f'# matching   {n_match}/{len(df_out)} frame(s) still hold '
+                           f'their built phase'],
+                          df_out, float_format='16.8f')
+        print(f"📊 check_md_frame_phase: {n_match}/{len(df_out)} frame(s) still hold their "
+              f"built phase -> {path_out}")
+        return path_out
+
+
+    @staticmethod
+    def _msd(atoms=None, atoms_ref=None) -> float:
+        """相对参考帧的均方位移（Å²）。
+
+        分数坐标做差再最小镜像：NPT 下盒子本身在涨，直接比笛卡尔坐标会把体积变化
+        算成位移。再减去平均位移，因为质心漂移不是结构变化。
+        """
+        frac = atoms.get_scaled_positions() - atoms_ref.get_scaled_positions()
+        frac -= np.round(frac)
+        cell = 0.5 * (atoms.cell.array + atoms_ref.cell.array)
+        disp = frac @ cell
+        disp -= disp.mean(axis=0)
+        return float((disp ** 2).sum(axis=1).mean())
+
+
     # ===== 阶段 iii-b：每条势对整份帧集跑 nnp-dataset =====
     def submit_compare(self, iround: int = 0, lpotential: list = None,
                        if_sbatch: bool = False, dict_args_to_submit: dict = None,
@@ -1074,6 +1171,7 @@ class PeiN2p2MD(PeiN2p2):
     def select_md_structures(self, iround: int = 0, n_select_per_group: int = 5,
                              lgroup_by: list = None, std_min: float = None,
                              n_select_total: int = None, tag_prefix: str = 'MD',
+                             if_phase_match: bool = False, msd_max: float = None,
                              if_skip_if_done: bool = True) -> Path:
         """按 committee 发散度挑出「训练得不好」的构型，写成待 DFT 标记的清单。
 
@@ -1087,6 +1185,17 @@ class PeiN2p2MD(PeiN2p2):
             n_select_per_group: 每组取多少个（默认 5，同 LT）。
             lgroup_by: 分组列，默认 ``['phase', 'T_set_K']``；传 ``[]`` 则全局排序。
             std_min: 只保留 ``E_std_meV/at`` 不低于该阈值的帧；None 表示不过滤。
+            if_phase_match: 只在「实测相 == 建胞时的相」的帧里挑（需先跑
+                :meth:`check_md_frame_phase`）。连续升温会让某些轨迹在中途重排，
+                之后所有更高温度档继承的都是变了的结构，而它们仍带着原来的 ``phase``
+                标签；打开这个开关，入选构型的 tag 才描述结构本身。
+            msd_max: 只保留 ``msd_A2`` 不超过该值的帧（Å²，同样来自
+                :meth:`check_md_frame_phase`）。**单靠 ``if_phase_match`` 不够**：
+                重排成层错堆垛的 HCP 在 q4 上仍读作 hcp，实测 630 K 档 MSD 已经到
+                5–8 Å² 却照样通过相判据。本体系纯热振动是 0.01–0.11 Å²，
+                0.4 左右是「热振动」与「换了格点」之间干净的分界。
+                两个开关一起用，采样的温度上限才真正由结构自己划定，
+                而不是由 ``DICT_MD_PARAMS`` 里的 ``n_temp`` 划定。
             n_select_total: 全局上限；超出时按发散度降序截断。DFT 标记的代价与它成正比。
             tag_prefix: 写进 input.data.md 的 tag 前缀（tag 形如 ``MD0-fcc``）。
             if_skip_if_done: 完成阀门。
@@ -1115,6 +1224,19 @@ class PeiN2p2MD(PeiN2p2):
         df = pd.read_csv(path_compare, sep=r'\s+', comment='#')
 
         n_all = len(df)
+        if if_phase_match:
+            path_phase = dir_round / 'y_frames' / 'p_post_frames_phase.txt'
+            if not self._is_file_nonempty(path_phase):
+                raise FileNotFoundError(f"❌ Missing {path_phase}. Run check_md_frame_phase "
+                                        f"first, or set if_phase_match=False.")
+            df_phase = pd.read_csv(path_phase, sep=r'\s+', comment='#')
+            lkeep = df_phase['measured'] == df_phase['phase']
+            if msd_max is not None:
+                lkeep &= df_phase['msd_A2'] <= float(msd_max)
+            lindex_keep = set(df_phase.loc[lkeep, 'index'].astype(int))
+            df = df[df['index'].astype(int).isin(lindex_keep)]
+            print(f"  phase_match (msd_max={msd_max}): {len(df)}/{n_all} frame(s) still hold "
+                  f"their built phase")
         if std_min is not None:
             df = df[df['E_std_meV/at'] >= float(std_min)]
             print(f"  std_min {std_min} meV/at: {len(df)}/{n_all} frame(s) kept")
@@ -1165,7 +1287,8 @@ class PeiN2p2MD(PeiN2p2):
                            f'# round             {iround}',
                            f'# group_by          {lgroup_by if lgroup_by else "(global)"}',
                            f'# n_select_per_group {n_select_per_group}   '
-                           f'std_min {std_min}   n_select_total {n_select_total}',
+                           f'std_min {std_min}   n_select_total {n_select_total}   '
+                           f'phase_match {if_phase_match}   msd_max {msd_max}',
                            f'# frames scanned    {n_all}   selected {len(df_out)}',
                            '# rank              1 = most divergent; index = frame index in '
                            'input.data.frames',

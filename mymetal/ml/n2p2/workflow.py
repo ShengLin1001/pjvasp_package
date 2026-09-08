@@ -40,7 +40,7 @@ from mymetal.ml.n2p2.calculate.post import (read_learning_curve, read_normalizat
 from mymetal.universal.plot.n2p2 import (my_plot_learning_curve, my_plot_compare, my_plot_rmse_by_tag,
                                          my_plot_epoch_stretch, my_plot_epoch_cij, my_plot_epoch_gsfe,
                                          my_plot_epoch_rmse, my_plot_check_interface, VERDICT_CODE)
-from mymetal.ml.n2p2.dataset import nnpdata, read_dft_reference
+from mymetal.ml.n2p2.dataset import nnpdata
 from mymetal.io.general import general_write
 from mymetal.slurm.submit import pei_slurm_univ_submit, read_comment_tag, stamp_comment_tag
 import numpy as np
@@ -107,6 +107,13 @@ _ABSENCE_STATUS = {
     'missing_epoch': '表在，但没有这个 epoch 的行 —— post_epoch_scan 当时判定该 epoch 输入不全（item = *）',
     'missing_value': '有该 epoch 的行，但 item 这一列是 NaN/inf',
 }
+
+# 逐 epoch 物性扫描默认丢弃的「热身段」：epoch <= 该值的权重快照不参与物性计算与汇总。
+# 训练初期权重还在随机初值附近，LAMMPS 的 minimize / fix box relax 经常不收敛甚至跑飞，
+# 算出来的 a/c、Cij、gsfe 是噪声，画进收敛图只会把纵轴压扁、看不出真正的收敛 epoch。
+# post_properties（决定算哪些）与 post_epoch_scan（决定汇总哪些）共用同一默认值；
+# 显式传 lepoch 时该值不生效，完全以调用方点名的 epoch 为准。
+_EPOCH_WARMUP = 50
 
 
 class PeiN2p2:
@@ -1953,7 +1960,114 @@ class PeiN2p2:
 
 
     # y_n2p2_train/y_post
+    @staticmethod
+    def _select_lepoch(lepoch_avail: list = None, lepoch: list = None,
+                       epoch_warmup: int = _EPOCH_WARMUP, label: str = '') -> list:
+        """定出逐 epoch 物性扫描要处理哪几个 epoch。
+
+        两种选法，``lepoch`` 优先：
+
+        - ``lepoch=[100, 150, ..., 1000]``：**按 epoch 号显式点名**。1000 epoch 配
+          ``write_weights_epoch 5`` 会攒出 201 个快照，逐个跑 LAMMPS 物性是 6 run x 201
+          个单核作业、墙钟数小时；看收敛趋势用几十个点足够，没必要全扫。
+        - ``lepoch=None``：丢掉 ``epoch <= epoch_warmup`` 的热身段，其余全取；
+          ``epoch_warmup=None`` 则不做任何过滤（全取，含 epoch 0 的随机初值快照）。
+
+        Args:
+            lepoch_avail: 现有的 epoch 标签（权重文件/目录里的原始零填充形式）。
+            lepoch: 要处理的 epoch 号列表，接受 int（``1000``）或 str（``'001000'``）；
+                按 epoch **数值**匹配，不依赖零填充宽度。
+            epoch_warmup: 仅当 ``lepoch`` 为 None 时生效；丢弃 ``epoch <= 该值`` 的快照。
+                传 None 表示不过滤（全取）——注意 ``0`` 不等于「全取」，它会丢掉 epoch 0。
+            label: 出错/回显时标明是哪个 run 或哪个目录。
+
+        Returns:
+            epoch 标签列表（保持传入的零填充形式），按 epoch 升序。
+
+        Raises:
+            ValueError: 点名的 epoch 不存在（列出可用范围，避免 write_weights_epoch
+                对不上时一路跑到汇总才发现缺行）；或热身段过滤后一个 epoch 都不剩。
+        """
+        lepoch_avail = sorted(lepoch_avail, key=int)
+
+        if lepoch is not None:
+            # 按数值建索引：目录名是 6 位零填充，但调用方写 1000 更自然。
+            dict_epoch = {int(e): e for e in lepoch_avail}
+            lout, lmiss = [], []
+            for e in lepoch:
+                key = int(e)
+                (lout.append(dict_epoch[key]) if key in dict_epoch else lmiss.append(key))
+            if lmiss:
+                raise ValueError(
+                    f"❌ epoch(s) {lmiss} not available in {label}. "
+                    f"Available: {int(lepoch_avail[0])} .. {int(lepoch_avail[-1])} "
+                    f"({len(lepoch_avail)} snapshot(s)). Check `write_weights_epoch` "
+                    f"in input.nn — weights are only dumped every N epochs.")
+            lout = sorted(set(lout), key=int)
+            print(f"  📊 epoch selection ({label}): {len(lout)} explicitly requested "
+                  f"of {len(lepoch_avail)} available.")
+            return lout
+
+        if epoch_warmup is None:                       # 显式「全取」：与加热身段过滤之前的行为等价
+            print(f"  📊 epoch selection ({label}): no warm-up filter, "
+                  f"all {len(lepoch_avail)} snapshot(s) taken.")
+            return lepoch_avail
+
+        lout = [e for e in lepoch_avail if int(e) > epoch_warmup]
+        if not lout:
+            raise ValueError(
+                f"❌ No epoch left in {label} after dropping the warm-up "
+                f"(epoch <= {epoch_warmup}); available "
+                f"{int(lepoch_avail[0])} .. {int(lepoch_avail[-1])}. "
+                f"Lower epoch_warmup or pass lepoch explicitly.")
+        print(f"  ⏭️  epoch selection ({label}): dropped {len(lepoch_avail) - len(lout)} "
+              f"warm-up snapshot(s) with epoch <= {epoch_warmup}; {len(lout)} left.")
+        return lout
+
+    @staticmethod
+    def _echo_dict_dft(dict_dft: dict = None) -> dict:
+        """校验并回显调用方传入的 DFT 参考值。
+
+        DFT 基线不再由库去 VASP 归档目录里现读（旧的 ``dir_dft_root`` 路径已去除）：
+        它是一组一年也不变几次的常数，写在项目脚本顶部比每次重新解析计算目录更好维护，
+        也让绘图不再依赖归档目录在不在、路径有没有搬家。
+
+        Args:
+            dict_dft: ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}}``，键名与
+                :meth:`post_epoch_scan` 写出的列名一致（无 ``epoch`` 列）。缺的组按空
+                字典处理（该类图不画参考线）；为 None 表示完全不叠参考线。
+                一次性生成方式见 :func:`mymetal.ml.n2p2.dataset.read_dft_reference`。
+
+        Returns:
+            补齐三个组键的 dict；``dict_dft`` 为 None 时返回 None。
+
+        Raises:
+            ValueError: 不是 dict、出现 stretch/cij/gsfe 之外的组名，或某组的值不是 dict。
+        """
+        if dict_dft is None:
+            return None
+        if not isinstance(dict_dft, dict):
+            raise ValueError(f"❌ dict_dft must be a dict, got {type(dict_dft).__name__}.")
+        lgroup = ['stretch', 'cij', 'gsfe']
+        lbad = [k for k in dict_dft if k not in lgroup]
+        if lbad:
+            raise ValueError(f"❌ Unknown dict_dft group(s) {lbad}; expected {lgroup}.")
+        dft = {}
+        for group in lgroup:
+            value = dict_dft.get(group, {})
+            if not isinstance(value, dict):
+                raise ValueError(f"❌ dict_dft['{group}'] must be a dict, "
+                                 f"got {type(value).__name__}.")
+            dft[group] = value
+        print("================ 📊 DFT reference (passed in as dict)")
+        for group in lgroup:
+            print(f"  [{group}] {len(dft[group])} value(s)")
+            for k, v in dft[group].items():
+                print(f"    {k:16s} = {v:.6g}")
+        return dft
+
     def post_properties(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
+                        lepoch: list = None, epoch_warmup: int = _EPOCH_WARMUP,
                         if_sbatch: bool = False,
                         dict_args_to_submit: dict = {'preset': 'zcm6_lammps_0',
                                                      'chunks': 5,
@@ -1986,6 +2100,12 @@ class PeiN2p2:
 
         Args:
             dir_run: n2p2 训练运行目录。
+            lepoch: 要跑物性的 epoch 号列表（如 ``[100, 150, ..., 1000]``），接受 int 或
+                零填充 str；为 None 时取 ``epoch > epoch_warmup`` 的全部快照。
+                每个 epoch = 一个独立 LAMMPS 作业，别无脑全扫（1000 epoch 配
+                ``write_weights_epoch 5`` 是 201 个作业/run）。见 :meth:`_select_lepoch`。
+            epoch_warmup: 仅当 ``lepoch`` 为 None 时生效；丢弃 ``epoch <= 该值`` 的热身段，
+                默认 ``_EPOCH_WARMUP``；传 None 表示不过滤（全取）。
             if_sbatch: 是否真正提交 Slurm 作业。
             dict_args_to_submit: 传递给通用 Slurm 提交器的参数字典。
             if_force_rebuild: properties/ 非空时是否强制清空重建。默认 False（非空即报错，
@@ -2006,6 +2126,7 @@ class PeiN2p2:
         Raises:
             FileNotFoundError: 缺少训练输入、scaling.data、权重文件或 LAMMPS 工具目录。
             FileExistsError: properties/ 非空且未传 if_force_rebuild。
+            ValueError: 点名的 epoch 没有对应权重，或热身段过滤后无 epoch 可跑。
         """
         os.chdir(self.dir_root)
         dir_run = Path(dir_run)
@@ -2029,14 +2150,16 @@ class PeiN2p2:
             raise FileNotFoundError(f"❌ Missing lmp_utils source dir {self.dir_lmp_utils}.")
         cutoff = get_largest_rc_from_input_nn(str(src_input_nn)) + 0.01
 
-        # 2. 收集 epoch（weights.<elem>.<epoch>.out -> <epoch> 去重排序）
-        lepoch = sorted({w.name.split('.')[-2] for w in dir_run.glob('weights.*.*.out')})
-        if not lepoch:
+        # 2. 收集 epoch（weights.<elem>.<epoch>.out -> <epoch> 去重排序）再按 lepoch 筛选，
+        #    没被选中的 epoch 连脚手架都不铺 —— 一个 epoch 就是一个 LAMMPS 作业，别白算。
+        lepoch_avail = sorted({w.name.split('.')[-2] for w in dir_run.glob('weights.*.*.out')})
+        if not lepoch_avail:
             raise FileNotFoundError(f"❌ No weights.*.*.out in {dir_run}. Training not finished?")
+        lepoch_use = self._select_lepoch(lepoch_avail, lepoch, epoch_warmup, label=str(dir_run))
 
         # 3. 脚手架：建 y_epoch_scan/y_dir/<epoch>/（非空即报错，除非 if_force_rebuild）
         dir_epoch_scan_root = dir_props / 'y_epoch_scan'
-        ldir_epoch = [dir_epoch_scan_root / 'y_dir' / epoch for epoch in lepoch]
+        ldir_epoch = [dir_epoch_scan_root / 'y_dir' / epoch for epoch in lepoch_use]
         ldir_done = [d for d in ldir_epoch if self._epoch_dir_is_done(d)] if if_skip_if_done else []
         if if_skip_if_done and len(ldir_done) == len(ldir_epoch):
             print(f"⏭️ skip post_properties {dir_props}: all {len(ldir_epoch)} epoch dir(s) already "
@@ -2046,7 +2169,7 @@ class PeiN2p2:
             return dir_props
 
         n_kept = 0
-        for epoch, dir_epoch in zip(lepoch, ldir_epoch):
+        for epoch, dir_epoch in zip(lepoch_use, ldir_epoch):
             # 脚手架已铺好就原样保留：避免 _guard_rebuild_dir 把「准备好但没投出去」判成非法，
             # 更要避免任何形式的删目录——已跑出的结果都在这些子目录里。
             if if_skip_if_done and self._epoch_dir_is_prepared(dir_epoch, self.dir_lmp_utils):
@@ -2057,7 +2180,7 @@ class PeiN2p2:
                                     label=f'epoch {epoch}')
             lw = sorted(dir_run.glob(f'weights.*.{epoch}.out'))
             self._prepare_epoch_dir(dir_epoch, dir_run, lw, self.dir_lmp_utils)
-        print(f"Prepared {len(lepoch) - n_kept} epoch dir(s) under {dir_epoch_scan_root} "
+        print(f"Prepared {len(lepoch_use) - n_kept} epoch dir(s) under {dir_epoch_scan_root} "
               f"(kept {n_kept} already-prepared, {len(ldir_done)} of them with complete results; "
               f"hdnnp cutoff {cutoff:.2f}, pair_coeff {' '.join(self.lele)}).")
 
@@ -2120,7 +2243,8 @@ class PeiN2p2:
 
 
     def post_epoch_scan(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
-                        dir_dft_root: Path = None) -> Path:
+                        dict_dft: dict = None, lepoch: list = None,
+                        epoch_warmup: int = _EPOCH_WARMUP) -> Path:
         """汇总跨 epoch 的 LAMMPS 物性扫描结果。
 
         把 ``properties/y_epoch_scan/y_dir/<epoch>/`` 各 epoch 的物性结果汇总到与 y_dir
@@ -2141,15 +2265,22 @@ class PeiN2p2:
 
         Args:
             dir_run: n2p2 训练运行目录。
-            dir_dft_root: DFT (VASP) 计算归档根目录（如 construct_dataset/calculate）。
-                给定时用 :func:`read_dft_reference` 读出同样的物理量，叠成灰色虚线参考线
-                画进三张 epoch 扫描图，并把读到的值打印到屏幕；为 None 时只画 LAMMPS 曲线。
+            dict_dft: DFT 参考值 ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}}``，
+                键名与本方法写出的列名一致。给定时叠成灰色水平虚线画进三张 epoch 扫描图，
+                并把值打印到屏幕；为 None 时只画 LAMMPS 曲线。由调用方（项目脚本）以字面量
+                维护，库不再去 VASP 归档目录现读；首次生成用
+                :func:`mymetal.ml.n2p2.dataset.read_dft_reference`。
+            lepoch: 要汇总的 epoch 号列表；为 None 时取 ``epoch > epoch_warmup`` 的全部。
+                通常与 :meth:`post_properties` 传的是同一个列表。见 :meth:`_select_lepoch`。
+            epoch_warmup: 仅当 ``lepoch`` 为 None 时生效；丢弃 ``epoch <= 该值`` 的热身段；
+                传 None 表示不过滤（全取）。
 
         Returns:
             epoch 扫描汇总目录。
 
         Raises:
-            FileNotFoundError: 缺少 properties/y_epoch_scan/y_dir 目录，或给定的 dir_dft_root 不存在。
+            FileNotFoundError: 缺少 properties/y_epoch_scan/y_dir 目录，或目录下没有任何 epoch。
+            ValueError: dict_dft 结构不合法，或点名的 epoch 没有结果目录。
         """
 
         from contextlib import redirect_stdout
@@ -2169,7 +2300,13 @@ class PeiN2p2:
         lats, cij_keys = _LATS, _CIJ_KEYS
         gsfe_types, all_types = _GSFE_TYPES, _ALL_GSFE_TYPES
 
-        epochs = sorted([int(d.name) for d in scan.iterdir() if d.is_dir() and d.name.isdigit()])
+        lepoch_avail = sorted([d.name for d in scan.iterdir() if d.is_dir() and d.name.isdigit()],
+                              key=int)
+        if not lepoch_avail:
+            raise FileNotFoundError(f"❌ No epoch dir under {scan}. "
+                                    f"Run post_properties(if_sbatch=True) first.")
+        epochs = [int(e) for e in self._select_lepoch(lepoch_avail, lepoch, epoch_warmup,
+                                                      label=str(scan))]
 
         rows_stretch, rows_cij, rows_gsfe = [], [], []
         for ep in epochs:
@@ -2233,18 +2370,8 @@ class PeiN2p2:
 
         nstretch, n_cij, n_gsfe = 0, 0, 0
 
-        # DFT 参考基线（construct_dataset 归档）：与逐 epoch 量同读取器、同键名，叠成灰色虚线参考。
-        # 给定 dir_dft_root 才读；目录不存在直接报错（结构性前提），缺单个文件由 read_dft_reference 跳过。
-        dft = None
-        if dir_dft_root is not None:
-            if not Path(dir_dft_root).is_dir():
-                raise FileNotFoundError(f"❌ Missing DFT archive root {dir_dft_root}.")
-            dft = read_dft_reference(dir_dft_root)
-            print(f"================ 📊 DFT reference ({dir_dft_root})")
-            for group in ('stretch', 'cij', 'gsfe'):
-                print(f"  [{group}] {len(dft[group])} value(s)")
-                for k, v in dft[group].items():
-                    print(f"    {k:16s} = {v:.6g}")
+        # DFT 参考基线：调用方以 dict 传入（键名与逐 epoch 列名一致），叠成灰色水平虚线参考。
+        dft = self._echo_dict_dft(dict_dft)
 
         if rows_stretch:
             df_stretch = pd.DataFrame(rows_stretch).sort_values('epoch').reset_index(drop=True)[cols_stretch]
@@ -2716,7 +2843,7 @@ class PeiN2p2:
             self._write_table(path, header, df)
 
 
-    def post_epoch_scan_summary(self, ldir_run: list = None, dir_dft_root: Path = None,
+    def post_epoch_scan_summary(self, ldir_run: list = None, dict_dft: dict = None,
                                 dir_summary: Path = None, band: str = 'minmax') -> Path:
         """把多个 run 的 epoch 扫描曲线汇总成 ensemble 均值 + 上下限图（chap_4 图 1.3/1.5 风格）。
 
@@ -2737,14 +2864,14 @@ class PeiN2p2:
 
         Note:
             纯读取 + 汇总，不触碰任何 run 自己的 ``y_post/<run-id>/`` 产物，可安全重跑。
-            各 run 的 epoch 数允许不同（并集对齐、nan-aware 统计）。DFT 的 Cij 参考来自
-            ``read_dft_reference`` 的默认 ``cij_subdir='y_cij_energy_small'``（小应变谐性
-            弹性常数），与逐 epoch 的 LAMMPS 评估口径一致。
+            各 run 的 epoch 数允许不同（并集对齐、nan-aware 统计）。传入的 DFT Cij 参考应取
+            小应变谐性弹性常数（``read_dft_reference`` 的默认 ``cij_subdir='y_cij_energy_small'``），
+            与逐 epoch 的 LAMMPS 评估口径一致。
 
         Args:
             ldir_run: 参与汇总的 n2p2 训练运行目录列表（如 ``[.../y_dir/001, ...]``）；
                 汇总输出落在这些 run 共同的 ``y_post/`` 下。
-            dir_dft_root: DFT (VASP) 计算归档根目录；给定时叠加灰色虚线 DFT 参考。
+            dict_dft: DFT 参考值 dict，同 :meth:`post_epoch_scan`；给定时叠加灰色虚线参考。
             dir_summary: 汇总输出目录；默认就是 ``y_post/`` 本身。
             band: 色带取法，``'minmax'``（默认，逐 epoch 跨 run 上下限）或 ``'std'``
                 （mean ± 样本标准差，对应 chap_4 图 1.3 的透明背景读法）。
@@ -2753,24 +2880,14 @@ class PeiN2p2:
             汇总输出目录。缺表的 run 只跳过并告警；三类全缺时只写 ``p_post_absence.txt``。
 
         Raises:
-            ValueError: 未给 ldir_run，或 band 不是 'minmax'/'std'。
-            FileNotFoundError: 给定的 dir_dft_root 不存在。
+            ValueError: 未给 ldir_run、band 不是 'minmax'/'std'，或 dict_dft 结构不合法。
         """
-        # 先校验入参再读 DFT / 落盘：参数写错时不产生任何文件
+        # 先校验入参再回显 DFT / 落盘：参数写错时不产生任何文件
         ldir_run, dir_post_root = self._summary_root(ldir_run, band)
         dir_summary = Path(dir_summary) if dir_summary else dir_post_root
 
-        # DFT 参考基线：与逐 run 图同一读取器、同一键名，故可直接叠成灰色水平虚线
-        dft = None
-        if dir_dft_root is not None:
-            if not Path(dir_dft_root).is_dir():
-                raise FileNotFoundError(f"❌ Missing DFT archive root {dir_dft_root}.")
-            dft = read_dft_reference(dir_dft_root)
-            print(f"================ 📊 DFT reference ({dir_dft_root})")
-            for group in ('stretch', 'cij', 'gsfe'):
-                print(f"  [{group}] {len(dft[group])} value(s)")
-                for k, v in dft[group].items():
-                    print(f"    {k:16s} = {v:.6g}")
+        # DFT 参考基线：与逐 run 图同一键名，故可直接叠成灰色水平虚线
+        dft = self._echo_dict_dft(dict_dft)
 
         os.makedirs(dir_summary, exist_ok=True)            # 只保证存在；不动已算好的 y_post/<run-id>/
 

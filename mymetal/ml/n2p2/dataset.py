@@ -692,7 +692,14 @@ def read_dft_reference(dir_dft_root,
             small-strain cij training set and the epoch-scan LAMMPS evaluation).
             Pass ``'y_cij_energy'`` for the legacy large-strain fit.
         gsfe_tag (dict, optional): phase -> tag for gsfe files.
-            Default ``{'fcc':'A22-2','hcp':'A21-2'}``.
+            Default ``{'fcc':'A22-2-small','hcp':'A21-2-small'}`` — the **short**
+            gamma-lines. ``A21-2``/``A22-2`` have since been extended by
+            ``pei_vasp_run_gsfe_extend`` into full slip periods that slide back to
+            the original position, so on them ``sf`` (= last gamma) reads ~0 and
+            ``usf`` (= max gamma) reads the whole-period maximum — neither is the
+            conventional usf/sf, and neither matches the range the LAMMPS
+            epoch-scan evaluates. Pass the extended tags explicitly only when you
+            really want whole-period numbers.
         gsfe_types (dict, optional): phase -> list of slip-system type names.
             Default matches ``post_epoch_scan``'s ``gsfe_types``.
         verbose (bool): Print a line for each missing/skipped file.
@@ -719,7 +726,9 @@ def read_dft_reference(dir_dft_root,
     if cij_tag is None:
         cij_tag = {'fcc': 'A12-2', 'bcc': 'A13-2', 'hcp': 'A11-2'}
     if gsfe_tag is None:
-        gsfe_tag = {'fcc': 'A22-2', 'hcp': 'A21-2'}
+        # 短 γ-line：与训练集口径、与 post_epoch_scan 的 LAMMPS 评估范围一致。
+        # 扩展后的 A21-2/A22-2 是完整滑移周期，usf/sf 的读法在那上面没有常规含义。
+        gsfe_tag = {'fcc': 'A22-2-small', 'hcp': 'A21-2-small'}
     if gsfe_types is None:
         gsfe_types = {'fcc': ['FCC_100', 'FCC_111'],
                       'hcp': ['HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']}

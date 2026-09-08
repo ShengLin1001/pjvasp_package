@@ -23,6 +23,15 @@ Cross-run (ensemble) summaries, driven by ``PeiN2p2.post_*_summary``:
     - my_plot_epoch_rmse     : train E/F RMSE vs epoch, 2 rows (same style as the grids)
     - my_plot_check_interface: per-run nnp-predict vs LAMMPS verdict, PASS/NO ticks
 
+MD active learning (data from ``PeiN2p2MD.collect_compare``):
+
+    - my_plot_md_estd        : committee E_std vs MD temperature + its CDF against
+                               the training set, i.e. "is the sampling reaching
+                               configurations the committee actually disagrees on"
+    - my_plot_md_phase       : MSD and averaged Steinhardt q4 vs MD temperature,
+                               i.e. "does each frame still hold the phase it was
+                               built as"
+
 All three epoch grids share the x-axis (epoch); each panel is one
 default-coloured (C0) line with a C1 circle marker every 50 epochs, labelled by a
 column title (phase / slip system) and its own y-axis label instead of a
@@ -48,7 +57,8 @@ from mymetal.universal.plot.general import general_modify_legend
 
 __all__ = ['my_plot_learning_curve', 'my_plot_compare', 'my_plot_rmse_by_tag',
            'my_plot_epoch_stretch', 'my_plot_epoch_cij', 'my_plot_epoch_gsfe',
-           'my_plot_epoch_rmse', 'my_plot_check_interface', 'VERDICT_CODE']
+           'my_plot_epoch_rmse', 'my_plot_check_interface', 'my_plot_md_estd',
+           'my_plot_md_phase', 'VERDICT_CODE']
 
 # check_interface 汇总图的纵轴编码：1 = 通过，2 = 未通过（刻度写 PASS / NO，不写轴标签）。
 # 公开导出：PeiN2p2.post_check_interface_summary 用同一份编码解析 verdict 行，
@@ -671,6 +681,142 @@ def my_plot_check_interface(df=None, file_path: str = None) -> tuple:
     ax[-1].xaxis.set_minor_locator(NullLocator())
     ax[-1].set_xlim(-0.5, len(d) - 0.5)
     ax[-1].set_xlabel('Run')
+
+    fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
+    return fig, ax
+
+
+# MD 主动学习诊断图的统一参数：
+#   _MD_ESTD_BAND_ALPHA  分位带（p10-p90）的透明度，衬在中位线之下
+#   _MD_ESTD_QUANTILE    带的上下分位（中位线固定 0.5）
+_MD_ESTD_BAND_ALPHA = 0.25
+_MD_ESTD_QUANTILE = (0.10, 0.90)
+
+
+def my_plot_md_estd(df=None, file_path: str = None, std_ref=None,
+                    label_ref: str = 'Training set', std_target: float = None,
+                    lphase: list = None) -> tuple:
+    """Committee spread of MD frames: E_std vs temperature, and its CDF vs the training set.
+
+    左图回答「升温有没有把采样推进到 committee 真正拿不准的区域」：每个相一条
+    中位线 + p10-p90 色带。右图把同一批 E_std 与训练集自身的 E_std 分布叠在一起 ——
+    MD 帧的分布若落在训练集分布之内，说明这批构型对 committee 而言并不比已有数据更陌生，
+    拿去做 DFT 标记的边际收益很低。
+
+    Args:
+        df: ``collect_compare`` 的表（``y_compare_data_md.txt`` 读进来即可），
+            至少要有 ``phase`` / ``T_set_K`` / ``E_std_meV/at`` 三列。
+        file_path: 输出图路径（如 ``p_post_md_estd.pdf``）。
+        std_ref: 训练集自身的 E_std 数组（meV/atom），用同一组势跑 ``nnp-dataset``
+            得到；None 时右图只画 MD 帧、左图不画参考线。
+        label_ref: ``std_ref`` 在图例里的名字。
+        std_target: 目标发散度（meV/atom），画成竖直/水平参考线；None 时不画。
+        lphase: 相的绘制顺序；None 时按 df 里出现的顺序。
+
+    Returns:
+        ``(fig, ax)``；``ax[0]`` 是 E_std-vs-T，``ax[1]`` 是 CDF。
+    """
+    col = 'E_std_meV/at'
+    lphase = lphase if lphase is not None else list(dict.fromkeys(df['phase']))
+    q_lo, q_hi = _MD_ESTD_QUANTILE
+
+    fig, ax = my_plot(fig_subp=[1, 2], fig_sharex=False)
+
+    # --- 左：E_std vs T，每相一条中位线 + 分位带 ---
+    for i, phase in enumerate(lphase):
+        d = df[df['phase'] == phase]
+        g = d.groupby('T_set_K')[col]
+        t = np.array(sorted(d['T_set_K'].unique()))
+        med = g.median().reindex(t).to_numpy()
+        lo = g.quantile(q_lo).reindex(t).to_numpy()
+        hi = g.quantile(q_hi).reindex(t).to_numpy()
+        ax[0].fill_between(t, lo, hi, color=f'C{i}', alpha=_MD_ESTD_BAND_ALPHA, zorder=1)
+        ax[0].plot(t, med, '-o', color=f'C{i}', markerfacecolor='white',
+                   label=str(phase).upper(), zorder=2)
+    if std_ref is not None:
+        ax[0].axhline(np.median(std_ref), ls='--', color='gray', zorder=1,
+                      label=f'{label_ref} median')
+    if std_target is not None:
+        ax[0].axhline(std_target, ls=':', color='black', zorder=1,
+                      label=f'Target {_format_plain(std_target, 2)}')
+    ax[0].set_xlabel('Temperature (K)')
+    ax[0].set_ylabel(r'Committee $E_{\mathrm{std}}$ (meV/atom)')
+    general_modify_legend(ax[0].legend(loc='upper left'))
+
+    # --- 右：E_std 的累积分布，MD 帧 vs 训练集（log-x，跨度好几个量级）---
+    def _cdf(a, axis, **kwargs):
+        v = np.sort(np.asarray(a, dtype=float))
+        v = v[np.isfinite(v) & (v > 0)]                      # log 轴下 0 无法显示
+        axis.plot(v, np.arange(1, len(v) + 1) / len(v), **kwargs)
+
+    for i, phase in enumerate(lphase):
+        _cdf(df.loc[df['phase'] == phase, col], ax[1], color=f'C{i}', ls='-',
+             label=f'MD {str(phase).upper()}')
+    if std_ref is not None:
+        _cdf(std_ref, ax[1], color='gray', ls='--', label=label_ref)
+    if std_target is not None:
+        ax[1].axvline(std_target, ls=':', color='black', zorder=1)
+    ax[1].set_xscale('log')
+    ax[1].set_xlabel(r'Committee $E_{\mathrm{std}}$ (meV/atom)')
+    ax[1].set_ylabel('Cumulative fraction (-)')
+    ax[1].set_ylim(0, 1.02)
+    general_modify_legend(ax[1].legend(loc='lower right'))
+
+    fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
+    return fig, ax
+
+
+def my_plot_md_phase(df=None, file_path: str = None, dict_ql_ideal: dict = None,
+                     msd_thermal: float = None, lphase: list = None) -> tuple:
+    """Structural health of an MD sampling run: does each frame still hold its phase?
+
+    左图是相对低温首帧的均方位移 —— 纯热振动是一条平缓的线，原子换了格点就是一个台阶；
+    右图是平均型 Steinhardt ``q4``，回答台阶之后变成了什么（FCC / HCP / 都不是）。
+    两张图一起用：MSD 说「动过了」，``q4`` 说「变成了什么」。
+
+    Args:
+        df: 每条轨迹每个温度档一行，需含 ``phase`` / ``T_set_K`` / ``run`` /
+            ``msd_A2`` / ``q4`` 五列。
+        file_path: 输出图路径。
+        dict_ql_ideal: ``{'fcc': q4, 'hcp': q4}`` 理想值，画成右图的水平参考线；
+            None 时不画。
+        msd_thermal: 纯热振动的 MSD 量级（Å²），画成左图的水平参考线；None 时不画。
+        lphase: 相的绘制顺序；None 时按 df 里出现的顺序。
+
+    Returns:
+        ``(fig, ax)``；``ax[0]`` 是 MSD，``ax[1]`` 是 q4。
+    """
+    lphase = lphase if lphase is not None else list(dict.fromkeys(df['phase']))
+    fig, ax = my_plot(fig_subp=[1, 2], fig_sharex=False)
+
+    for i, phase in enumerate(lphase):
+        d = df[df['phase'] == phase]
+        for run, d_run in d.groupby('run'):
+            d_run = d_run.sort_values('T_set_K')
+            # 每条轨迹单画一条：相变是单条轨迹上的事件，取平均会把台阶抹平
+            ax[0].plot(d_run['T_set_K'], d_run['msd_A2'], '-', color=f'C{i}', alpha=0.7,
+                       marker='o', markersize=8, markeredgewidth=1.5,
+                       label=str(phase).upper() if run == d['run'].iloc[0] else None)
+            ax[1].plot(d_run['T_set_K'], d_run['q4'], '-', color=f'C{i}', alpha=0.7,
+                       marker='o', markersize=8, markeredgewidth=1.5,
+                       label=str(phase).upper() if run == d['run'].iloc[0] else None)
+    if msd_thermal is not None:
+        ax[0].axhline(msd_thermal, ls='--', color='gray', zorder=1,
+                      label='Thermal only')
+    ax[0].set_yscale('log')
+    ax[0].set_xlabel('Temperature (K)')
+    ax[0].set_ylabel(r'MSD vs. lowest-$T$ frame ($\mathrm{\AA}^2$)')
+    general_modify_legend(ax[0].legend(loc='upper left'))
+
+    for name, value in (dict_ql_ideal or {}).items():
+        ax[1].axhline(value, ls=':', color='black', zorder=1)
+        ax[1].annotate(str(name).upper(), xy=(0.02, value), xycoords=('axes fraction', 'data'),
+                       xytext=(0, 4), textcoords='offset points', fontsize=20)
+    ax[1].set_xlabel('Temperature (K)')
+    ax[1].set_ylabel(r'Averaged $\bar{q}_4$ (-)')
+    general_modify_legend(ax[1].legend(loc='center left'))
 
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
