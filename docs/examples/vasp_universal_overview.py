@@ -267,7 +267,7 @@ def draw_panel_post_tree(ax):
     _box(ax, 5, 2.1, 9.0, 1.2,
          "-v 模式额外运行:\n"
          "pei_vasp_univ_extract_convergence  →  y_post_convergence/*.txt\n"
-         "pei_vasp_plot_convergence.py        →  收敛曲线 PNG\n"
+         "pei_vasp_plot_relax_convergence.py        →  收敛曲线 PNG\n"
          "yin_vasp_plot_mag/dos/statistics.py (YIN_GITHUB 旧脚本)",
          fc=COLOR_CODE_BG, fontsize=7.2)
     _arrow(ax, 5, 3.1, 5, 2.7, lw=0.9, color="#7a8aa0")

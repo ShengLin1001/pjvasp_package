@@ -235,15 +235,15 @@ pei_vasp_univ_extract_convergence
    # 在包含 y_dir 的目录运行
    pei_vasp_univ_extract_convergence
 
-pei_vasp_plot_convergence.py
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+pei_vasp_plot_relax_convergence.py
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 读取 ``pei_vasp_univ_extract_convergence`` 产出的数据文件，绘制每个 ``y_dir``
 子目录的弛豫收敛曲线（能量/原子 + 最大力）。
 
 .. code-block:: bash
 
-   python pei_vasp_plot_convergence.py
+   python pei_vasp_plot_relax_convergence.py
 
 能量分量提取
 ------------

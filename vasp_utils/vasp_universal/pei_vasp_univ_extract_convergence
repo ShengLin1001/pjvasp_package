@@ -9,7 +9,7 @@
 # plus natoms / EDIFFG / ISIF metadata in the header.
 #
 # The heavy lifting (grep/awk over OUTCAR) is done here in bash because it is
-# fast; the plotting is done separately by pei_vasp_plot_convergence.py.
+# fast; the plotting is done separately by pei_vasp_plot_relax_convergence.py.
 #
 # Run from the directory that contains y_dir (same place as pei_vasp_univ_post).
 #

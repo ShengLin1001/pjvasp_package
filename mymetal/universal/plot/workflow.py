@@ -9,6 +9,8 @@ Functions:
     - my_plot_convergence: Plot convergence test results for energy cutoff or k-point grids.
     - my_plot_cij_energy: Plot Cij energy-density fits and stress responses.
     - my_plot_kpar_ncore: Plot KPAR/NCORE timing and relative-energy curves.
+    - my_plot_kpar_ncore_klen: Plot the k-mesh scan of that benchmark (cost and convergence).
+    - my_plot_vasp_param_scan: Plot energy/force/time against several DFT setting axes.
     - my_plot_relax_convergence: Plot ionic-relaxation energy and force convergence.
     - my_plot_gsfe: Plot GSFE, normal displacement, and shear stress.
     - my_plot_gsfe_displacement: Plot atom-resolved normal displacements along a GSFE path.
@@ -69,6 +71,9 @@ def my_plot_convergence(x: list = None,
                         kpoints_ylabel_rotation: int=45,
                         kpoints_ylabel_fontsize: int=20,
 
+                        laxis_label: list = None,
+                        if_logx: bool=False,
+
                         marker: str='o',
                         linestyle: str='-',
                         color: str='b',
@@ -123,14 +128,12 @@ def my_plot_convergence(x: list = None,
     fig, axes = my_plot(axes_width = axes_width, one_fig_wh=[one_fig_width, 8.205],)
     ax = axes
     
-    if encuts:
-        if if_difference:
-            xlabel = encuts_labels_dif[0]
-            ylabel = encuts_labels_dif[1]
-        else:
-            xlabel = encuts_labels[0]
-            ylabel = encuts_labels[1]
-    elif kpoints:
+    # kpoints is the only 2D x (an n1 x n2 x n3 triple, drawn on categorical ticks);
+    # every other axis -- ENCUT, automatic k-mesh length, EDIFF -- is a numeric
+    # scalar and shares the encuts branch. Falling through to it by default also
+    # means a caller that names no axis still gets labelled axes instead of a
+    # NameError.
+    if kpoints:
         if if_difference:
             xlabel = kpoints_labels_dif[0]
             ylabel = kpoints_labels_dif[1]
@@ -144,7 +147,21 @@ def my_plot_convergence(x: list = None,
         x = np.arange(len(labels))
         ax.set_xticks(x)
         ax.set_xticklabels(labels, rotation=kpoints_ylabel_rotation, fontsize=kpoints_ylabel_fontsize)
-    
+    else:
+        if if_difference:
+            xlabel = encuts_labels_dif[0]
+            ylabel = encuts_labels_dif[1]
+        else:
+            xlabel = encuts_labels[0]
+            ylabel = encuts_labels[1]
+
+    # An explicit pair wins over the per-axis defaults, so a new scan axis needs a
+    # label here rather than another boolean flag in the signature.
+    if laxis_label is not None:
+        xlabel, ylabel = laxis_label[0], laxis_label[1]
+    if if_logx:
+        ax.set_xscale('log')
+
     if if_difference:
         y = y - y[-1] # make the last value zero
         y = y * 1e3   # meV per atom
@@ -602,6 +619,192 @@ def my_plot_kpar_ncore(
     if if_close:
         plt.close(fig)
     return fig, axes
+
+
+def my_plot_kpar_ncore_klen(
+        dict_time: dict = None,
+        dict_delta_energy: dict = None,
+        dict_cost: dict = None,
+        dict_force: dict = None,
+        lklength: list = None,
+        if_save: bool = False,
+        savefile: str = 'p_post_kpar_ncore_klen.pdf',
+        if_close: bool = False) -> tuple:
+    """Plot the k-mesh scan of a KPAR/NCORE benchmark: cost and convergence.
+
+    One curve per (KPAR, NCORE) pair. The top panel is what the mesh costs, the
+    bottom one whether the cheaper mesh is still converged -- the two halves of
+    "can I drop to a coarser mesh?". x is the automatic mesh length ``A <L>``,
+    annotated with the resulting IBZ k-point count.
+
+    Args:
+        dict_time (dict): ``(KPAR, NCORE, klength) -> elapsed time`` in minutes.
+        dict_delta_energy (dict): ``(KPAR, NCORE, klength) -> E - E0`` in
+            meV/atom, referenced to the densest mesh.
+        dict_cost (dict): ``(KPAR, NCORE, klength) -> {'nkpts': int, ...}`` used
+            to annotate each mesh with its k-point count; may be None.
+        dict_force (dict): ``(KPAR, NCORE, klength) -> {'dfmax': float, ...}``;
+            when given, a third panel shows the worst per-atom force deviation
+            from the densest mesh -- the quantity a force-trained potential
+            actually cares about. None keeps the two-panel figure.
+        lklength (list): Mesh lengths in plotting order.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+        if_close (bool): Close the pyplot figure after saving.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    dict_cost = {} if dict_cost is None else dict_cost
+    lklength = (sorted({case[2] for case in dict_time}) if lklength is None
+                else list(lklength))
+    lpair = sorted({(case[0], case[1]) for case in dict_time})
+
+    n_panel = 2 if dict_force is None else 3
+    fig, axes = my_plot(fig_subp=[n_panel, 1], fig_sharex=True)
+    for index, pair in enumerate(lpair):
+        color = 'C%d' % (index % 10)
+        lx = [klength for klength in lklength
+              if (pair[0], pair[1], klength) in dict_time]
+        if not lx:
+            continue
+        axes[0].plot(lx, [dict_time[(pair[0], pair[1], k)] for k in lx],
+                     marker='o', color=color,
+                     label='KPAR=%d NCORE=%d' % pair)
+        ly = [dict_delta_energy.get((pair[0], pair[1], k), float('nan')) for k in lx]
+        axes[1].plot(lx, ly, marker='o', color=color)
+        if dict_force is not None:
+            ly = [(dict_force.get((pair[0], pair[1], k)) or {}).get('dfmax', float('nan'))
+                  for k in lx]
+            axes[2].plot(lx, ly, marker='o', color=color)
+
+    # NKPTS is the quantity that actually drives the cost; the mesh length is
+    # only a request, so print what VASP really generated next to each point.
+    # The label hangs under the *fastest* case of each mesh: the curves rise to
+    # the right, so that corner stays clear of both the lines and the legend.
+    axes[0].margins(y=0.18)
+    for klength in lklength:
+        lnkpts = [dict_cost[case].get('nkpts') for case in dict_cost
+                  if case[2] == klength and dict_cost[case].get('nkpts')]
+        ltime = [dict_time[case] for case in dict_time if case[2] == klength]
+        if not lnkpts or not ltime:
+            continue
+        ha = 'left' if klength == lklength[0] else (
+            'right' if klength == lklength[-1] else 'center')
+        axes[0].annotate('%d k' % lnkpts[0], xy=(klength, min(ltime)),
+                         xytext=(0, -18), textcoords='offset points',
+                         ha=ha, va='top', fontsize=20)
+    axes[1].axhline(0.0, ls='--', color='gray', zorder=1)
+    axes[-1].set_xticks(lklength)
+    axes[-1].set_xticklabels([str(klength) for klength in lklength])
+    for a in axes[:-1]:
+        a.set_xlabel('')
+    axes[-1].set_xlabel('KPOINTS automatic length $A$ (-)')
+    axes[0].set_ylabel('Time (min)')
+    axes[1].set_ylabel('$\\Delta E$ (meV/atom)')
+    if dict_force is not None:
+        axes[2].set_ylabel(r'max $|\Delta \vec{F}|$ (eV/$\mathrm{\AA}$)')
+    general_modify_legend(axes[0].legend(ncol=2, loc='upper left'))
+
+    # Both panels share the mesh length, so drop the repeated x labels.
+    fig.subplots_adjust(hspace=0.05)
+
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    if if_close:
+        plt.close(fig)
+    return fig, axes
+
+
+def my_plot_vasp_param_scan(
+        df: pd.DataFrame = None,
+        laxis: list = None,
+        dict_axis_label: dict = None,
+        laxis_logx: list = None,
+        col_axis: str = 'axis',
+        col_x: str = 'x',
+        col_group: str = None,
+        col_time: str = 'time_min',
+        col_energy: str = 'delta_energy_meV_per_atom',
+        col_force: str = 'dfmax',
+        if_save: bool = False,
+        savefile: str = 'p_post_dft_param.pdf',
+        if_close: bool = False) -> tuple:
+    """Plot what each DFT setting costs and what it changes, axis by axis.
+
+    Picking the settings of a labelling run is one question asked three times:
+    how long does it take, how far does the energy move, and how far do the
+    forces move. This lays the answer out as a grid -- one column per setting
+    axis (k mesh, EDIFF, ENCUT, cell size ...), the three questions as rows --
+    so a column whose lower two panels are flat is a knob that can be turned
+    for free.
+
+    Args:
+        df (pd.DataFrame): Long-format table; one row per finished run, holding
+            the axis name, the axis value and the three metrics.
+        laxis (list): Axis names in plotting order; ``None`` uses their order of
+            appearance in ``df``.
+        dict_axis_label (dict): ``axis -> x label``; missing names use the axis
+            name itself.
+        laxis_logx (list): Axes drawn with a logarithmic x scale (EDIFF).
+        col_axis, col_x (str): Columns holding the axis name and its value.
+        col_group (str): Optional column splitting each axis into several
+            curves (e.g. the structure), plotted with its own colour and label.
+        col_time, col_energy, col_force (str): Metric columns, in minutes,
+            meV/atom and eV/Angstrom.
+        if_save (bool): Whether to save the figure.
+        savefile (str): Figure output path.
+        if_close (bool): Close the pyplot figure after saving.
+
+    Returns:
+        tuple: Matplotlib ``(fig, axes)`` objects.
+    """
+    laxis = (list(dict.fromkeys(df[col_axis])) if laxis is None else list(laxis))
+    dict_axis_label = {} if dict_axis_label is None else dict_axis_label
+    laxis_logx = [] if laxis_logx is None else list(laxis_logx)
+    lmetric = [(col_time, 'Time (min)'),
+               (col_energy, r'$\Delta E$ (meV/atom)'),
+               (col_force, r'max $|\Delta \vec{F}|$ (eV/$\mathrm{\AA}$)')]
+
+    fig, axes = my_plot(fig_subp=[len(lmetric), len(laxis)], fig_sharex=False)
+    axes = np.atleast_2d(axes).reshape(len(lmetric), len(laxis))
+    for index_axis, axis in enumerate(laxis):
+        df_axis = df[df[col_axis] == axis].sort_values(col_x)
+        lgroup = ([None] if col_group is None
+                  else list(dict.fromkeys(df_axis[col_group])))
+        for index_row, (col, ylabel) in enumerate(lmetric):
+            ax = axes[index_row, index_axis]
+            for index_group, group in enumerate(lgroup):
+                df_group = (df_axis if group is None
+                            else df_axis[df_axis[col_group] == group])
+                ax.plot(df_group[col_x], df_group[col], marker='o',
+                        color='C%d' % (index_group % 10),
+                        label=None if group is None else str(group))
+            if not df_axis[col].notna().any():
+                # 该轴上这个量没有可比的数（如跨结构族的能量），空着比画个空框清楚
+                ax.axis('off')
+                ax.text(0.5, 0.5, 'not comparable\nacross cells', ha='center',
+                        va='center', transform=ax.transAxes, fontsize=18,
+                        color='gray')
+                continue
+            if index_row and col in (col_energy, col_force):
+                # 0 线是「和参照算例完全一致」，两条偏差曲线都该盯着它看
+                ax.axhline(0.0, ls='--', color='gray', zorder=1)
+            if axis in laxis_logx:
+                ax.set_xscale('log')
+            ax.set_xlabel(dict_axis_label.get(axis, axis))
+            ax.set_ylabel(ylabel if index_axis == 0 else '')
+            # 每一列的曲线各不相同，图例只放第一列会让其余四列的颜色无从解释
+            if col_group is not None and index_row == 0:
+                ax.margins(y=0.30)          # 给图例腾出上方空间，别压在曲线上
+                general_modify_legend(ax.legend(loc='upper left', fontsize=11))
+
+    if if_save:
+        fig.savefig(savefile, bbox_inches='tight')
+    if if_close:
+        plt.close(fig)
+    return fig, axes
+
 
 
 # for workflow NEB trajectory

@@ -62,7 +62,7 @@
 | pei_vasp_univ_transfer_selective_to_normal | bash | 功能说明 |
 | pei_vasp_univ_cp_contcar_cartesian_poscar | bash | 功能说明 |
 | pei_vasp_univ_extract_convergence | bash | 用法 + 产出 |
-| pei_vasp_plot_convergence.py | python | 用法 |
+| pei_vasp_plot_relax_convergence.py | python | 用法 |
 | pei_vasp_univ_extract_energy_components | bash | 用法 |
 | pei_vasp_univ_monitor_error | bash | 用法 + 参数 |
 | pei_vasp_univ_monitor_slurm_state | bash | 功能说明 |

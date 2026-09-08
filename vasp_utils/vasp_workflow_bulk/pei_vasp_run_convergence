@@ -1,257 +1,219 @@
-#!/bin/bash
-# J. Pei, 2025-05-29
-# 🧪 ENCUT and KPOINTS convergence test script
-# 📌 Usage: pei_vasp_run_convergence -encuts 500 -kpoints 3 3 3 4 4 4
+#!/usr/bin/env python3
+# J. Pei, 2025-05-29; rewritten in Python 2026-09-01
+# pei_vasp_run_convergence
+#  >>> Generate a static VASP parameter scan from y_full_relax, one axis per subtree.
+#
+#  Run it at the level of `y_full_relax`, like the other bulk workflows. Each case
+#  inherits EVERYTHING from y_full_relax and changes ONLY the parameter under test, so
+#  "benchmark KPAR/NCORE at the production cutoff" is not a flag here -- it is a
+#  y_full_relax that already carries the production ENCUT/EDIFF/KPOINTS, plus
+#  -kpar_ncore. The real work lives in mymetal.build.workflow.convergence.
+#
+#  Five axes, each in its own subtree so a finished tree is self-describing:
+#      -encuts     y_convergence_encuts/y_dir/encut_<E>
+#      -kpoints    y_convergence_kpoints/y_dir/kpoints_<n1>-<n2>-<n3>   explicit mesh
+#      -klengths   y_convergence_klength/y_dir/klen_<L>                 automatic, mode A
+#      -ediffs     y_convergence_ediff/y_dir/ediff_<D>
+#      -kpar_ncore y_convergence_kpar_ncore/y_dir/kpar_<K>_ncore_<N>
+#
+#  It ONLY prepares input directories -- no sbatch. Submit y_convergence/*/y_dir/* with
+#  your usual flow, then post-process with pei_vasp_plot_all -convergence.
+#
+#  >>> Example usage:
+#      pei_vasp_run_convergence -encuts 400 450 550
+#      pei_vasp_run_convergence -klengths 60 81 100 -ediffs 1E-6 1E-8
+#      pei_vasp_run_convergence -kpar_ncore 4:4 8:4 16:4      # at the production settings
 
-# ---------- Existing-output guard (shared policy with the python workflows) ----------
-# Ask before deleting an existing y_* output. A blank/No answer, or no terminal to
-# ask on (piped / sbatch), aborts instead of deleting -- so unattended runs never
-# throw away old results. Mirrors confirm_prepare_outdir() in mymetal.
-confirm_prepare_dir(){
-    local dir="$1"
-    [[ -e "$dir" ]] || return 0
-    if [[ ! -t 0 ]]; then
-        echo "❌ ERROR: $dir already exists and there is no terminal to confirm its deletion." >&2
-        echo "   re-run in a terminal, or remove it manually first." >&2
-        exit 1
-    fi
-    echo "⚠️  $dir already exists."
-    rm -rI "$dir"                    # interactive recursive remove; blank/n keeps it
-    if [[ -e "$dir" ]]; then
-        echo "❌ ERROR: aborted by user; existing output kept: $dir" >&2
-        exit 1
-    fi
-}
+import argparse
+import sys
+from pathlib import Path
 
-main() {
-    GREEN='\033[0;32m'
-    YELLOW='\033[0;33m'
-    BLUE='\033[0;34m'
-    NC='\033[0m'
+# Kept in sync with the ">>> Example usage" block above; argparse only shows what we
+# hand it, so the header comment alone never reaches a --help reader.
+EPILOG = """\
+most common:
+  pei_vasp_run_convergence                              # NO flags: every default axis
+                                                        # (encuts, klength, ediff,
+                                                        #  kpar_ncore) at its default
+                                                        #  sweep -- kpoints stays off
+  pei_vasp_run_convergence -klengths                    # bare flag: ONLY that axis,
+                                                        # at its default sweep
+  pei_vasp_run_convergence -encuts 400 450 550          # explicit values
+  pei_vasp_run_convergence -kpoints 3 3 3 4 4 4         # explicit meshes (must be named)
+  pei_vasp_run_convergence -kpar_ncore 4:4 8:4 16:4     # parallel split timing
+  pei_vasp_run_convergence -encuts 400 450 -klengths 60 81   # several axes in one call
+  pei_vasp_run_convergence -kpar_ncore 8:16 4:32 -if_append  # add points to a finished scan
 
-    # -----------------------
-    # --help support
-    # -----------------------
-    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-        echo -e "${GREEN}pei_vasp_run_convergence${NC} - ENCUT and KPOINTS convergence test"
-        echo ""
-        echo -e "${YELLOW}Usage:${NC}"
-        echo -e "  $0 ${GREEN}-encuts 400 500${NC}"
-        echo -e "  $0 ${GREEN}-kpoints 3 3 3 4 4 4${NC}"
-        echo -e "  $0 ${GREEN}-encuts 400 500 -kpoints 3 3 3 4 4 4${NC}"
-        echo ""
-        echo -e "${YELLOW}Options:${NC}"
-        echo -e "  ${GREEN}-encuts <val1> <val2> ...${NC}    Test convergence with different ENCUT values"
-        echo -e "  ${GREEN}-kpoints <kx1> <ky1> <kz1> ...${NC} Test convergence with different K-point meshes (must be groups of 3)"
-        echo ""
-        echo -e "${YELLOW}Notes:${NC}"
-        echo -e "  - The source directory must be ${BLUE}y_full_relax${NC}"
-        echo -e "  - Required input files: ${GREEN}{INCAR, KPOINTS, CONTCAR or POSCAR, POTCAR, sub.*, Y_*}${NC}"
-        echo -e "  - Don't copy ${GREEN}CHGCAR, WAVECAR${NC}"
-        echo ""
-        echo -e "${YELLOW}Example:${NC}"
-        echo -e "  $0 -encuts 400 500"
-        echo -e "  $0 -kpoints 3 3 3 4 4 4"
-        echo -e "  $0 -encuts 400 500 -kpoints 3 3 3 4 4 4"
-        echo ""
-        exit 0
-    fi
+axis selection:
+  no axis flag at all  -> every axis in DEFAULT_AXES, each at its default sweep
+  a bare axis flag     -> only that axis, at its default sweep
+  a flag with values   -> only that axis, at those values
+  -kpoints             -> never automatic; it needs explicit triples
 
-    script_name=$(basename "$0")
-    logfile="${script_name}.log"
+then:
+  submit y_convergence/*/y_dir/* with your usual flow, then
+  pei_vasp_plot_all -convergence                        # every y_convergence under the tree
 
-    # 📜 Log everything to file and terminal
-    exec > >(tee "$logfile") 2>&1
+notes:
+  run at the level of y_full_relax (needs INCAR, POTCAR, CONTCAR/POSCAR and a sub.* script).
+  it ONLY prepares dirs -- it never sbatches, so a wide default sweep costs nothing
+  until you choose which cases to submit.
+  EVERY case inherits everything from y_full_relax and changes only the axis under test.
+  so a KPAR/NCORE timing run that has to predict a production campaign wants a
+  y_full_relax already carrying that campaign's ENCUT / EDIFF / KPOINTS -- there are no
+  -encut/-ediff side flags on the parallel axis, on purpose.
+  every case is forced to a static single point (NSW 0, IBRION -1, LWAVE/LCHARG/LELF F,
+  ISIF 2, fully constrained Y_CONSTR_LATT); NPAR is kept commented on the parallel axis
+  because VASP derives it as ntasks/(KPAR*NCORE) and an active NPAR would fight NCORE.
+  KPAR*NCORE must DIVIDE -ntasks (default 128).
+  scanning atom count is several runs under different roots, one y_full_relax each.
+"""
 
 
-    echo -e "🟢 ===== ${GREEN}Convergence test started${NC} at: $(date) ====="
-    echo "📌 Command: $0 $@"
-    echo "==========================================================="
+def parse_pair(text: str = None) -> tuple:
+    """Parse one ``KPAR:NCORE`` command-line pair.
 
-    srcdir0=y_full_relax
-    if [ -d "$srcdir0" ]; then
-        sub_run_convergence "$@"
-    else
-        echo -e "❌ ${YELLOW}ERROR${NC}: Directory ${BLUE}$srcdir0${NC} not found. Aborting."
-        exit 1
-    fi
-}
+    Args:
+        text (str): Raw ``-kpar_ncore`` token, e.g. ``"4:4"``.
 
-sub_run_convergence() {
-    myroot=$(pwd)
-    srcdir=$myroot/y_full_relax_temp
+    Returns:
+        tuple[int, int]: ``(kpar, ncore)``.
+    """
+    lpart = text.split(":")
+    if len(lpart) != 2:
+        raise argparse.ArgumentTypeError(
+            "expected KPAR:NCORE (e.g. 4:4), got %r" % text)
+    try:
+        kpar, ncore = int(lpart[0]), int(lpart[1])
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            "KPAR and NCORE must be integers, got %r" % text)
+    if kpar <= 0 or ncore <= 0:
+        raise argparse.ArgumentTypeError(
+            "KPAR and NCORE must be positive, got %r" % text)
+    return (kpar, ncore)
 
-    echo "🧹 Preparing working directory..."
-    rm -rf "$srcdir"
-    echo -e "📁 Copying from: ${BLUE}$srcdir0${NC}"
-    cp -r "$srcdir0" "$srcdir"
-    cd "$srcdir"
 
-    echo "==========================================================="
-    echo -e "📋 ${YELLOW}INFO${NC}:"
-    echo -e "📁 Source:       ${BLUE}$srcdir0${NC}"
-    echo -e "📄 Required:     ${GREEN}{INCAR, KPOINTS, CONTCAR, POTCAR, sub.*, Y_*}${NC}"
-    echo ""
-    echo -e "🧪 Supported:"
-    echo -e "    ➤ ENCUT:     ${GREEN}-encuts 400 500${NC}"
-    echo -e "    ➤ KPOINTS:   ${GREEN}-kpoints 3 3 3 4 4 4${NC}"
-    echo ""
-    echo -e "📏 Note:"
-    echo -e "    - ${YELLOW}KPOINTS values must be multiple of 3${NC}"
-    echo -e "    - Don't copy ${GREEN}CHGCAR, WAVECAR${NC}"
-    echo "==========================================================="
+# The help text quotes the real default sweeps, which live in mymetal -- but the version
+# guard has to stay AFTER parse_args so --help still answers under a stale interpreter.
+# So import just the constants optimistically here and fall back to a placeholder when
+# the interpreter is too old: --help still works, only without the concrete numbers.
+try:
+    from mymetal.build.workflow.convergence import (
+        DEFAULT_ENCUTS, DEFAULT_KLENGTHS, DEFAULT_EDIFFS)
+except Exception:
+    DEFAULT_ENCUTS = DEFAULT_KLENGTHS = DEFAULT_EDIFFS = "the module default sweep"
 
-    echo "🔍 Checking CONTCAR..."
-    if [ -f CONTCAR ]; then
-        echo -e "✅ ${GREEN}CONTCAR found${NC}"
-    else 
-        echo -e "⚠️ ${YELLOW}CONTCAR not found${NC}, using POSCAR"
-        cp POSCAR CONTCAR
-    fi
+parser = argparse.ArgumentParser(
+    description="Generate a static VASP parameter scan from y_full_relax.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+# nargs="*" so a bare flag means "this axis, at its default sweep", while the flag
+# being absent entirely (default=None) means "this axis was not asked for". The two
+# have to stay distinguishable -- that is what makes `-klengths` alone run one axis
+# and no flags at all run every axis.
+parser.add_argument("-encuts", nargs="*", type=int, default=None,
+                    metavar="ENCUT",
+                    help="Plane-wave cutoffs to scan (eV). Bare flag uses %s."
+                         % DEFAULT_ENCUTS)
+parser.add_argument("-kpoints", nargs="*", type=int, default=None,
+                    metavar="N",
+                    help="Explicit k meshes as whole n1 n2 n3 triples. No default "
+                         "sweep and never run unless named: an explicit mesh depends "
+                         "on the cell, use -klengths for a cell-independent scan.")
+parser.add_argument("-klengths", nargs="*", type=int, default=None,
+                    metavar="LENGTH",
+                    help="Automatic k-mesh lengths (KPOINTS mode A). Bare flag uses %s."
+                         % DEFAULT_KLENGTHS)
+parser.add_argument("-ediffs", nargs="*", default=None, metavar="EDIFF",
+                    help="SCF criteria to scan. Bare flag uses %s." % DEFAULT_EDIFFS)
+parser.add_argument("-kpar_ncore", nargs="*", type=parse_pair, default=None,
+                    metavar="KPAR:NCORE",
+                    help="Parallel splits to time, e.g. 4:4 8:4. Bare flag uses the "
+                         "21-pair default matrix (every KPAR*NCORE dividing -ntasks).")
+parser.add_argument("-ntasks", type=int, default=128,
+                    help="Fixed MPI rank count used by every job (default 128).")
+parser.add_argument("-srcdir", default="y_full_relax",
+                    help="Source VASP directory (default y_full_relax).")
+parser.add_argument("-outdir", default="y_convergence",
+                    help="Output workflow directory (default y_convergence).")
+parser.add_argument("-force", action="store_true",
+                    help="Delete an existing output directory without prompting.")
+parser.add_argument("-if_append", action="store_true",
+                    help="Add cases to an existing tree instead of replacing it; "
+                         "case directories already present are left untouched.")
+args = parser.parse_args()
 
-    pei_vasp_univ_find_and_change -nsw     0
-    pei_vasp_univ_find_and_change -ibrion -1
-    pei_vasp_univ_find_and_change -lwave   F
-    pei_vasp_univ_find_and_change -lcharg  F
-    pei_vasp_univ_find_and_change -lelf    F
-    pei_vasp_univ_find_and_change -isif    2
-    echo -e "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
+# Guard AFTER parse_args, so --help still answers under a stale interpreter: the shebang
+# is /usr/bin/env python3, which is 3.6 on this box. Only the mymetal import below needs
+# 3.10 (the library annotates with subscripted generics like list[tuple[int, int]]).
+if sys.version_info < (3, 10):
+    raise SystemExit("pei_vasp_run_convergence needs the active Python >= 3.10 environment")
 
-    cat -n POSCAR
-    cat -n KPOINTS
-    grep NSW INCAR
-    grep IBRION INCAR
-    grep LWAVE INCAR
-    grep LCHARG INCAR
-    grep LELF INCAR
-    grep ISIF INCAR
-    cat -n Y_CONSTR_LATT
-    head -n 10 POTCAR | cat -n
-    echo "==========================================================="
+from mymetal.build.workflow.convergence import (
+    generate_convergence_dirs, get_default_pairs,
+    DEFAULT_ENCUTS, DEFAULT_KLENGTHS, DEFAULT_EDIFFS, DEFAULT_AXES)   # noqa: F811
 
-    echo "📥 Parsing arguments..."
-    encuts=()
-    kpoints=()
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -encuts)
-                shift
-                while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
-                    encuts+=("$1") 
-                    shift
-                done
-                ;;
-            -kpoints)
-                shift
-                while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
-                    kpoints+=("$1")  
-                    shift
-                done
-                ;;
-            *)
-                echo -e "❌ ${YELLOW}ERROR${NC}: Unknown option $1"
-                exit 1
-                ;;
-        esac
-    done
 
-    echo -e "📏 ENCUTs:   ${GREEN}${encuts[*]}${NC}"
-    echo -e "📏 KPOINTS:  ${GREEN}${kpoints[*]}${NC}"
+def resolve_axis(lvalue: list = None, ldefault: list = None,
+                 if_all: bool = False) -> list:
+    """Turn one axis flag into the values to scan.
 
-    elen=${#encuts[@]}
-    klen=${#kpoints[@]}
+    Args:
+        lvalue (list): What argparse captured -- ``None`` if the flag was absent,
+            ``[]`` if it was given bare, otherwise the explicit values.
+        ldefault (list): This axis's default sweep.
+        if_all (bool): True when no axis flag was given at all, so every default
+            axis runs.
 
-    echo "🧪 Validating input..."
-    if (( klen % 3 != 0 )); then
-        echo -e "❌ ${YELLOW}ERROR${NC}: KPOINTS length ($klen) is not divisible by 3"
-        exit 1
-    fi
+    Returns:
+        list: Values to scan, or ``None`` to skip this axis entirely.
+    """
+    if lvalue is None:
+        return list(ldefault) if if_all else None
+    return list(ldefault) if not lvalue else lvalue
 
-    cd $myroot
 
-    dirsurf=$myroot/y_convergence
-    echo -e "🧹 Preparing clean NEB workspace at: ${BLUE}$dirsurf${NC}"
-    confirm_prepare_dir "$dirsurf"
-    mkdir "$dirsurf"
-    cd "$dirsurf"
+# No axis flag at all -> run every axis in DEFAULT_AXES at its default sweep.
+# kpoints is not in DEFAULT_AXES, so it stays off unless named explicitly.
+if_all = all(getattr(args, name) is None for name in
+             ("encuts", "kpoints", "klengths", "ediffs", "kpar_ncore"))
+lencut = resolve_axis(args.encuts, DEFAULT_ENCUTS, if_all and "encuts" in DEFAULT_AXES)
+lklength = resolve_axis(args.klengths, DEFAULT_KLENGTHS,
+                        if_all and "klength" in DEFAULT_AXES)
+lediff = resolve_axis(args.ediffs, DEFAULT_EDIFFS, if_all and "ediff" in DEFAULT_AXES)
+lpair = resolve_axis(args.kpar_ncore, get_default_pairs(args.ntasks),
+                     if_all and "kpar_ncore" in DEFAULT_AXES)
+# kpoints has no default sweep: a bare -kpoints cannot mean anything sensible.
+if args.kpoints is not None and not args.kpoints:
+    raise SystemExit("❌ ERROR: -kpoints needs explicit n1 n2 n3 triples; there is no "
+                     "default explicit mesh. Use -klengths for the automatic mesh.")
+lkpoint = args.kpoints
 
-    # 🎯 ENCUT convergence test
-    if (( elen != 0 )); then
-        dir=y_convergence_encuts
-        echo "==========================================================="
-        echo -e "📂 Creating ENCUT test dir: ${BLUE}$dir${NC}"
-        rm -rI "$dir"
-        mkdir "$dir"
-        cd "$dir"
-        mkdir y_dir
-        cd y_dir
-        
-        for val in "${encuts[@]}"; do
-            echo "----------------"
-            echo -e "📏 ENCUT = ${GREEN}$val${NC}"
-            dirn=$val
-            mkdir "$dirn"
-            cd "$dirn"
+print("Root dir   :", Path.cwd())
+print("Source dir :", args.srcdir)
+print("Output dir :", args.outdir)
+print("ntasks     :", args.ntasks)
+print("Append     :", args.if_append)
+print("All axes   :", if_all, "(no axis flag given -> every default axis)"
+      if if_all else "")
+print("ENCUTs     :", lencut)
+print("KPOINTS    :", lkpoint)
+print("k lengths  :", lklength)
+print("EDIFFs     :", lediff)
+print("KPAR:NCORE :", lpair)
 
-            cp "$srcdir"/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*} ./ 2>/dev/null
-            mv CONTCAR POSCAR
-            pei_vasp_univ_find_and_change -encut "$val"
-            grep ENCUT INCAR
-            sed -n '4p' KPOINTS
-            echo -e "🚀 Ready to submit: ${BLUE}$(pwd)${NC}"
-            #sbatch sub.*
+# pei_vasp_univ_find_and_change is a subprocess; line-buffer stdout so our messages stay
+# ordered around its output instead of arriving in one block at the end.
+sys.stdout.reconfigure(line_buffering=True)
 
-            cd ..
-        done
-
-        cd "$dirsurf"
-    fi
-
-    # 🎯 KPOINTS convergence test
-    if (( klen != 0 )); then
-        dir=y_convergence_kpoints
-        echo "==========================================================="
-        echo -e "📂 Creating KPOINTS test dir: ${BLUE}$dir${NC}"
-        rm -rI "$dir"
-        mkdir "$dir"
-        cd "$dir"
-        mkdir y_dir
-        cd y_dir
-
-        for ((i = 0; i < klen; i+=3)); do
-            echo "----------------"
-            echo -e "📏 KPOINTS = ${GREEN}${kpoints[i]} ${kpoints[i+1]} ${kpoints[i+2]}${NC}"
-            dirn="${kpoints[i]}-${kpoints[i+1]}-${kpoints[i+2]}"
-            mkdir "$dirn"
-            cd "$dirn"
-
-            cp "$srcdir"/{INCAR,CONTCAR,POTCAR,sub.*,Y_*} ./ 2>/dev/null
-            mv CONTCAR POSCAR
-
-            cat > KPOINTS << EOF
-Regular ${kpoints[i]} x ${kpoints[i+1]} x ${kpoints[i+2]} mesh centered at Gamma 
-0
-Gamma
-${kpoints[i]} ${kpoints[i+1]} ${kpoints[i+2]}
-0  0  0
-EOF
-            grep ENCUT INCAR
-            sed -n '4p' KPOINTS
-            echo -e "🚀 Ready to submit: ${BLUE}$(pwd)${NC}"
-            #sbatch sub.*
-
-            cd ..
-        done
-    fi
-
-    # ♻️ Cleanup
-    echo -e "🧹 Cleaning up: ${BLUE}$srcdir${NC}"
-    rm -rf "$srcdir"
-
-    echo -e "📄 Moving log file to: ${BLUE}$dirsurf/$logfile${NC}"
-    mv "$myroot/$logfile" "$dirsurf/"
-
-}
-
-main "$@"
-exit
+generate_convergence_dirs(path_root=str(Path.cwd().resolve()),
+                          lencut=lencut,
+                          lkpoint=lkpoint,
+                          lklength=lklength,
+                          lediff=lediff,
+                          lpair=lpair,
+                          ntasks=args.ntasks,
+                          srcdir=args.srcdir,
+                          outdir=args.outdir,
+                          force=args.force,
+                          if_append=args.if_append)

@@ -1,107 +1,53 @@
 #!/usr/bin/env python3
-# J. Pei, 2026-07-15
+# J. Pei, 2026-07-15; retired 2026-09-01
 # pei_vasp_run_kpar_ncore
-#  >>> Generate a static KPAR/NCORE parallel-efficiency benchmark from y_full_relax.
+#  >>> RETIRED. Merged into pei_vasp_run_convergence as one axis among five.
 #
-#  Run it at the level of `y_full_relax`, like the other bulk workflows. It copies the
-#  relaxed INCAR/POTCAR/CONTCAR and the sub.* Slurm scripts into y_kpar_ncore/y_dir/*,
-#  then holds the whole VASP workload fixed (static single point, fixed KPOINTS/ENCUT,
-#  fully constrained lattice) and varies ONLY KPAR and NCORE. NPAR is kept commented so it
-#  cannot compete with the NCORE strategy. The real work lives in
-#  mymetal.build.workflow.kpar_ncore.
+#  This workflow started as "scan KPAR and NCORE", then grew -klength / -encut / -ediff
+#  flags until it was scanning five parameters under a name that promised two, wrote its
+#  cases into a flat y_dir instead of the y_*/y_*_<axis>/y_dir layout every other bulk
+#  workflow uses, and carried side flags (-encut/-ediff) that fought the project rule
+#  that a case inherits everything from y_full_relax except the parameter under test.
 #
-#  It ONLY prepares input directories -- no sbatch. Submit y_kpar_ncore/y_dir/* with your
-#  usual flow, then post-process the elapsed times with pei_vasp_plot_kpar_ncore.
+#  pei_vasp_run_convergence now owns all five axes, each in its own subtree:
+#      -encuts     y_convergence_encuts/y_dir/encut_<E>
+#      -kpoints    y_convergence_kpoints/y_dir/kpoints_<n1>-<n2>-<n3>
+#      -klengths   y_convergence_klength/y_dir/klen_<L>
+#      -ediffs     y_convergence_ediff/y_dir/ediff_<D>
+#      -kpar_ncore y_convergence_kpar_ncore/y_dir/kpar_<K>_ncore_<N>
 #
-#  -pairs takes KPAR:NCORE tokens; the default is the requested 21-pair matrix that spans
-#  KPAR in {128,64,32,16,8,4}. Every pair must satisfy KPAR*NCORE | ntasks.
+#  The library it called, mymetal.build.workflow.kpar_ncore, is NOT retired: it still
+#  supplies the source validation, the restart-free copy and the INCAR reader that
+#  mymetal.build.workflow.convergence reuses. Finished y_kpar_ncore trees also still
+#  post-process, via pei_vasp_plot_all -kpar_ncore.
 #
-#  >>> Example usage (mirrored in EPILOG below, which is what --help prints):
-#      pei_vasp_run_kpar_ncore                              # default 21-pair matrix, 128 ranks
-#      pei_vasp_run_kpar_ncore -pairs 32:4 16:8            # only these two pairs
-#      pei_vasp_run_kpar_ncore -ntasks 64 -pairs 16:4 8:8 # benchmark a 64-rank job instead
-#          ^ -ntasks 64 ALONE aborts: the default matrix still holds 128-rank pairs, and
-#            KPAR*NCORE must divide ntasks -- narrow -pairs whenever you lower -ntasks.
-#
-#  Prerequisite: y_full_relax must hold a usable INCAR, POTCAR and CONTCAR/POSCAR plus at
-#  least one sub.* Slurm script; pei_vasp_univ_find_and_change must be on PATH.
+#  Kept as a signpost rather than deleted so an old command line fails loudly with the
+#  replacement in hand instead of "command not found".
 
-import argparse
 import sys
-from pathlib import Path
 
+GREEN, YELLOW, BLUE, NC = "\033[0;32m", "\033[0;33m", "\033[0;34m", "\033[0m"
 
-def parse_pair(value):
-    """argparse type: parse one ``KPAR:NCORE`` token such as ``32:4`` into a tuple."""
-    try:
-        kpar_text, ncore_text = value.split(":", maxsplit=1)
-        kpar, ncore = int(kpar_text), int(ncore_text)
-    except (TypeError, ValueError) as exc:
-        raise argparse.ArgumentTypeError(
-            "pair must use KPAR:NCORE, for example 32:4") from exc
-    if kpar <= 0 or ncore <= 0:
-        raise argparse.ArgumentTypeError("KPAR and NCORE must be positive integers")
-    return kpar, ncore
-
-
-# Kept in sync with the ">>> Example usage" block at the top of this file; argparse only
-# shows what we hand it, so the header comment alone never reaches a --help reader.
-EPILOG = """\
-most common:
-  pei_vasp_run_kpar_ncore                              # default 21-pair matrix, 128 ranks
-  pei_vasp_run_kpar_ncore -pairs 32:4 16:8            # only these two pairs (32*4 = 16*8 = 128)
-  pei_vasp_run_kpar_ncore -ntasks 64 -pairs 16:4 8:8 # benchmark a 64-rank job instead
-  pei_vasp_run_kpar_ncore -pairs 16:4 -force         # re-generate one pair, no prompt
-
-then:
-  submit y_kpar_ncore/y_dir/* with your usual flow, then
-  pei_vasp_plot_kpar_ncore                             # elapsed time vs NCORE, per KPAR
-
-notes:
-  run at the level of y_full_relax (needs INCAR, POTCAR, CONTCAR/POSCAR and a sub.* script).
-  it only prepares dirs -- it never sbatches.
-  KPAR*NCORE must DIVIDE ntasks, so the default matrix is 128-rank only: dropping to
-  -ntasks 64 without also narrowing -pairs aborts on the first 128-rank pair.
-"""
-
-parser = argparse.ArgumentParser(
-    description="Generate static KPAR/NCORE VASP benchmarks from y_full_relax.",
-    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.add_argument("-pairs", nargs="+", type=parse_pair, default=None,
-                    metavar="KPAR:NCORE",
-                    help="Pairs to test; default is the requested 21-pair matrix.")
-parser.add_argument("-ntasks", type=int, default=None,
-                    help="Fixed MPI rank count used by every job (default 128).")
-parser.add_argument("-srcdir", default="y_full_relax",
-                    help="Source VASP directory (default y_full_relax).")
-parser.add_argument("-outdir", default="y_kpar_ncore",
-                    help="Output workflow directory (default y_kpar_ncore).")
-parser.add_argument("-force", action="store_true",
-                    help="Delete an existing output directory without prompting.")
-args = parser.parse_args()
-
-# Guard AFTER parse_args, so --help still answers under a stale interpreter: the shebang is
-# /usr/bin/env python3, which is 3.6 on this box. Only the mymetal import below needs 3.10
-# (the library annotates with subscripted generics like list[tuple[int, int]]).
-if sys.version_info < (3, 10):
-    raise SystemExit("pei_vasp_run_kpar_ncore needs the active Python >= 3.10 environment")
-
-from mymetal.build.workflow.kpar_ncore import generate_kpar_ncore_dirs, DEFAULT_NTASKS
-
-# -ntasks defaults to None so the parser needs no mymetal import; resolve the real default
-# now that the library is in.
-ntasks = DEFAULT_NTASKS if args.ntasks is None else args.ntasks
-
-print("Test pairs :", "default 21-pair matrix" if args.pairs is None else args.pairs)
-print("Fixed ranks:", ntasks)
-print("Source dir :", args.srcdir)
-print("Output dir :", args.outdir)
-
-# find_and_change is a subprocess; line-buffer stdout so our messages stay ordered
-# around its output instead of arriving in one block at the end.
-sys.stdout.reconfigure(line_buffering=True)
-
-path_root = Path.cwd().resolve()
-print("🟢 ===== pei_vasp_run_kpar_ncore in %s" % path_root)
-generate_kpar_ncore_dirs(path_root=path_root, lpairs=args.pairs, ntasks=ntasks,
-                         srcdir=args.srcdir, outdir=args.outdir, force=args.force)
+print("%s❌ pei_vasp_run_kpar_ncore is retired.%s" % (YELLOW, NC))
+print("")
+print("   It scanned five parameters under a name that promised two, and wrote a flat")
+print("   y_dir instead of the %sy_*/y_*_<axis>/y_dir%s layout the other bulk workflows use."
+      % (BLUE, NC))
+print("")
+print("   Use %spei_vasp_run_convergence%s instead -- same source contract" % (GREEN, NC))
+print("   (run it beside %sy_full_relax%s), one subtree per axis:" % (BLUE, NC))
+print("")
+print("     old: pei_vasp_run_kpar_ncore -pairs 4:4 8:4 -klength 81 -encut 400 -ediff 1E-6")
+print("     new: %spei_vasp_run_convergence -kpar_ncore 4:4 8:4%s" % (GREEN, NC))
+print("          ...with KPOINTS 'A 81', ENCUT 400 and EDIFF 1E-6 already set in")
+print("          %sy_full_relax%s -- under the new workflow the source IS the reference"
+      % (BLUE, NC))
+print("          setting, and a case changes only the axis under test.")
+print("")
+print("     old: pei_vasp_run_kpar_ncore -pairs 4:4 -klength 60 81 100")
+print("     new: %spei_vasp_run_convergence -klengths 60 81 100%s" % (GREEN, NC))
+print("")
+print("   See %spei_vasp_run_convergence --help%s for all five axes." % (GREEN, NC))
+print("   Existing y_kpar_ncore trees still post-process: %spei_vasp_plot_all -kpar_ncore%s"
+      % (GREEN, NC))
+sys.exit(1)

@@ -81,7 +81,7 @@ main 分支保持不动。最终验证通过后再 merge 回 main 或提 PR。
 | `pei_vasp_univ_get_size_by_distance.py` | 按 k 点距离计算 size |
 | `pei_vasp_univ_check_phase_transition` | 检查相变 |
 | `pei_vasp_univ_get_struct_infos` | 获取结构信息 |
-| `pei_vasp_plot_convergence.py` | 绘制收敛曲线 |
+| `pei_vasp_plot_relax_convergence.py` | 绘制弛豫收敛曲线 |
 
 ### Stage 2 — vasp_utils/vasp_workflow_bulk + neb_utils
 

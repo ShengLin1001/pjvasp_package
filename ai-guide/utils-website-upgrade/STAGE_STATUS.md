@@ -45,7 +45,7 @@
   pei_vasp_univ_load_env, pei_vasp_univ_monitor_*, pei_vasp_univ_resubmit_*,
   pei_vasp_univ_transfer_*, pei_vasp_univ_get_size_by_distance.py,
   pei_vasp_univ_check_phase_transition, pei_vasp_univ_get_struct_infos,
-  pei_vasp_plot_convergence.py
+  pei_vasp_plot_relax_convergence.py
 - 产出：`ai-guide/utils-website-upgrade/handoff/stage_1_handoff.md`
 
 ### Stage 2 — vasp_utils/vasp_workflow_bulk + neb_utils
