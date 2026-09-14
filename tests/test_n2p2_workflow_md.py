@@ -177,7 +177,10 @@ class TestIncarStaticGuard(unittest.TestCase):
             PeiN2p2MD._check_incar_static(self._write(' NSW= 150\n IBRION= 2\n'))
 
 
-class TestInputNnEnergyOnly(unittest.TestCase):
+class TestInputNnForCompare(unittest.TestCase):
+
+    TEXT_SRC = ('epochs 1000\nuse_short_forces   # Use forces.\nrandom_seed 1\n'
+                '# note: use_short_forces is expensive\n')
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -185,17 +188,39 @@ class TestInputNnEnergyOnly(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def test_use_short_forces_is_commented_out(self):
+    def _write_and_read(self, text_src: str, if_forces: bool) -> list:
         src = Path(self.tmp.name) / 'input.nn'
         dst = Path(self.tmp.name) / 'out.nn'
-        src.write_text('epochs 1000\nuse_short_forces   # Use forces.\nrandom_seed 1\n',
-                       encoding='utf-8')
-        PeiN2p2MD._write_input_nn_energy_only(src, dst)
-        ltext = dst.read_text(encoding='utf-8').splitlines()
+        src.write_text(text_src, encoding='utf-8')
+        PeiN2p2MD._write_input_nn_for_compare(src, dst, if_forces=if_forces)
+        return dst.read_text(encoding='utf-8').splitlines()
+
+    def test_use_short_forces_is_commented_out(self):
+        ltext = self._write_and_read(self.TEXT_SRC, if_forces=False)
         self.assertTrue(any(l.startswith('#use_short_forces') for l in ltext))
         self.assertIn('epochs 1000', ltext)
-        # 只注释目标关键词，其它行原样保留
+        # 只动目标关键词，其它行原样保留
         self.assertIn('random_seed 1', ltext)
+        # 顶格才算关键词：散文注释里提到它不能被当成开关
+        self.assertIn('# note: use_short_forces is expensive', ltext)
+
+    def test_use_short_forces_is_enabled(self):
+        ltext = self._write_and_read(self.TEXT_SRC, if_forces=True)
+        self.assertTrue(any(l.startswith('use_short_forces') for l in ltext))
+        self.assertFalse(any(l.startswith('#use_short_forces') for l in ltext))
+
+    def test_toggle_is_idempotent(self):
+        # 反复开关不能让标记越堆越长，也不能多出 '##'
+        ltext = self._write_and_read(self.TEXT_SRC, if_forces=False)
+        for if_forces in [True, False, True]:
+            ltext = self._write_and_read('\n'.join(ltext) + '\n', if_forces=if_forces)
+        lhit = [l for l in ltext if l.startswith('use_short_forces')]
+        self.assertEqual(len(lhit), 1)
+        self.assertEqual(lhit[0].count('# toggled by'), 1)
+
+    def test_missing_keyword_raises(self):
+        with self.assertRaises(ValueError):
+            self._write_and_read('epochs 1000\nrandom_seed 1\n', if_forces=True)
 
 
 class TestCountStructures(unittest.TestCase):
@@ -214,6 +239,54 @@ class TestCountStructures(unittest.TestCase):
 
     def test_missing_file_counts_zero(self):
         self.assertEqual(PeiN2p2MD._count_structures(Path(self.tmp.name) / 'nope.data'), 0)
+
+
+class TestReadForcesComp(unittest.TestCase):
+    """forces.comp 没有分量列，同一原子靠「连续三行」定位，错了会安静地把 x/y/z 拌匀。"""
+
+    # 结构 1 的两个原子故意写在结构 0 前面，模拟多 rank 合并后 index 不是全局有序的情形
+    TEXT_FORCES = ('# forces.comp\n'
+                   '         1          0  1.0E+00  1.1E+00  0.0E+00  0.0E+00\n'
+                   '         1          0  2.0E+00  2.1E+00  0.0E+00  0.0E+00\n'
+                   '         1          0  3.0E+00  3.1E+00  0.0E+00  0.0E+00\n'
+                   '         0          0  4.0E+00  4.1E+00  0.0E+00  0.0E+00\n'
+                   '         0          0  5.0E+00  5.1E+00  0.0E+00  0.0E+00\n'
+                   '         0          0  6.0E+00  6.1E+00  0.0E+00  0.0E+00\n')
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _write(self, name: str, text: str) -> Path:
+        path = Path(self.tmp.name) / name
+        path.write_text(text, encoding='utf-8')
+        return Path(self.tmp.name)
+
+    def test_triplets_are_sorted_without_scrambling_components(self):
+        dir_job = self._write('forces.comp', self.TEXT_FORCES)
+        arr_key, arr_f = PeiN2p2MD._read_forces_comp(dir_job)
+        # 取的是第 3 列（Fnnp_phys），不是第 2 列（Fref_phys）
+        np.testing.assert_allclose(arr_key, [[0, 0], [1, 0]])
+        np.testing.assert_allclose(arr_f, [[4.1, 5.1, 6.1], [1.1, 2.1, 3.1]])
+
+    def test_merged_file_wins_over_rank_shards(self):
+        # 合并文件与分片并存时只读合并文件，否则同一批力会被数两遍
+        self._write('forces.comp', self.TEXT_FORCES)
+        self._write('forces.comp.0000', self.TEXT_FORCES)
+        dir_job = Path(self.tmp.name)
+        self.assertEqual(len(PeiN2p2MD._read_forces_comp(dir_job)[1]), 2)
+
+    def test_missing_file_raises(self):
+        with self.assertRaises(FileNotFoundError):
+            PeiN2p2MD._read_forces_comp(Path(self.tmp.name))
+
+    def test_row_count_not_multiple_of_three_raises(self):
+        dir_job = self._write('forces.comp',
+                              '\n'.join(self.TEXT_FORCES.splitlines()[:-1]) + '\n')
+        with self.assertRaises(ValueError):
+            PeiN2p2MD._read_forces_comp(dir_job)
 
 
 class TestPotentialId(unittest.TestCase):

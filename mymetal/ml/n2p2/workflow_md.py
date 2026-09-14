@@ -21,6 +21,7 @@ MD 主动学习（chap_4_TL.pdf Stage I）的调度器：把「已训练好的�
                             -> data_md/<iround>/y_frames/input.data.frames
     submit_compare          每条势对整条帧集跑一次 nnp-dataset
                             -> data_md/<iround>/y_compare/y_dir/<run>_<epoch>/energy.comp.*
+                            （if_forces=True 时另出 forces.comp.*）
     collect_compare         逐帧汇总各势预测 -> y_compare/y_compare_data_md.txt
     select_md_structures    按 committee 发散度挑结构 -> y_compare/input.data.md
     prepare_dft             逐结构 VASP 静态 -> data_dft/<iround>/y_dir/<i>/
@@ -103,6 +104,11 @@ _DICT_MD_INDEX_NAME = {'lphase': 'phase', 'llatid': 'latid', 'laa0': 'aa0',
 _COLS_FRAMES = ['index', 'run', 'epoch', 'phase', 'T_set_K', 'step', 'natoms', 'E_md_eV']
 _COLS_COMPARE_STAT = ['index', 'phase', 'T_set_K', 'natoms',
                       'E_mean_eV/at', 'E_std_meV/at', 'E_spread_meV/at', 'n_pot']
+# 力判据的两列，只有 collect_compare(if_forces=True) 才有；插在 n_pot 之后、逐势能量之前。
+_COLS_COMPARE_FORCE = ['F_std_max_eV/A', 'F_std_mean_eV/A']
+
+# compare 作业目录里 input.nn 的 use_short_forces 开关标记（写入与再解析共用一份字面量）
+_MARK_INPUT_NN_FORCE = '# toggled by PeiN2p2MD.submit_compare'
 _COLS_SELECT = ['rank', 'index', 'phase', 'T_set_K', 'natoms',
                 'E_std_meV/at', 'E_spread_meV/at', 'tag']
 _COLS_PHASE = ['index', 'run', 'phase', 'T_set_K', 'step', 'measured', 'q4', 'q6', 'msd_A2']
@@ -932,12 +938,14 @@ class PeiN2p2MD(PeiN2p2):
     # ===== 阶段 iii-b：每条势对整份帧集跑 nnp-dataset =====
     def submit_compare(self, iround: int = 0, lpotential: list = None,
                        if_sbatch: bool = False, dict_args_to_submit: dict = None,
+                       if_forces: bool = False,
                        if_force_rebuild: bool = False, if_skip_if_done: bool = True) -> Path:
         """准备并可选提交 committee 一致性对比作业（每条势函数一个 nnp-dataset）。
 
         每个作业目录是一份自包含的 nnp 运行环境：势函数三件套 +
         input.data（= 本轮全部 MD 帧）。nnp-dataset 0 逐结构写
-        energy.comp.%04d（index / N / Eref_phys / Ennp_phys），一次跑完所有帧。
+        energy.comp.%04d（index / N / Eref_phys / Ennp_phys），一次跑完所有帧；
+        ``if_forces=True`` 时额外写 forces.comp.%04d（逐原子逐分量）。
 
         Note:
             ``0`` 是 shuffle 开关，必须为 0：开了洗牌后各 rank 拿到的结构顺序被打乱，
@@ -950,6 +958,8 @@ class PeiN2p2MD(PeiN2p2):
             lpotential: ``[(run, epoch), ...]``；为 None 时读 potentials 的清单。
             if_sbatch: 是否真正提交 Slurm 作业。
             dict_args_to_submit: 传给通用 Slurm 提交器的参数字典。
+            if_forces: 是否让 nnp-dataset 连力一起算（committee 力发散度判据要用）。
+                完成阀门随之改看 forces.comp：只有能量产物的旧作业会被重跑。
             if_force_rebuild: 作业目录非空时是否强制清空重建。
             if_skip_if_done: 完成阀门，逐作业生效。
 
@@ -978,38 +988,51 @@ class PeiN2p2MD(PeiN2p2):
         dir_ydir = dir_cmp / 'y_dir'
         os.makedirs(dir_ydir, exist_ok=True)
 
+        # 完成阀门看的是「本轮判据要的那个产物」：只开能量时是 energy.comp，开了力就必须
+        # 看 forces.comp —— 否则上一轮只算过能量的作业目录会被当成已完成直接跳过，
+        # 力判据无料可用（2026-09-13 round 1c 换判据时踩过这个点）。
+        pat_done = 'forces.comp*' if if_forces else 'energy.comp*'
         ldir_job = [dir_ydir / self._potential_id(run, epoch) for run, epoch in lpotential]
         ldir_done = ([d for d in ldir_job if any(self._is_file_nonempty(p)
-                                                 for p in d.glob('energy.comp*'))]
+                                                 for p in d.glob(pat_done))]
                      if if_skip_if_done else [])
         if if_skip_if_done and len(ldir_done) == len(ldir_job):
             print(f"⏭️ skip submit_compare {dir_cmp}: all {len(ldir_job)} job dir(s) already carry "
-                  f"energy.comp. Pass if_skip_if_done=False to redo them.")
+                  f"{pat_done}. Pass if_skip_if_done=False to redo them.")
             self.last_jobids = []
             return dir_cmp
 
         n_kept = 0
         for (run, epoch), dir_job in zip(lpotential, ldir_job):
-            if if_skip_if_done and self._is_file_nonempty(dir_job / 'input.data') \
+            if dir_job in set(ldir_done):
+                continue
+            dir_pot_src = self.dir_potentials / run / epoch
+            # 已备好的目录只重写 input.nn，不清空重建：nnp-dataset 会原地覆盖 energy.comp
+            # 并补出 forces.comp，旧产物（output.data 等）留着无害。换势函数时才需要
+            # if_force_rebuild=True 走下面的整备分支，把 weights/scaling 一并换掉。
+            if not if_force_rebuild and self._is_file_nonempty(dir_job / 'input.data') \
                     and self._is_file_nonempty(dir_job / 'scaling.data'):
+                self._write_input_nn_for_compare(dir_pot_src / 'input.nn',
+                                                 dir_job / 'input.nn', if_forces=if_forces)
                 n_kept += 1
                 continue
             self._guard_rebuild_dir(dir_job, if_force_rebuild=if_force_rebuild,
                                     label=f'compare job {dir_job.name}')
             os.makedirs(dir_job, exist_ok=True)
-            dir_pot_src = self.dir_potentials / run / epoch
             for path_src in [dir_pot_src / 'scaling.data'] \
                     + sorted(dir_pot_src.glob('weights.*.data')):
                 shutil.copy(path_src, dir_job / path_src.name)
-            self._write_input_nn_energy_only(dir_pot_src / 'input.nn', dir_job / 'input.nn')
+            self._write_input_nn_for_compare(dir_pot_src / 'input.nn',
+                                             dir_job / 'input.nn', if_forces=if_forces)
             # 帧集逐作业硬拷会把同一份数据复制 N 份（上百 MB × 势数）；nnp-dataset 只读它，
             # 软链接足够，且能一眼看出所有作业吃的是同一份帧集。
             path_link = dir_job / 'input.data'
             if path_link.is_symlink() or path_link.exists():
                 path_link.unlink()
             path_link.symlink_to(os.path.relpath(path_frames.resolve(), dir_job.resolve()))
-        print(f"Prepared {len(ldir_job) - n_kept} compare job dir(s) under {dir_ydir} "
-              f"(kept {n_kept} already-prepared, {len(ldir_done)} of them with results).")
+        print(f"Prepared {len(ldir_job) - n_kept - len(ldir_done)} compare job dir(s) under "
+              f"{dir_ydir} (reused {n_kept} already-prepared dir(s) with input.nn rewritten for "
+              f"if_forces={if_forces}, {len(ldir_done)} already carry {pat_done}).")
 
         ldir_todo = [d for d in ldir_job if d not in set(ldir_done)]
         args_to_submit = {**self._clamp_chunks(dict_args_to_submit, len(ldir_todo)),
@@ -1071,49 +1094,124 @@ class PeiN2p2MD(PeiN2p2):
         return df.sort_values('index').reset_index(drop=True)
 
     @staticmethod
-    def _write_input_nn_energy_only(path_src: Path = None, path_dst: Path = None) -> None:
-        """拷一份 input.nn，同时注释掉 ``use_short_forces``。
+    def _write_input_nn_for_compare(path_src: Path = None, path_dst: Path = None,
+                                    if_forces: bool = False) -> None:
+        """拷一份 input.nn 到 compare 作业目录，并按判据需要开关 ``use_short_forces``。
 
-        committee 判据只用能量，但 nnp-dataset 见到 ``use_short_forces`` 就会连力一起算
-        并落盘 ``forces.comp``：力的反向传播是单点预测里最贵的一步，产物体积也按
-        「帧数 × 原子数 × 3」膨胀（万帧量级下每条势就是几十 MB，乘上势数很快上到 10 GB）。
-        关掉它对能量预测没有任何影响。
+        nnp-dataset 见到 ``use_short_forces`` 就会连力一起算并落盘 ``forces.comp``：
+        力的反向传播是单点预测里最贵的一步，产物体积也按「帧数 × 原子数 × 3」膨胀
+        （万帧量级下每条势就是几十 MB，乘上势数很快上到 10 GB）。所以默认关掉——
+        只比能量时关掉它对预测结果没有任何影响。
+
+        要用 committee **力**发散度判据时才打开：逐原子的力发散度不受势间常数能量偏移
+        影响，也不像每原子能量那样随 N 被平均掉，是比 E_std 更干净的主动学习信号。
 
         Args:
             path_src: 势函数库里的 input.nn。
             path_dst: 目标 compare 作业目录里的 input.nn。
+            if_forces: True 则打开 ``use_short_forces``，False 则注释掉。
+
+        Raises:
+            ValueError: 源 input.nn 里找不到 ``use_short_forces``（无论开关状态）。
         """
-        lline = Path(path_src).read_text(encoding='utf-8').splitlines()
         lout = []
-        for line in lline:
-            if line.split('#', 1)[0].split()[:1] == ['use_short_forces']:
-                lout.append('#' + line + '   # disabled by PeiN2p2MD.submit_compare '
-                                         '(committee compares energies only)')
-            else:
+        n_hit = 0
+        for line in Path(path_src).read_text(encoding='utf-8').splitlines():
+            # 只认顶格的关键词行（n2p2 的 input.nn 关键词都在第 0 列），避免把散文注释里
+            # 出现的 "# use_short_forces ..." 误当成开关给取消注释掉。
+            if not (line.startswith('use_short_forces') or line.startswith('#use_short_forces')):
                 lout.append(line)
+                continue
+            # 去掉上一次写入留下的标记，免得反复开关时标记越堆越长
+            body = line.lstrip('#').split(_MARK_INPUT_NN_FORCE, 1)[0].rstrip()
+            lout.append((body if if_forces else '#' + body) + '   ' + _MARK_INPUT_NN_FORCE
+                        + (' (forces on)' if if_forces else ' (energies only)'))
+            n_hit += 1
+        if n_hit == 0:
+            raise ValueError(f"❌ No 'use_short_forces' line in {path_src}. "
+                             f"Cannot toggle the committee force criterion.")
         Path(path_dst).write_text('\n'.join(lout) + '\n', encoding='utf-8')
 
+    @staticmethod
+    def _read_forces_comp(dir_job: Path = None) -> tuple:
+        """读回单个 nnp-dataset 作业的 ``forces.comp``，返回逐原子的 NNP 预测力。
+
+        forces.comp 逐行是「一个原子的一个分量」，且**没有分量列**（nnp-dataset.cpp:302-320）：
+        同一原子的 x/y/z 是连续三行。所以排序必须是稳定的，否则三元组会被打散。
+
+        Args:
+            dir_job: ``y_compare/y_dir/<run>_<epoch>/``。
+
+        Returns:
+            ``(arr_key, arr_f)``：``arr_key`` 形状 ``(n_atom, 2)``，列为 (结构 index, 原子 index)；
+            ``arr_f`` 形状 ``(n_atom, 3)``，为物理单位的 NNP 预测力（本项目口径 eV/Å）。
+            两者都按 (index, iatom) 升序且一一对应。
+
+        Raises:
+            FileNotFoundError: 目录下没有非空的 forces.comp*。
+            ValueError: 行数不是 3 的整数倍，或某个原子的三行键不一致。
+        """
+        dir_job = Path(dir_job)
+        # 与 _read_energy_comp 同一套形态判断：正常跑完只剩合并后的 forces.comp，
+        # 被砍在合并之前则只剩各 rank 的分片，两种都要认。
+        lpath = sorted(p for p in dir_job.glob('forces.comp*') if p.stat().st_size > 0)
+        lmerged = [p for p in lpath if p.name == 'forces.comp']
+        lpath = lmerged if lmerged else lpath
+        if not lpath:
+            raise FileNotFoundError(f"❌ No non-empty forces.comp / forces.comp.* in {dir_job}. "
+                                    f"Was use_short_forces enabled? check nnp-dataset.log.*")
+        larr = []
+        for path in lpath:
+            df = pd.read_csv(path, sep=r'\s+', comment='#', header=None)
+            # index iatom Fref_phys Fnnp_phys [Fref_int Fnnp_int]（nnp-dataset.cpp:302-320）
+            # 未开 normalize 时只有 4 列，但第 3 列仍是 NNP 预测力，取列号 3 两种形态通用。
+            larr.append(df.iloc[:, [0, 1, 3]].to_numpy(dtype=float))
+        arr = np.concatenate(larr, axis=0) if len(larr) > 1 else larr[0]
+        if arr.shape[0] % 3 != 0:
+            raise ValueError(f"❌ {dir_job.name}: forces.comp has {arr.shape[0]} row(s), "
+                             f"not a multiple of 3 (one row per atom per component).")
+        # lexsort 是稳定排序：同一 (index, iatom) 的三行保持 x/y/z 原序。
+        arr = arr[np.lexsort((arr[:, 1], arr[:, 0]))]
+        arr_key = arr[:, :2].reshape(-1, 3, 2)
+        if not np.array_equal(arr_key[:, 0, :], arr_key[:, 2, :]):
+            raise ValueError(f"❌ {dir_job.name}: forces.comp rows do not group into clean "
+                             f"(index, iatom) triplets. Corrupt or truncated file?")
+        return arr_key[:, 0, :], arr[:, 2].reshape(-1, 3)
+
     def collect_compare(self, iround: int = 0, lpotential: list = None,
-                        if_skip_if_done: bool = True) -> Path:
-        """逐帧汇总所有势函数的预测能量，写出 committee 一致性表。
+                        if_forces: bool = False, if_skip_if_done: bool = True) -> Path:
+        """逐帧汇总所有势函数的预测能量（可选力），写出 committee 一致性表。
 
         判据就是 chap_4_TL.pdf 的出发点：同一结构如果被训练得好，一组势函数应当给出
-        彼此接近的能量；预测越发散，说明该构型在势能面上的表达越不足，越值得补进训练集。
+        彼此接近的预测；越发散说明该构型在势能面上的表达越不足，越值得补进训练集。
 
         产物 ``y_compare/y_compare_data_md.txt`` 逐帧一行：帧的溯源信息 + 统计量
         （mean / std / spread）+ 每条势函数一列的预测能量（eV/atom）。
 
+        ``if_forces=True`` 时多两列力发散度。逐原子先算力**矢量**的样本标准差
+
+        .. math:: \\sigma_a = \\sqrt{\\tfrac{1}{P-1}\\sum_{p}\\lVert F_{pa}-\\bar F_a\\rVert^2}
+
+        再对帧内原子取 max / mean。为什么它比 E_std 好用：
+
+        1. 力是能量的导数，势间的**常数能量偏移**（各 seed 对内聚能零点看法不同，
+           实测 Au 委员会达 ±0.4 meV/atom）在求导时被完全消掉，而 E_std 会被它主导；
+        2. 每原子能量是 N 个局域贡献的平均，局域分歧按 :math:`1/\\sqrt N` 被抹平，
+           换大胞反而让信号变小；逐原子的 max 力发散度没有这个尺寸依赖，
+           24 原子标定的阈值可以直接用到 96 原子胞上。
+
         Args:
             iround: MD 扩充轮次。
             lpotential: ``[(run, epoch), ...]``；为 None 时读 potentials 的清单。
+            if_forces: 是否一并汇总力发散度（要求 compare 作业是 ``if_forces=True`` 跑的）。
             if_skip_if_done: 完成阀门。
 
         Returns:
             ``y_compare/y_compare_data_md.txt``。
 
         Raises:
-            FileNotFoundError: 缺帧索引表，或某个作业没有 energy.comp.*。
-            ValueError: 某条势的预测帧数与帧索引表对不上。
+            FileNotFoundError: 缺帧索引表，或某个作业没有 energy.comp.* / forces.comp.*。
+            ValueError: 某条势的预测帧数与帧索引表对不上，或各势的力原子序对不上。
         """
         os.chdir(self.dir_root)
         lpotential = lpotential if lpotential is not None else self._read_lpotential()
@@ -1131,6 +1229,9 @@ class PeiN2p2MD(PeiN2p2):
 
         df = df_frame[['index', 'phase', 'T_set_K', 'natoms']].copy()
         lcol_pot = []
+        arr_key_ref = None      # 第一条势的 (index, iatom) 键，用来核对各势原子序一致
+        arr_sum = None          # Σ_p F_pac，形状 (n_atom, 3)
+        arr_sumsq = None        # Σ_p F_pac²，同形状
         for run, epoch in lpotential:
             pot_id = self._potential_id(run, epoch)
             df_pot = self._read_energy_comp(dir_cmp / 'y_dir' / pot_id)
@@ -1143,7 +1244,21 @@ class PeiN2p2MD(PeiN2p2):
             # 换成 eV/atom：不同帧的原子数可以不同（FCC 32 / HCP 36），总能不可比。
             df[col] = (df_pot['E_nnp_eV'] / df_pot['natoms']).to_numpy()
             lcol_pot.append(col)
-            print(f"  ✅ {pot_id}: {len(df_pot)} structure(s)")
+            n_atom_msg = ''
+            if if_forces:
+                # 逐势只保留一二阶累加量（各 (n_atom, 3)），不把 P 条势的全量力同时留在内存：
+                # 4536 帧 × 96 原子 × 3 × 6 势 已是千万量级的双精度。
+                arr_key, arr_f = self._read_forces_comp(dir_cmp / 'y_dir' / pot_id)
+                if arr_key_ref is None:
+                    arr_key_ref, arr_sum, arr_sumsq = arr_key, arr_f.copy(), arr_f ** 2
+                elif not np.array_equal(arr_key, arr_key_ref):
+                    raise ValueError(f"❌ {pot_id}: forces.comp atom ordering differs from the "
+                                     f"first potential. Did all jobs read the same input.data?")
+                else:
+                    arr_sum += arr_f
+                    arr_sumsq += arr_f ** 2
+                n_atom_msg = f", {len(arr_f)} atom force(s)"
+            print(f"  ✅ {pot_id}: {len(df_pot)} structure(s){n_atom_msg}")
 
         arr = df[lcol_pot].to_numpy(dtype=float)
         df['E_mean_eV/at'] = arr.mean(axis=1)
@@ -1151,7 +1266,30 @@ class PeiN2p2MD(PeiN2p2):
         df['E_std_meV/at'] = arr.std(axis=1, ddof=1) * 1e3
         df['E_spread_meV/at'] = (arr.max(axis=1) - arr.min(axis=1)) * 1e3
         df['n_pot'] = len(lcol_pot)
-        df = df[_COLS_COMPARE_STAT + lcol_pot]
+
+        lcol_stat = list(_COLS_COMPARE_STAT)
+        lhead_force = []
+        if if_forces:
+            n_pot = len(lcol_pot)
+            # σ_a² = (1/(P-1)) Σ_c [ Σ_p F² − (Σ_p F)²/P ]：一二阶累加量直接给出样本方差，
+            # 对分量求和 = 力矢量偏差的模方。clip 是防浮点相消出的极小负数。
+            arr_var = (arr_sumsq - arr_sum ** 2 / n_pot).sum(axis=1) / (n_pot - 1)
+            df_f = pd.DataFrame({'index': arr_key_ref[:, 0].astype(int),
+                                 'F_std': np.sqrt(np.clip(arr_var, 0.0, None))})
+            grouped = df_f.groupby('index')['F_std']
+            if grouped.ngroups != len(df):
+                raise ValueError(f"❌ forces.comp covers {grouped.ngroups} structure(s) but the "
+                                 f"frame index table has {len(df)}.")
+            df['F_std_max_eV/A'] = df['index'].map(grouped.max()).to_numpy()
+            df['F_std_mean_eV/A'] = df['index'].map(grouped.mean()).to_numpy()
+            lcol_stat += _COLS_COMPARE_FORCE
+            lhead_force = ['# F_std_max / F_std_mean  committee force disagreement, eV/A: '
+                           'per-atom sample std of the force *vector* over the potentials '
+                           '(ddof=1), then max / mean over the atoms of the frame',
+                           '# force criterion is immune to the constant per-potential energy '
+                           'offset and does not average out as 1/sqrt(N) -> comparable across '
+                           'cell sizes, unlike E_std']
+        df = df[lcol_stat + lcol_pot]
 
         self._write_table(path_out,
                           ['# committee consistency of MD frames (n2p2 nnp-dataset, Ennp_phys)',
@@ -1161,11 +1299,13 @@ class PeiN2p2MD(PeiN2p2):
                            '# index      0-based structure index in input.data.frames',
                            '# E_<run>_<epoch>  per-potential prediction, eV/atom',
                            '# E_std / E_spread over the potentials, meV/atom '
-                           '(std uses ddof=1)'],
+                           '(std uses ddof=1)'] + lhead_force,
                           df, float_format='16.8f')
+        msg_force = (f"; F_std_max median {df['F_std_max_eV/A'].median():.4f} eV/A, "
+                     f"max {df['F_std_max_eV/A'].max():.4f} eV/A" if if_forces else '')
         print(f"📊 collect_compare: {len(df)} frame(s) x {len(lcol_pot)} potential(s); "
               f"E_std median {df['E_std_meV/at'].median():.3f} meV/at, "
-              f"max {df['E_std_meV/at'].max():.3f} meV/at -> {path_out}")
+              f"max {df['E_std_meV/at'].max():.3f} meV/at{msg_force} -> {path_out}")
         return path_out
 
     def select_md_structures(self, iround: int = 0, n_select_per_group: int = 5,
