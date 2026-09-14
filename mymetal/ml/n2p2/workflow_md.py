@@ -105,7 +105,7 @@ _COLS_FRAMES = ['index', 'run', 'epoch', 'phase', 'T_set_K', 'step', 'natoms', '
 _COLS_COMPARE_STAT = ['index', 'phase', 'T_set_K', 'natoms',
                       'E_mean_eV/at', 'E_std_meV/at', 'E_spread_meV/at', 'n_pot']
 # 力判据的两列，只有 collect_compare(if_forces=True) 才有；插在 n_pot 之后、逐势能量之前。
-_COLS_COMPARE_FORCE = ['F_std_max_eV/A', 'F_std_mean_eV/A']
+_COLS_COMPARE_FORCE = ['F_std_max_eV/A', 'F_std_mean_eV/A', 'F_ref_max_eV/A']
 
 # compare 作业目录里 input.nn 的 use_short_forces 开关标记（写入与再解析共用一份字面量）
 _MARK_INPUT_NN_FORCE = '# toggled by PeiN2p2MD.submit_compare'
@@ -1143,9 +1143,10 @@ class PeiN2p2MD(PeiN2p2):
             dir_job: ``y_compare/y_dir/<run>_<epoch>/``。
 
         Returns:
-            ``(arr_key, arr_f)``：``arr_key`` 形状 ``(n_atom, 2)``，列为 (结构 index, 原子 index)；
-            ``arr_f`` 形状 ``(n_atom, 3)``，为物理单位的 NNP 预测力（本项目口径 eV/Å）。
-            两者都按 (index, iatom) 升序且一一对应。
+            ``(arr_key, arr_f, arr_f_ref)``：``arr_key`` 形状 ``(n_atom, 2)``，
+            列为 (结构 index, 原子 index)；``arr_f`` / ``arr_f_ref`` 形状 ``(n_atom, 3)``，
+            分别是 NNP 预测力与参考力（物理单位，本项目口径 eV/Å）。
+            三者都按 (index, iatom) 升序且一一对应。
 
         Raises:
             FileNotFoundError: 目录下没有非空的 forces.comp*。
@@ -1164,8 +1165,9 @@ class PeiN2p2MD(PeiN2p2):
         for path in lpath:
             df = pd.read_csv(path, sep=r'\s+', comment='#', header=None)
             # index iatom Fref_phys Fnnp_phys [Fref_int Fnnp_int]（nnp-dataset.cpp:302-320）
-            # 未开 normalize 时只有 4 列，但第 3 列仍是 NNP 预测力，取列号 3 两种形态通用。
-            larr.append(df.iloc[:, [0, 1, 3]].to_numpy(dtype=float))
+            # 未开 normalize 时只有 4 列，但第 2/3 列仍是参考力与 NNP 预测力，
+            # 取列号 2、3 两种形态通用。
+            larr.append(df.iloc[:, [0, 1, 2, 3]].to_numpy(dtype=float))
         arr = np.concatenate(larr, axis=0) if len(larr) > 1 else larr[0]
         if arr.shape[0] % 3 != 0:
             raise ValueError(f"❌ {dir_job.name}: forces.comp has {arr.shape[0]} row(s), "
@@ -1176,7 +1178,7 @@ class PeiN2p2MD(PeiN2p2):
         if not np.array_equal(arr_key[:, 0, :], arr_key[:, 2, :]):
             raise ValueError(f"❌ {dir_job.name}: forces.comp rows do not group into clean "
                              f"(index, iatom) triplets. Corrupt or truncated file?")
-        return arr_key[:, 0, :], arr[:, 2].reshape(-1, 3)
+        return arr_key[:, 0, :], arr[:, 3].reshape(-1, 3), arr[:, 2].reshape(-1, 3)
 
     def collect_compare(self, iround: int = 0, lpotential: list = None,
                         if_forces: bool = False, if_skip_if_done: bool = True) -> Path:
@@ -1230,6 +1232,7 @@ class PeiN2p2MD(PeiN2p2):
         df = df_frame[['index', 'phase', 'T_set_K', 'natoms']].copy()
         lcol_pot = []
         arr_key_ref = None      # 第一条势的 (index, iatom) 键，用来核对各势原子序一致
+        arr_fmag_ref = None     # 逐原子参考力的模，各势共用同一份 input.data
         arr_sum = None          # Σ_p F_pac，形状 (n_atom, 3)
         arr_sumsq = None        # Σ_p F_pac²，同形状
         for run, epoch in lpotential:
@@ -1248,9 +1251,11 @@ class PeiN2p2MD(PeiN2p2):
             if if_forces:
                 # 逐势只保留一二阶累加量（各 (n_atom, 3)），不把 P 条势的全量力同时留在内存：
                 # 4536 帧 × 96 原子 × 3 × 6 势 已是千万量级的双精度。
-                arr_key, arr_f = self._read_forces_comp(dir_cmp / 'y_dir' / pot_id)
+                arr_key, arr_f, arr_f_ref = self._read_forces_comp(dir_cmp / 'y_dir' / pot_id)
                 if arr_key_ref is None:
                     arr_key_ref, arr_sum, arr_sumsq = arr_key, arr_f.copy(), arr_f ** 2
+                    # 参考力各势读到的是同一份 input.data，取第一条即可
+                    arr_fmag_ref = np.linalg.norm(arr_f_ref, axis=1)
                 elif not np.array_equal(arr_key, arr_key_ref):
                     raise ValueError(f"❌ {pot_id}: forces.comp atom ordering differs from the "
                                      f"first potential. Did all jobs read the same input.data?")
@@ -1275,17 +1280,26 @@ class PeiN2p2MD(PeiN2p2):
             # 对分量求和 = 力矢量偏差的模方。clip 是防浮点相消出的极小负数。
             arr_var = (arr_sumsq - arr_sum ** 2 / n_pot).sum(axis=1) / (n_pot - 1)
             df_f = pd.DataFrame({'index': arr_key_ref[:, 0].astype(int),
-                                 'F_std': np.sqrt(np.clip(arr_var, 0.0, None))})
+                                 'F_std': np.sqrt(np.clip(arr_var, 0.0, None)),
+                                 'F_ref': arr_fmag_ref})
             grouped = df_f.groupby('index')['F_std']
             if grouped.ngroups != len(df):
                 raise ValueError(f"❌ forces.comp covers {grouped.ngroups} structure(s) but the "
                                  f"frame index table has {len(df)}.")
             df['F_std_max_eV/A'] = df['index'].map(grouped.max()).to_numpy()
             df['F_std_mean_eV/A'] = df['index'].map(grouped.mean()).to_numpy()
+            # 参考力的量级必须和发散度一起看：F_std 天然随 |F| 增大（同一相对精度下
+            # 力越大绝对分歧越大），实测 rho(F_std_max, F_ref_max) 高达 0.92。
+            # 不把这一列摆出来，就会把「这帧力大」误读成「委员会拿不准这帧」。
+            df['F_ref_max_eV/A'] = df['index'].map(df_f.groupby('index')['F_ref'].max()).to_numpy()
             lcol_stat += _COLS_COMPARE_FORCE
             lhead_force = ['# F_std_max / F_std_mean  committee force disagreement, eV/A: '
                            'per-atom sample std of the force *vector* over the potentials '
                            '(ddof=1), then max / mean over the atoms of the frame',
+                           '# F_ref_max  largest reference force magnitude in the frame, eV/A '
+                           '(from the input.data being scored) -- read F_std together with it: '
+                           'F_std grows with |F|, so a large F_std alone does not mean the '
+                           'committee is uncertain',
                            '# force criterion is immune to the constant per-potential energy '
                            'offset and does not average out as 1/sqrt(N) -> comparable across '
                            'cell sizes, unlike E_std']

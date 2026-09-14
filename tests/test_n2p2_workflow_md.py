@@ -266,10 +266,11 @@ class TestReadForcesComp(unittest.TestCase):
 
     def test_triplets_are_sorted_without_scrambling_components(self):
         dir_job = self._write('forces.comp', self.TEXT_FORCES)
-        arr_key, arr_f = PeiN2p2MD._read_forces_comp(dir_job)
-        # 取的是第 3 列（Fnnp_phys），不是第 2 列（Fref_phys）
+        arr_key, arr_f, arr_f_ref = PeiN2p2MD._read_forces_comp(dir_job)
         np.testing.assert_allclose(arr_key, [[0, 0], [1, 0]])
+        # NNP 预测力取第 3 列（Fnnp_phys），参考力取第 2 列（Fref_phys）——两列别弄反
         np.testing.assert_allclose(arr_f, [[4.1, 5.1, 6.1], [1.1, 2.1, 3.1]])
+        np.testing.assert_allclose(arr_f_ref, [[4.0, 5.0, 6.0], [1.0, 2.0, 3.0]])
 
     def test_merged_file_wins_over_rank_shards(self):
         # 合并文件与分片并存时只读合并文件，否则同一批力会被数两遍
