@@ -28,6 +28,10 @@ MD active learning (data from ``PeiN2p2MD.collect_compare``):
     - my_plot_md_estd        : committee E_std vs MD temperature + its CDF against
                                the training set, i.e. "is the sampling reaching
                                configurations the committee actually disagrees on"
+    - my_plot_md_criteria    : several candidate selection criteria vs MD temperature,
+                               one panel each (per-frame scatter + median + p10-p90),
+                               i.e. "which criterion is monotonic, discriminating
+                               within a group, and balanced across phases"
     - my_plot_md_phase       : MSD and averaged Steinhardt q4 vs MD temperature,
                                i.e. "does each frame still hold the phase it was
                                built as"
@@ -58,7 +62,7 @@ from mymetal.universal.plot.general import general_modify_legend
 __all__ = ['my_plot_learning_curve', 'my_plot_compare', 'my_plot_rmse_by_tag',
            'my_plot_epoch_stretch', 'my_plot_epoch_cij', 'my_plot_epoch_gsfe',
            'my_plot_epoch_rmse', 'my_plot_check_interface', 'my_plot_md_estd',
-           'my_plot_md_phase', 'VERDICT_CODE']
+           'my_plot_md_criteria', 'my_plot_md_phase', 'VERDICT_CODE']
 
 # check_interface 汇总图的纵轴编码：1 = 通过，2 = 未通过（刻度写 PASS / NO，不写轴标签）。
 # 公开导出：PeiN2p2.post_check_interface_summary 用同一份编码解析 verdict 行，
@@ -766,6 +770,91 @@ def my_plot_md_estd(df=None, file_path: str = None, std_ref=None,
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
     return fig, ax
+
+
+_MD_CRIT_SCATTER = {'s': 9, 'alpha': 0.25, 'linewidths': 0}
+# 同一温度档上两个相的点会完全重叠，按相给一点水平偏移才看得出各自的分布宽度。
+# 单位是 K，取温度步长的一个小份额（阶梯步长 35 K -> ±3.5 K）。
+_MD_CRIT_JITTER_FRAC = 0.10
+
+
+def my_plot_md_criteria(df=None, file_path: str = None, lpanel: list = None,
+                        lphase: list = None, ldict_threshold: list = None,
+                        if_logy: bool = False) -> tuple:
+    """并排比较多个主动学习判据随 MD 温度的分布，一个判据一个 panel。
+
+    用途是「换判据」这类决策：同一批帧、同一组势，把候选判据画在同一张图上，
+    直接看哪个随温度单调、哪个组内有区分度、哪两个相能落在同一把尺子上。
+    每个 panel 画三层：逐帧散点（分布本身）、逐 (相, 温度) 的中位线、p10-p90 色带。
+    散点是这张图的主角 —— 只画中位线会把「组内有没有区分度」这个关键信息抹掉。
+
+    Args:
+        df: ``collect_compare`` 的表，至少要有 ``phase`` / ``T_set_K`` 两列，
+            外加 ``lpanel`` 点名的那些判据列。
+        file_path: 输出图路径。
+        lpanel: ``[(列名, y 轴标签), ...]``，顺序即 panel 顺序（按行铺满 2 列）。
+        lphase: 相的绘制顺序；None 时按 df 里出现的顺序。
+        ldict_threshold: 与 ``lpanel`` 等长的 ``{label: value}``（或 None），
+            在对应 panel 上画水平参考线，用来标阈值。
+        if_logy: 判据跨好几个量级时置 True。
+
+    Returns:
+        ``(fig, axes)``；``axes`` 是展平后的 panel 数组，与 ``lpanel`` 一一对应。
+
+    Raises:
+        ValueError: ``lpanel`` 为空，或点名的列不在 df 里。
+    """
+    if not lpanel:
+        raise ValueError("❌ lpanel is empty; give at least one (column, ylabel) pair.")
+    lmissing = [c for c, _ in lpanel if c not in df.columns]
+    if lmissing:
+        raise ValueError(f"❌ column(s) {lmissing} not in the dataframe.")
+    lphase = lphase if lphase is not None else list(dict.fromkeys(df['phase']))
+    ldict_threshold = ldict_threshold if ldict_threshold is not None else [None] * len(lpanel)
+    q_lo, q_hi = _MD_ESTD_QUANTILE
+
+    n_col = 2 if len(lpanel) > 1 else 1
+    n_row = int(np.ceil(len(lpanel) / n_col))
+    fig, axes = my_plot(fig_subp=[n_row, n_col], fig_sharex=False)
+    axes = np.atleast_1d(axes).flatten()
+
+    lt_all = np.array(sorted(df['T_set_K'].unique()))
+    # 步长取相邻温度差的中位，阶梯不等距时也稳
+    dt = np.median(np.diff(lt_all)) if len(lt_all) > 1 else 1.0
+
+    for i_panel, ((col, ylabel), dict_threshold) in enumerate(zip(lpanel, ldict_threshold)):
+        ax = axes[i_panel]
+        for i, phase in enumerate(lphase):
+            d = df[df['phase'] == phase]
+            # 相之间左右错开，居中分布（两相时为 -0.5/+0.5 个抖动单位）
+            shift = (i - (len(lphase) - 1) / 2) * dt * _MD_CRIT_JITTER_FRAC
+            ax.scatter(d['T_set_K'] + shift, d[col], color=f'C{i}', zorder=1,
+                       **_MD_CRIT_SCATTER)
+            g = d.groupby('T_set_K')[col]
+            t = np.array(sorted(d['T_set_K'].unique()))
+            ax.fill_between(t, g.quantile(q_lo).reindex(t).to_numpy(),
+                            g.quantile(q_hi).reindex(t).to_numpy(),
+                            color=f'C{i}', alpha=_MD_ESTD_BAND_ALPHA, zorder=2)
+            ax.plot(t, g.median().reindex(t).to_numpy(), '-o', color=f'C{i}',
+                    markerfacecolor='white', label=str(phase).upper(), zorder=3)
+        for j, (label, value) in enumerate((dict_threshold or {}).items()):
+            ax.axhline(value, ls='--' if j == 0 else ':', color='black', zorder=4,
+                       label=label)
+        if if_logy:
+            ax.set_yscale('log')
+        ax.set_xlabel('Temperature (K)')
+        ax.set_ylabel(ylabel)
+        # 图例只放第一个 panel：四个 panel 的相颜色一致，重复四遍纯属挤占数据区
+        if i_panel == 0 or dict_threshold:
+            general_modify_legend(ax.legend(loc='upper left'))
+
+    # 多出来的空 panel 关掉，别留一个带刻度的空框
+    for ax in axes[len(lpanel):]:
+        ax.set_axis_off()
+
+    fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
+    return fig, axes
 
 
 def my_plot_md_phase(df=None, file_path: str = None, dict_ql_ideal: dict = None,
