@@ -111,6 +111,10 @@ _COLS_COMPARE_FORCE = ['F_std_max_eV/A', 'F_std_mean_eV/A', 'F_ref_max_eV/A']
 _MARK_INPUT_NN_FORCE = '# toggled by PeiN2p2MD.submit_compare'
 _COLS_SELECT = ['rank', 'index', 'phase', 'T_set_K', 'natoms',
                 'E_std_meV/at', 'E_spread_meV/at', 'tag']
+# 随机模式直接从帧表（y_frames/p_post_frames.txt）选构型时没有 committee 判据列，
+# 改带「这帧出自哪条轨迹」和生成势给的 MD 能量，事后回看来源用。
+_COLS_SELECT_FRAMES = ['rank', 'index', 'phase', 'T_set_K', 'natoms',
+                       'run', 'E_md_eV', 'tag']
 _COLS_PHASE = ['index', 'run', 'phase', 'T_set_K', 'step', 'measured', 'q4', 'q6', 'msd_A2']
 
 # LAMMPS dump 的列名 -> 本模块内部字段名。改 md_heating.mod 的 dump 列时这里同步改。
@@ -1326,19 +1330,31 @@ class PeiN2p2MD(PeiN2p2):
                              lgroup_by: list = None, std_min: float = None,
                              n_select_total: int = None, tag_prefix: str = 'MD',
                              if_phase_match: bool = False, msd_max: float = None,
+                             select_mode: str = 'random', seed: int = None,
                              if_skip_if_done: bool = True) -> Path:
-        """按 committee 发散度挑出「训练得不好」的构型，写成待 DFT 标记的清单。
+        """从 MD 帧集里挑出构型，写成待 DFT 标记的清单。
 
-        分组取 top-N 而不是全局取 top-N：发散度与温度强相关（高温帧天然更发散），
-        全局排序会让最高的几档温度吃掉全部名额，低温区的欠拟合构型一个都进不来。
-        分组口径默认 ``(phase, T_set_K)``，与 chap_4_TL.pdf「每个温度取若干个结构」一致；
-        区别是那里按随机取，这里按发散度降序取。
+        两种口径，都按 ``(phase, T_set_K)`` 分组后在**组内**取名额 —— 不做全局取样：
+        温度是采样密度的主轴，全局排序/全局随机都会让某几档温度吃掉全部名额。
+
+        - ``select_mode='random'``（默认，chap_4_TL.pdf p.7 原文口径）：组内**等概率**取
+          ``n_select_per_group`` 个，不看任何 committee 判据。LT 的做法是 25–450 K 共 18 档、
+          每档随机 5 个 = 90 个结构/轮。
+        - ``select_mode='divergence'``：组内按 committee 能量发散度 ``E_std_meV/at`` 降序取
+          top-N，直接对准「训练得不好」的帧。
+
+        选 ``'random'`` 作默认的理由：committee 判据在留出集上被实测为**不可靠**
+        （见 ai-guide/training/20260913-claude-stage2-0-force-criterion.md §6：
+        ``E_std`` 对能量误差的 Spearman 只有 0.395，对力误差 0.885 里大半可由力的量级这个
+        平凡基线 0.813 解释），且阈值随胞尺寸/相漂移，每轮都得重标定。随机采样没有这些
+        自由度，也不会把训练集推向判据自身的偏差。
 
         Args:
             iround: MD 扩充轮次。
-            n_select_per_group: 每组取多少个（默认 5，同 LT）。
-            lgroup_by: 分组列，默认 ``['phase', 'T_set_K']``；传 ``[]`` 则全局排序。
+            n_select_per_group: 每组取多少个（默认 5，同 LT）。组内帧数不足时有多少取多少。
+            lgroup_by: 分组列，默认 ``['phase', 'T_set_K']``；传 ``[]`` 则不分组。
             std_min: 只保留 ``E_std_meV/at`` 不低于该阈值的帧；None 表示不过滤。
+                ``'random'`` 模式下通常留 None —— 一旦设阈值就不再是 LT 的无偏采样。
             if_phase_match: 只在「实测相 == 建胞时的相」的帧里挑（需先跑
                 :meth:`check_md_frame_phase`）。连续升温会让某些轨迹在中途重排，
                 之后所有更高温度档继承的都是变了的结构，而它们仍带着原来的 ``phase``
@@ -1350,19 +1366,33 @@ class PeiN2p2MD(PeiN2p2):
                 0.4 左右是「热振动」与「换了格点」之间干净的分界。
                 两个开关一起用，采样的温度上限才真正由结构自己划定，
                 而不是由 ``DICT_MD_PARAMS`` 里的 ``n_temp`` 划定。
-            n_select_total: 全局上限；超出时按发散度降序截断。DFT 标记的代价与它成正比。
+            n_select_total: 全局上限（DFT 预算闸，标记代价与它成正比）；超出时
+                ``'divergence'`` 按发散度降序截断，``'random'`` 再随机截断一次。
             tag_prefix: 写进 input.data.md 的 tag 前缀（tag 形如 ``MD0-fcc``）。
+            select_mode: ``'random'``（LT 口径）或 ``'divergence'``（committee 判据）。
+            seed: ``'random'`` 模式的随机种子。**务必显式给**：入选清单只落盘一次，
+                没有种子就无法复现「这一轮为什么是这 180 帧」。
             if_skip_if_done: 完成阀门。
 
         Returns:
             ``y_compare/input.data.md``。
 
+        Note:
+            ``'random'`` 模式**不需要 committee 预测**：帧的 ``(index, phase, T_set_K,
+            natoms)`` 在 ``y_frames/p_post_frames.txt`` 里就有，所以缺 committee 表时
+            自动回退到帧表，:meth:`submit_compare` / :meth:`collect_compare` 整段可以不跑。
+            此时 ``std_min`` 必须留 None，``p_post_select.txt`` 也换成 ``run`` / ``E_md_eV``
+            两列（判据列本来就不存在）。
+
         Raises:
-            FileNotFoundError: 缺 committee 表或帧集。
-            ValueError: 过滤后没有任何结构入选。
+            FileNotFoundError: committee 表与帧表都没有，或缺帧集。
+            ValueError: ``select_mode`` 不在枚举内、要判据列却没有、或过滤后没有结构入选。
         """
         os.chdir(self.dir_root)
         lgroup_by = ['phase', 'T_set_K'] if lgroup_by is None else list(lgroup_by)
+        lselect_mode = ['random', 'divergence']
+        if select_mode not in lselect_mode:
+            raise ValueError(f"❌ select_mode must be one of {lselect_mode}, got {select_mode!r}.")
 
         dir_round = self.dir_data_md / str(iround)
         dir_cmp = dir_round / 'y_compare'
@@ -1372,10 +1402,26 @@ class PeiN2p2MD(PeiN2p2):
                                  if_skip_if_done=if_skip_if_done):
             return path_md
 
+        # 数据来源：committee 表优先（两种模式都能用），随机模式在没有它时回退到帧表。
+        # 回退不是降级 —— 'random' 压根不看任何判据，(index, phase, T_set_K, natoms)
+        # 帧表里全有，于是整个 compare 阶段（每条势一个 nnp-dataset 作业 + GB 级产物）
+        # 都可以不跑。
         path_compare = dir_cmp / 'y_compare_data_md.txt'
-        if not self._is_file_nonempty(path_compare):
-            raise FileNotFoundError(f"❌ Missing {path_compare}. Run collect_compare first.")
-        df = pd.read_csv(path_compare, sep=r'\s+', comment='#')
+        path_index = dir_round / 'y_frames' / 'p_post_frames.txt'
+        if self._is_file_nonempty(path_compare):
+            path_source, lcol_select = path_compare, _COLS_SELECT
+        elif select_mode == 'random' and self._is_file_nonempty(path_index):
+            path_source, lcol_select = path_index, _COLS_SELECT_FRAMES
+            print(f"  📁 no committee table; select_mode='random' falls back to {path_index.name}")
+        else:
+            raise FileNotFoundError(
+                f"❌ Missing {path_compare}. Run collect_compare first, or (select_mode="
+                f"'random' only) run collect_md_frames to get {path_index}.")
+        df = pd.read_csv(path_source, sep=r'\s+', comment='#')
+        if 'run' in df.columns:
+            # run 是 '001' 这样的目录名，read_csv 会把它读成整数 1，补回零填充才对得上 y_dir/
+            df['run'] = df['run'].astype(str).str.zfill(3)
+        dir_cmp.mkdir(parents=True, exist_ok=True)   # 跳过 compare 时这个目录还不存在
 
         n_all = len(df)
         if if_phase_match:
@@ -1392,22 +1438,36 @@ class PeiN2p2MD(PeiN2p2):
             print(f"  phase_match (msd_max={msd_max}): {len(df)}/{n_all} frame(s) still hold "
                   f"their built phase")
         if std_min is not None:
+            if 'E_std_meV/at' not in df.columns:
+                raise ValueError(f"❌ std_min={std_min} needs the committee table; "
+                                 f"{path_source.name} has no 'E_std_meV/at' column. "
+                                 f"Run collect_compare, or set std_min=None.")
             df = df[df['E_std_meV/at'] >= float(std_min)]
             print(f"  std_min {std_min} meV/at: {len(df)}/{n_all} frame(s) kept")
 
+        # 两种模式都是「先把整表排成想要的顺序，再逐组 head」：groupby.head 保持原行序，
+        # 所以排序一次就同时定下了组内名额和后面全局截断的取舍。
+        # 随机模式故意不用 groupby.sample(n=)：组内帧数不足 n 时它直接抛错，
+        # 而洗牌 + head 会自动退化成「有多少取多少」。
+        if select_mode == 'divergence':
+            if 'E_std_meV/at' not in df.columns:
+                raise ValueError(f"❌ select_mode='divergence' needs the committee table; "
+                                 f"{path_source.name} has no 'E_std_meV/at' column.")
+            df = df.sort_values('E_std_meV/at', ascending=False)
+        else:
+            if seed is None:
+                print("  ⚠️  select_mode='random' without seed: this selection is NOT reproducible")
+            df = df.sample(frac=1.0, random_state=seed)
         if lgroup_by:
-            df = (df.sort_values('E_std_meV/at', ascending=False)
-                    .groupby(lgroup_by, sort=False, group_keys=False)
-                    .head(int(n_select_per_group)))
-        df = df.sort_values('E_std_meV/at', ascending=False)
+            df = df.groupby(lgroup_by, sort=False, group_keys=False).head(int(n_select_per_group))
         if n_select_total is not None and len(df) > int(n_select_total):
-            print(f"  ⚠️  {len(df)} selected exceed n_select_total={n_select_total}; "
-                  f"keeping the most divergent ones")
+            print(f"  ⚠️  {len(df)} selected exceed n_select_total={n_select_total}; keeping the "
+                  f"{'most divergent' if select_mode == 'divergence' else 'first shuffled'} ones")
             df = df.head(int(n_select_total))
         if df.empty:
             raise ValueError(f"❌ No structure selected from {path_compare} "
-                             f"(std_min={std_min}, n_select_per_group={n_select_per_group}). "
-                             f"Loosen the criteria.")
+                             f"(select_mode={select_mode}, std_min={std_min}, "
+                             f"n_select_per_group={n_select_per_group}). Loosen the criteria.")
 
         # 落盘顺序按 index 升序：input.data.md 与 data_dft 的子目录编号一一对应，
         # 用帧序而不是发散度序，事后回看 DFT 目录时不必再查排名。
@@ -1432,26 +1492,33 @@ class PeiN2p2MD(PeiN2p2):
                                   tag=tag, append=True)
             lrow.append({'rank': rank, 'index': idx, 'phase': row['phase'],
                          'T_set_K': row['T_set_K'], 'natoms': int(row['natoms']),
-                         'E_std_meV/at': row['E_std_meV/at'],
-                         'E_spread_meV/at': row['E_spread_meV/at'], 'tag': tag})
+                         'tag': tag,
+                         **{col: row[col] for col in lcol_select
+                            if col not in ('rank', 'index', 'phase', 'T_set_K',
+                                           'natoms', 'tag')}})
 
-        df_out = pd.DataFrame(lrow)[_COLS_SELECT]
+        df_out = pd.DataFrame(lrow)[lcol_select]
         self._write_table(path_select,
-                          ['# MD structures selected for DFT labelling (committee divergence)',
+                          [f'# MD structures selected for DFT labelling (mode: {select_mode})',
                            f'# round             {iround}',
+                           f'# source            {path_source.name}',
                            f'# group_by          {lgroup_by if lgroup_by else "(global)"}',
                            f'# n_select_per_group {n_select_per_group}   '
                            f'std_min {std_min}   n_select_total {n_select_total}   '
-                           f'phase_match {if_phase_match}   msd_max {msd_max}',
+                           f'phase_match {if_phase_match}   msd_max {msd_max}   '
+                           f'seed {seed}',
                            f'# frames scanned    {n_all}   selected {len(df_out)}',
-                           '# rank              1 = most divergent; index = frame index in '
-                           'input.data.frames',
+                           '# rank              1..N in frame order (= data_dft subdir number); '
+                           'index = frame index in input.data.frames',
                            '# energies in input.data.md are NNP placeholders — they are '
                            'overwritten by DFT in collect_dft'],
                           df_out, float_format='16.8f')
-        print(f"📊 select_md_structures: {len(df_out)}/{n_all} frame(s) selected "
-              f"(E_std {df_out['E_std_meV/at'].min():.3f} .. "
-              f"{df_out['E_std_meV/at'].max():.3f} meV/at) -> {path_md}")
+        str_range = ''
+        if 'E_std_meV/at' in df_out.columns:
+            str_range = (f"(E_std {df_out['E_std_meV/at'].min():.3f} .. "
+                         f"{df_out['E_std_meV/at'].max():.3f} meV/at) ")
+        print(f"📊 select_md_structures [{select_mode}]: {len(df_out)}/{n_all} frame(s) "
+              f"selected {str_range}-> {path_md}")
         return path_md
 
 
