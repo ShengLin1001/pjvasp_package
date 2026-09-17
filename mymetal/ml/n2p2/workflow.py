@@ -1928,6 +1928,31 @@ class PeiN2p2:
         shutil.copytree(dir_lmp_utils / "post", dir_post, dirs_exist_ok=True)          # 整目录拷一份到 epoch 里，供后续提交脚本用（如注入 lmp_utils 源路径）
 
 
+    # ===== 提交入口共用：chunks 夹取（post_properties 与 PeiN2p2MD 的三个提交入口共用）=====
+    @staticmethod
+    def _clamp_chunks(dict_args: dict = None, n_job: int = None) -> dict:
+        """把 ``chunks`` 夹到本次实际提交的作业目录数以内。
+
+        ``pei_slurm_univ_submit`` 明确拒绝 ``chunks > 作业目录数``（直接 fail 退出）。
+        首轮一般不会踩到（作业上百个），但**补投**时只剩几个未完成目录，仍按 chunks=10
+        提交就会整批失败——而这恰恰是最需要它跑起来的时候。
+
+        Args:
+            dict_args: 传给提交器的参数字典。
+            n_job: 本次真正要提交的作业目录数。
+
+        Returns:
+            夹取后的新字典（不改原字典）。
+        """
+        dict_args = dict(dict_args or {})
+        n_job = max(1, int(n_job))
+        chunks = int(dict_args.get('chunks', 1))
+        if chunks > n_job:
+            print(f"  ⚠️  chunks {chunks} > {n_job} job dir(s) to submit; clamped to {n_job} "
+                  f"(the submit engine rejects chunks > job count).")
+            dict_args['chunks'] = n_job
+        return dict_args
+
     @staticmethod
     def _dict_to_cli_args(dict_args: dict) -> str:
         """将参数字典转换为 pei_slurm_univ_submit.py 的 CLI 长选项字符串。
@@ -2220,6 +2245,9 @@ class PeiN2p2:
         # 正好可以直接作为 -lsubdir 的过滤器。
         ldir_done_set = set(ldir_done)
         ldir_todo = [d for d in ldir_epoch if d not in ldir_done_set]
+        # 提交引擎拒绝 chunks > 作业目录数（直接 fail、一个作业都不交）：LEPOCH 只点名 9 个 epoch
+        # 却沿用 chunks=10 时整批静默落空（stage2/0 round 1 实测），补投只剩几个 epoch 时同理。
+        args_to_submit = self._clamp_chunks(args_to_submit, len(ldir_todo))
         if ldir_done:
             args_to_submit['lsubdir'] = [d.name for d in ldir_todo]
             print(f"  submit only {len(ldir_todo)} incomplete epoch dir(s) "

@@ -154,6 +154,12 @@ class TestClampChunks(unittest.TestCase):
         PeiN2p2MD._clamp_chunks(dict_args, 2)
         self.assertEqual(dict_args['chunks'], 10)
 
+    def test_base_class_owns_it_for_post_properties(self):
+        # post_properties 在父类 PeiN2p2 里，同样要夹 chunks（stage2/0 round 1：9 个 epoch 配 chunks=10）
+        from mymetal.ml.n2p2.workflow import PeiN2p2
+        self.assertEqual(PeiN2p2._clamp_chunks({'chunks': 10, 'cmd': 'x'}, 9),
+                         {'chunks': 9, 'cmd': 'x'})
+
 
 class TestIncarStaticGuard(unittest.TestCase):
 

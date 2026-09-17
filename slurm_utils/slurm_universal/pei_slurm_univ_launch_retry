@@ -52,6 +52,11 @@ LAUNCH_FAIL_PATTERNS=(
     "Unable to allocate resources"
     "Unable to create step"            # 本机实测主力：srun: error: Unable to create step for job N: Unexpected message received
     "Unable to confirm allocation"     # 本机实测：同上，slurmctld 通信抖动的另一形态
+    # 本机实测（2026-09-16，2 节点 VASP）：第二个节点的 task 没按时起来，srun 打完下面两句就
+    # 取消整个作业步、退出 137。先起来的那一半 rank 虽已进 VASP，但作业步从没完整建成，
+    # 程序没有真正跑起来——属于启动失败，不是算例本身崩了。两句都是 srun 放弃前的终态串。
+    "timeout waiting for task launch"          # srun: error: timeout waiting for task launch, started 128 of 256 tasks
+    "aborted before step completely launched"  # srun: StepId=N.0 aborted before step completely launched.
     # —— MPI（OpenMPI / Intel MPI）：daemon / proxy 起不来，mpirun 就此 abort ——
     "mpirun was unable to launch"
     "unable to reliably start one or more daemons"

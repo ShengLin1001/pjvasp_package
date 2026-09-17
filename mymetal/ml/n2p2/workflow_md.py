@@ -475,30 +475,7 @@ class PeiN2p2MD(PeiN2p2):
         return f'{run}_{epoch}'
 
 
-    # ===== 三个提交入口共用的部件 =====
-    @staticmethod
-    def _clamp_chunks(dict_args: dict = None, n_job: int = None) -> dict:
-        """把 ``chunks`` 夹到本次实际提交的作业目录数以内。
-
-        ``pei_slurm_univ_submit`` 明确拒绝 ``chunks > 作业目录数``（直接 fail 退出）。
-        首轮一般不会踩到（作业上百个），但**补投**时只剩几个未完成目录，仍按 chunks=10
-        提交就会整批失败——而这恰恰是最需要它跑起来的时候。
-
-        Args:
-            dict_args: 传给提交器的参数字典。
-            n_job: 本次真正要提交的作业目录数。
-
-        Returns:
-            夹取后的新字典（不改原字典）。
-        """
-        dict_args = dict(dict_args or {})
-        n_job = max(1, int(n_job))
-        chunks = int(dict_args.get('chunks', 1))
-        if chunks > n_job:
-            print(f"  ⚠️  chunks {chunks} > {n_job} job dir(s) to submit; clamped to {n_job} "
-                  f"(the submit engine rejects chunks > job count).")
-            dict_args['chunks'] = n_job
-        return dict_args
+    # 三个提交入口共用的 _clamp_chunks 在父类 PeiN2p2 里（post_properties 也要用）。
 
     # ===== 阶段 ii：逐条势函数做升温 MD =====
     @staticmethod
