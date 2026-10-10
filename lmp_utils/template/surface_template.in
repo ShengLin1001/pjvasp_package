@@ -1,0 +1,29 @@
+# Surface energy: 周期超胞插真空劈成两个自由表面，取未弛豫 + 弛豫两个值。
+# 对标 chap_4_TL 图 1.9：未弛豫表面能 = decohesion 曲线的收敛平台值，
+# 直接劈开取单点比扫整条分离曲线便宜得多，数值等价。
+#
+# 结构模型直接复用 gsfe_model.py —— y_gsfe 的滑移面超胞本来就是
+# 「面内固定、面外为第 3 轴」的正取向 slab，正是表面能需要的几何。
+
+# For dump dir
+shell mkdir ../dump
+
+############################ bulk reference ############################
+include general_init.mod
+
+shell python_path_template slurm/gsfe_model.py
+read_data ./data.ini
+
+include general_potential.mod
+
+min_style   cg
+minimize ${etol} ${ftol} ${maxiter} ${maxeval}
+
+write_data ../dump/data.ref
+
+variable i    equal 1
+variable jobn string "0.000000000000e+00"
+include general_output.mod
+
+############################ cleave ############################
+include surface.mod

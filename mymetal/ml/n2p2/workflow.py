@@ -39,6 +39,7 @@ from mymetal.ml.n2p2.calculate.post import (read_learning_curve, read_normalizat
                                             read_trainforces, rmse_me, build_rmse_by_tag_df)
 from mymetal.universal.plot.n2p2 import (my_plot_learning_curve, my_plot_compare, my_plot_rmse_by_tag,
                                          my_plot_epoch_stretch, my_plot_epoch_cij, my_plot_epoch_gsfe,
+                                         my_plot_epoch_planar,
                                          my_plot_epoch_rmse, my_plot_check_interface, VERDICT_CODE)
 from mymetal.ml.n2p2.dataset import nnpdata
 from mymetal.io.general import general_write
@@ -55,6 +56,9 @@ import subprocess
 import time
 import getpass
 import warnings
+
+from mymetal.build.bulk.planar import (LIST_SSF_FAULT, LIST_SURF_TYPE, LIST_SEQSF_FAULT,
+                                      get_ssf_name, get_planar_columns)
 
 
 # epoch 扫描的物性字典与列顺序：post_epoch_scan（逐 run 读 LAMMPS 结果）与
@@ -74,8 +78,23 @@ _COLS_STRETCH = ['epoch', 'a_fcc', 'a_bcc', 'a_hcp', 'c_fcc', 'c_bcc', 'c_hcp', 
 _COLS_CIJ = ['epoch'] + [f'{k}_{lat}' for lat in _LATS for k in _CIJ_KEYS]
 _COLS_GSFE = ['epoch'] + [f'{p}_{t}' for t in _ALL_GSFE_TYPES for p in ['usf', 'sf']]
 
-# 三类 epoch 扫描产物的共同元数据：kind -> (列顺序, 表格浮点格式, 表头量纲说明)
-# post_epoch_scan_summary 据此遍历三类产物，避免为每类各写一遍相同的读表/统计/写表逻辑。
+# 平面缺陷单点物性（表面能 / 稳定层错 / 层序型层错）的唯一配置来源是
+# mymetal.build.bulk.planar —— LAMMPS runner、lmp_utils/post 与这里都读同一张表，
+# 改层错清单只需要改那边一处。_SSF_NAMES/_SEQSF_NAMES 用「目录名 = 列名后缀」的约定，
+# 与 pei_lmp_run_properties 铺的 y_ssf/<lat>/<name>、y_seqsf/<lat>/<name> 对应。
+_SSF_NAMES = [get_ssf_name(gsfe_type, fault)
+              for lat, gsfe_type, fault, t1, t2 in LIST_SSF_FAULT]
+_SURF_TYPES = [gsfe_type for lat, gsfe_type in LIST_SURF_TYPE]
+_SEQSF_NAMES = [fault_type for lat, fault_type, n_repeat in LIST_SEQSF_FAULT]
+
+_COLS_SSF = ['epoch'] + get_planar_columns('ssf')
+_COLS_SURF = ['epoch'] + get_planar_columns('surface')
+_COLS_SEQSF = ['epoch'] + get_planar_columns('seqsf')
+
+# 六类 epoch 扫描产物的共同元数据：kind -> (列顺序, 表格浮点格式, 表头量纲说明)
+# post_epoch_scan_summary 据此遍历全部产物，避免为每类各写一遍相同的读表/统计/写表逻辑。
+# 新增一类物性时，在这里加一项 + 在 post_epoch_scan 里加读取块 + 在
+# _epoch_dir_result_markers 里加结果文件路径，三处齐了汇总侧就自动跟上。
 _EPOCH_KINDS = {
     'stretch': (_COLS_STRETCH, '14.6f',
                 'FCC/BCC a/c are conventional cubic lengths; HCP a/c are hexagonal; '
@@ -84,6 +103,15 @@ _EPOCH_KINDS = {
             'Cij (GPa); cubic phases use C11=C33, C12=C13'),
     'gsfe': (_COLS_GSFE, '12.4f',
              'usf = max(gamma), sf = last gamma value; units mJ/m^2'),
+    'ssf': (_COLS_SSF, '12.4f',
+            'tilted-cell stable SFE (all atoms free, sigma_3j = 0); units mJ/m^2. '
+            'A value near 0 means the fault relaxed back to the perfect lattice '
+            '(see "stable" in the per-epoch y_post_ssf.txt)'),
+    'surface': (_COLS_SURF, '12.4f',
+                'surface energy from a 20 Ang vacuum cleave; unrel = rigid cleave, '
+                'rel = atoms relaxed at fixed cell; units mJ/m^2'),
+    'seqsf': (_COLS_SEQSF, '12.4f',
+              'stacking-sequence faults (I1 / I3 / ESF / TB), 2 faults per cell; units mJ/m^2'),
 }
 
 # 训练误差表的列（post_training 写出，post_training_summary 读回）：
@@ -633,14 +661,17 @@ class PeiN2p2:
                    for sub in ['template', 'post'])
 
     @staticmethod
-    def _epoch_dir_result_markers(dir_epoch: Path = None) -> list:
+    def _epoch_dir_result_markers(dir_epoch: Path = None, if_planar: bool = False) -> list:
         """单个 epoch 物性目录里 :meth:`post_epoch_scan` 会去读的全部结果文件。
 
-        路径与 post_epoch_scan 的读取逻辑一一对应（stretch 逐相、cij 逐相、gsfe 逐滑移系），
-        改那边的目录约定时这里必须同步改。
+        路径与 post_epoch_scan 的读取逻辑一一对应（stretch 逐相、cij 逐相、gsfe 逐滑移系、
+        ssf/surface/seqsf 逐缺陷），改那边的目录约定时这里必须同步改。
 
         Args:
             dir_epoch: ``properties/y_epoch_scan/y_dir/<epoch>/``。
+            if_planar: 是否把平面缺陷三段（ssf/surface/seqsf）的结果也算进必需文件。
+                必须与 runner 的 ``-if_planar`` 同步：关着却要求这些文件，会把所有
+                已经算完的 epoch 判成未完成并整体重投。
 
         Returns:
             结果文件路径列表。
@@ -650,19 +681,28 @@ class PeiN2p2:
         lpath += [dir_epoch / 'y_Cij_energy' / lat / 'y_post_cij_energy.txt' for lat in _LATS]
         lpath += [dir_epoch / 'y_gsfe' / phase / t / 'y_post_gsfe.txt'
                   for phase, ltype in _GSFE_TYPES.items() for t in ltype]
+        if if_planar:
+            lpath += [dir_epoch / 'y_ssf' / lat / get_ssf_name(gsfe_type, fault) / 'y_post_ssf.txt'
+                      for lat, gsfe_type, fault, t1, t2 in LIST_SSF_FAULT]
+            lpath += [dir_epoch / 'y_surface' / lat / gsfe_type / 'y_post_surface.txt'
+                      for lat, gsfe_type in LIST_SURF_TYPE]
+            lpath += [dir_epoch / 'y_seqsf' / lat / fault_type / 'y_post_ssf.txt'
+                      for lat, fault_type, n_repeat in LIST_SEQSF_FAULT]
         return lpath
 
     @classmethod
-    def _epoch_dir_is_done(cls, dir_epoch: Path = None) -> bool:
-        """单个 epoch 物性目录的 LAMMPS **结果**是否齐全（stretch + cij + gsfe 全部非空）。
+    def _epoch_dir_is_done(cls, dir_epoch: Path = None, if_planar: bool = False) -> bool:
+        """单个 epoch 物性目录的 LAMMPS **结果**是否齐全（按 ``if_planar`` 决定看三类还是六类）。
 
         Args:
             dir_epoch: ``properties/y_epoch_scan/y_dir/<epoch>/``。
+            if_planar: 同 :meth:`_epoch_dir_result_markers`；关着时只看 stretch/cij/gsfe。
 
         Returns:
-            三类结果文件全部存在且非空时为 True。
+            需要的结果文件全部存在且非空时为 True。
         """
-        return all(cls._is_file_nonempty(p) for p in cls._epoch_dir_result_markers(dir_epoch))
+        return all(cls._is_file_nonempty(p)
+                   for p in cls._epoch_dir_result_markers(dir_epoch, if_planar=if_planar))
 
 
     # ===== 数据落盘的公共部件（generate_data 与 generate_data_tree 共用）=====
@@ -2058,22 +2098,23 @@ class PeiN2p2:
         也让绘图不再依赖归档目录在不在、路径有没有搬家。
 
         Args:
-            dict_dft: ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}}``，键名与
-                :meth:`post_epoch_scan` 写出的列名一致（无 ``epoch`` 列）。缺的组按空
+            dict_dft: ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}, 'ssf': {...},
+                'surface': {...}, 'seqsf': {...}}``（组名即 ``_EPOCH_KINDS`` 的键），
+                键名与 :meth:`post_epoch_scan` 写出的列名一致（无 ``epoch`` 列）。缺的组按空
                 字典处理（该类图不画参考线）；为 None 表示完全不叠参考线。
                 一次性生成方式见 :func:`mymetal.ml.n2p2.dataset.read_dft_reference`。
 
         Returns:
-            补齐三个组键的 dict；``dict_dft`` 为 None 时返回 None。
+            补齐全部组键的 dict；``dict_dft`` 为 None 时返回 None。
 
         Raises:
-            ValueError: 不是 dict、出现 stretch/cij/gsfe 之外的组名，或某组的值不是 dict。
+            ValueError: 不是 dict、出现 ``_EPOCH_KINDS`` 之外的组名，或某组的值不是 dict。
         """
         if dict_dft is None:
             return None
         if not isinstance(dict_dft, dict):
             raise ValueError(f"❌ dict_dft must be a dict, got {type(dict_dft).__name__}.")
-        lgroup = ['stretch', 'cij', 'gsfe']
+        lgroup = list(_EPOCH_KINDS)      # stretch / cij / gsfe / ssf / surface / seqsf
         lbad = [k for k in dict_dft if k not in lgroup]
         if lbad:
             raise ValueError(f"❌ Unknown dict_dft group(s) {lbad}; expected {lgroup}.")
@@ -2093,7 +2134,7 @@ class PeiN2p2:
 
     def post_properties(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
                         lepoch: list = None, epoch_warmup: int = _EPOCH_WARMUP,
-                        if_sbatch: bool = False,
+                        if_sbatch: bool = False, if_planar: bool = False,
                         dict_args_to_submit: dict = {'preset': 'zcm6_lammps_0',
                                                      'chunks': 5,
                                                      'nodes': 1,
@@ -2185,10 +2226,13 @@ class PeiN2p2:
         # 3. 脚手架：建 y_epoch_scan/y_dir/<epoch>/（非空即报错，除非 if_force_rebuild）
         dir_epoch_scan_root = dir_props / 'y_epoch_scan'
         ldir_epoch = [dir_epoch_scan_root / 'y_dir' / epoch for epoch in lepoch_use]
-        ldir_done = [d for d in ldir_epoch if self._epoch_dir_is_done(d)] if if_skip_if_done else []
+        # 完成判定必须和 runner 跑哪几段一致：if_planar 关着时不要求平面缺陷结果，
+        # 否则老 epoch 目录会因为缺三个新目录被整体重投。
+        ldir_done = ([d for d in ldir_epoch if self._epoch_dir_is_done(d, if_planar=if_planar)]
+                     if if_skip_if_done else [])
         if if_skip_if_done and len(ldir_done) == len(ldir_epoch):
             print(f"⏭️ skip post_properties {dir_props}: all {len(ldir_epoch)} epoch dir(s) already "
-                  f"carry complete stretch/cij/gsfe results. "
+                  f"carry complete {'six-group' if if_planar else 'stretch/cij/gsfe'} results. "
                   f"Pass if_skip_if_done=False to redo them.")
             self.last_jobids = []
             return dir_props
@@ -2226,8 +2270,11 @@ class PeiN2p2:
                                   for i, el in enumerate(self.lele))
         # on the PATH, not in cwd, so that it can be shared by all epochs
         runner = 'pei_lmp_run_properties'
+        # -if_planar 是 runner 的可选开关（它会先把开关从参数里摘掉再取 $1..$5），
+        # 默认不传 -> 只跑 stretch/Cij/gsfe，与加平面缺陷三段之前的行为完全一致。
+        flag_planar = ' -if_planar' if if_planar else ''
         cmd = (f'{runner} "{pair_style}" "{pair_coeff}" '
-               f'"{python_path}" "{mass_content}"')
+               f'"{python_path}" "{mass_content}"{flag_planar}')
         # 注入运行期参数（preset / 资源项由 dict_args_to_submit 提供，不在此固化）：
         #   cmd       runner + 4 个参数（见上；含 $(pwd)，必须留到作业里展开）
         #   path_root 扫描根（绝对）；其下 dir_root 的每个子目录 = 一个 epoch 物性作业
@@ -2272,24 +2319,33 @@ class PeiN2p2:
 
     def post_epoch_scan(self, dir_run: Path = Path('./train/y_n2p2_train/y_dir/001'),
                         dict_dft: dict = None, lepoch: list = None,
-                        epoch_warmup: int = _EPOCH_WARMUP) -> Path:
+                        epoch_warmup: int = _EPOCH_WARMUP,
+                        if_planar: bool = False,
+                        if_relative2dft: bool = True) -> Path:
         """汇总跨 epoch 的 LAMMPS 物性扫描结果。
 
         把 ``properties/y_epoch_scan/y_dir/<epoch>/`` 各 epoch 的物性结果汇总到与 y_dir
-        同级的 ``y_epoch_scan/`` 下，三类产物各自独立成表 + 图：
+        同级的 ``y_epoch_scan/`` 下，各类产物独立成表 + 图。前三类总是汇总，
+        后三类（平面缺陷）只在 ``if_planar=True`` 时汇总：
 
         - ``p_post_epoch_stretch.txt/pdf``：每 epoch 各相平衡 a/c、c/a(HCP)、E/atom、ΔE(相-FCC)。
         - ``p_post_epoch_cij.txt/pdf``：每 epoch 各相弹性常数 Cij。
         - ``p_post_epoch_gsfe.txt/pdf``：每 epoch 各滑移系的不稳定/稳定层错能（usf/sf）。
+        - ``p_post_epoch_ssf.txt/pdf``：每 epoch 各 tilted-cell 稳定层错能（全弛豫，σ3j = 0）。
+        - ``p_post_epoch_surface.txt/pdf``：每 epoch 各面的未弛豫 / 弛豫表面能。
+        - ``p_post_epoch_seqsf.txt/pdf``：每 epoch 的层序型层错能（Basal I1/I3、FCC ESF/TB）。
 
         物理量全部经 mymetal 的逐 epoch post 读取器取得（单一数据来源，避免重复解析逻辑）：
         ``my_read_stretch`` 读 p_post_stretch.txt 的 Extr infos(E)/rvector(a,c)，
         ``read_cij_energy`` 读 y_post_cij_energy.txt 的 C11..C44，
-        ``read_output`` 从 y_post_gsfe.txt 的 gamma 表强制取 usf=max(gamma)、sf=最后一个 gamma。
+        ``read_output`` 从 y_post_gsfe.txt 的 gamma 表强制取 usf=max(gamma)、sf=最后一个 gamma，
+        ``read_ssf`` / ``read_surface`` 读 y_post_ssf.txt / y_post_surface.txt 的标量。
 
         Note:
             某 epoch 缺 stretch/cij 的任一相则该表跳过此 epoch；gsfe 按滑移系逐个读取，
-            缺失留 NaN。三表行数与 epoch 数不一致时只告警、不报错。
+            缺失留 NaN。六表行数与 epoch 数不一致时只告警、不报错。
+            ssf 表里接近 0 的值表示该层错弛豫回了完整晶格（不是一个真实的层错能），
+            判据见逐 epoch 的 ``y_post_ssf.txt`` 里的 ``stable`` 字段。
 
         Args:
             dir_run: n2p2 训练运行目录。
@@ -2302,6 +2358,12 @@ class PeiN2p2:
                 通常与 :meth:`post_properties` 传的是同一个列表。见 :meth:`_select_lepoch`。
             epoch_warmup: 仅当 ``lepoch`` 为 None 时生效；丢弃 ``epoch <= 该值`` 的热身段；
                 传 None 表示不过滤（全取）。
+            if_planar: 是否汇总平面缺陷三段（ssf/surface/seqsf）。必须与 :meth:`post_properties`
+                传的值一致 —— 那边没跑过，这边开着只会得到一堆 "incomplete" 提示和空表。
+            if_relative2dft: 默认 True，逐 run 的 epoch 扫描图纵轴改画
+                ``(value - DFT) / DFT`` 百分比（固定 ±10%，DFT 线落在 0）；没有 DFT
+                参考或参考值为 0 的量自动退回绝对值。口径与
+                :meth:`post_epoch_scan_summary` 的同名开关一致。
 
         Returns:
             epoch 扫描汇总目录。
@@ -2316,6 +2378,7 @@ class PeiN2p2:
         from mymetal.post.stretch import my_read_stretch
         from mymetal.post.Cij_energy import read_cij_energy
         from mymetal.post.gsfe import read_output
+        from mymetal.post.planar import read_ssf, read_surface
 
         os.chdir(self.dir_root)
         dir_run = Path(dir_run)
@@ -2337,6 +2400,7 @@ class PeiN2p2:
                                                       label=str(scan))]
 
         rows_stretch, rows_cij, rows_gsfe = [], [], []
+        rows_ssf, rows_surf, rows_seqsf = [], [], []
         for ep in epochs:
             epp = f'{ep:06d}'
 
@@ -2388,10 +2452,55 @@ class PeiN2p2:
             else:
                 print(f'skip epoch {epp}: incomplete gsfe')
 
-        if len(rows_stretch) != len(epochs) or len(rows_cij) != len(epochs) or len(rows_gsfe) != len(epochs):
-            print(f"⚠️ Warning: Inconsistent epoch counts: "
-                             f"stretch {len(rows_stretch)}, cij {len(rows_cij)}, gsfe {len(rows_gsfe)}, epochs {len(epochs)}. "
-                             f"Check {scan} for missing files.")
+            if not if_planar:          # 平面缺陷三段没跑，跳过 4)-6) 的读取
+                continue
+
+            # 4) ssf：tilted-cell 稳定层错能，逐层错读一个标量
+            rec, ok = {'epoch': ep}, True
+            for lat, gsfe_type, fault, t1, t2 in LIST_SSF_FAULT:
+                name = get_ssf_name(gsfe_type, fault)
+                pf = scan / epp / 'y_ssf' / lat / name / 'y_post_ssf.txt'
+                if not pf.is_file():
+                    ok = False; break
+                rec[f'ssf_{name}'] = read_ssf(str(pf))['gamma']
+            if ok:
+                rows_ssf.append(rec)
+            else:
+                print(f'skip epoch {epp}: incomplete ssf')
+
+            # 5) surface：每个面两列（未弛豫 / 弛豫）
+            rec, ok = {'epoch': ep}, True
+            for lat, gsfe_type in LIST_SURF_TYPE:
+                pf = scan / epp / 'y_surface' / lat / gsfe_type / 'y_post_surface.txt'
+                if not pf.is_file():
+                    ok = False; break
+                g = read_surface(str(pf))
+                rec[f'surf_unrel_{gsfe_type}'] = g['gamma_unrelaxed']
+                rec[f'surf_rel_{gsfe_type}'] = g['gamma_relaxed']
+            if ok:
+                rows_surf.append(rec)
+            else:
+                print(f'skip epoch {epp}: incomplete surface')
+
+            # 6) seqsf：层序型层错，与 ssf 同一份 txt 格式（nfault=2 已在 post 侧归一）
+            rec, ok = {'epoch': ep}, True
+            for lat, fault_type, n_repeat in LIST_SEQSF_FAULT:
+                pf = scan / epp / 'y_seqsf' / lat / fault_type / 'y_post_ssf.txt'
+                if not pf.is_file():
+                    ok = False; break
+                rec[f'ssf_{fault_type}'] = read_ssf(str(pf))['gamma']
+            if ok:
+                rows_seqsf.append(rec)
+            else:
+                print(f'skip epoch {epp}: incomplete seqsf')
+
+        dict_rows = {'stretch': rows_stretch, 'cij': rows_cij, 'gsfe': rows_gsfe}
+        if if_planar:
+            dict_rows.update({'ssf': rows_ssf, 'surface': rows_surf, 'seqsf': rows_seqsf})
+        if any(len(lrow) != len(epochs) for lrow in dict_rows.values()):
+            lcount = ', '.join(f'{kind} {len(lrow)}' for kind, lrow in dict_rows.items())
+            print(f"⚠️ Warning: Inconsistent epoch counts: {lcount}, epochs {len(epochs)}. "
+                  f"Check {scan} for missing files.")
 
         # 列顺序（缺的列在 reindex 时自动补 NaN，不影响表/图）
         cols_stretch, cols_cij, cols_gsfe = _COLS_STRETCH, _COLS_CIJ, _COLS_GSFE
@@ -2408,7 +2517,8 @@ class PeiN2p2:
                             '# FCC/BCC a/c are conventional cubic lengths; HCP a/c are hexagonal; E (eV/atom), dE (meV/atom)'],
                             df_stretch, float_format='14.6f')
             my_plot_epoch_stretch(df_stretch, dir_scan / 'p_post_epoch_stretch.pdf',
-                                  dft=dft['stretch'] if dft else None)
+                                  dft=dft['stretch'] if dft else None,
+                                  if_relative2dft=if_relative2dft)
             nstretch = len(df_stretch)
         else:
             print('No complete stretch epochs; skip stretch.txt/pdf.')
@@ -2420,7 +2530,8 @@ class PeiN2p2:
                                '# Cij (GPa); cubic phases use C11=C33, C12=C13'],
                               df_cij, float_format='12.4f')
             my_plot_epoch_cij(df_cij, dir_scan / 'p_post_epoch_cij.pdf',
-                              dft=dft['cij'] if dft else None)
+                              dft=dft['cij'] if dft else None,
+                              if_relative2dft=if_relative2dft)
             n_cij = len(df_cij)
         else:
             print('No complete cij epochs; skip cij.txt/pdf.')
@@ -2432,14 +2543,46 @@ class PeiN2p2:
                                '# usf = max(gamma), sf = last gamma value; units mJ/m^2'],
                               df_gsfe, float_format='12.4f')
             my_plot_epoch_gsfe(df_gsfe, dir_scan / 'p_post_epoch_gsfe.pdf', types=all_types,
-                               dft=dft['gsfe'] if dft else None)
+                               dft=dft['gsfe'] if dft else None,
+                               if_relative2dft=if_relative2dft)
             n_gsfe = len(df_gsfe)
         else:
             print('No gsfe epochs; skip gsfe.txt/pdf.')
 
+        # 三类平面缺陷单点物性：表结构一致（epoch + 每缺陷若干标量列），故共用一个循环。
+        # 画图入口统一是 my_plot_epoch_planar，行数由 prefixes 决定（surface 两行，其余一行）。
+        dict_planar = {
+            'ssf': (rows_ssf, _COLS_SSF, _SSF_NAMES, ('ssf',),
+                    'tilted-cell stable stacking-fault energies'),
+            'surface': (rows_surf, _COLS_SURF, _SURF_TYPES, ('surf_unrel', 'surf_rel'),
+                        'surface energies (unrelaxed / relaxed)'),
+            'seqsf': (rows_seqsf, _COLS_SEQSF, _SEQSF_NAMES, ('ssf',),
+                      'stacking-sequence fault energies (I1 / I3 / ESF / TB)'),
+        }
+        dict_nplanar = {kind: 0 for kind in dict_planar}
+        for kind, (lrow, cols, ltype, prefixes, note) in (dict_planar.items() if if_planar else []):
+            if not lrow:
+                print(f'No complete {kind} epochs; skip {kind}.txt/pdf.')
+                dict_nplanar[kind] = 0
+                continue
+            df_planar = (pd.DataFrame(lrow).sort_values('epoch')
+                         .reset_index(drop=True).reindex(columns=cols))
+            self._write_table(dir_scan / f'p_post_epoch_{kind}.txt',
+                              [f'# LAMMPS (pair_style hdnnp) {note} vs training epoch',
+                               f'# {_EPOCH_KINDS[kind][2]}'],
+                              df_planar, float_format='12.4f')
+            my_plot_epoch_planar(df_planar, dir_scan / f'p_post_epoch_{kind}.pdf',
+                                 types=ltype, prefixes=prefixes,
+                                 dft=dft[kind] if dft else None,
+                                 if_relative2dft=if_relative2dft)
+            dict_nplanar[kind] = len(df_planar)
+
+        str_planar = (f", ssf={dict_nplanar['ssf']}, surface={dict_nplanar['surface']}, "
+                      f"seqsf={dict_nplanar['seqsf']} (six .txt + .pdf pairs, sibling of y_dir)"
+                      if if_planar else
+                      " (three .txt + .pdf pairs, sibling of y_dir; planar groups off)")
         print(f"✅ Aggregated epochs -> {dir_scan}: "
-              f"stretch={nstretch}, cij={n_cij}, gsfe={n_gsfe} "
-              f"(stretch/cij/gsfe .txt + .pdf, sibling of y_dir)")
+              f"stretch={nstretch}, cij={n_cij}, gsfe={n_gsfe}{str_planar}")
         return dir_scan
 
 
@@ -2872,16 +3015,18 @@ class PeiN2p2:
 
 
     def post_epoch_scan_summary(self, ldir_run: list = None, dict_dft: dict = None,
-                                dir_summary: Path = None, band: str = 'minmax') -> Path:
+                                dir_summary: Path = None, band: str = 'minmax',
+                                if_relative2dft: bool = True) -> Path:
         """把多个 run 的 epoch 扫描曲线汇总成 ensemble 均值 + 上下限图（chap_4 图 1.3/1.5 风格）。
 
         :meth:`post_epoch_scan` 已为每个 run 在 ``y_post/<run-id>/properties/y_epoch_scan/``
         下写好 ``p_post_epoch_{stretch,cij,gsfe}.txt``；本方法只**读**这些表，跨 run 对齐
         epoch 后统计，把汇总产物直接写在 ``y_post/`` 下（与各 run 目录平级）：
 
-        - ``p_post_epoch_stretch_summary.txt/pdf``
-        - ``p_post_epoch_cij_summary.txt/pdf``
-        - ``p_post_epoch_gsfe_summary.txt/pdf``
+        - ``p_post_epoch_<kind>_summary.txt``：跨 run 统计宽表
+        - ``p_post_epoch_<kind>_summary.pdf``：跨 run 均值线 + 上下限色带
+        - ``p_post_epoch_<kind>_summary2.pdf``：同一版式，但画逐 run 曲线
+          （run 依次 C0/C1/...，共用一个图例），用来看清是哪个 run 把包络撑开的
         - ``p_post_absence.txt``：缺失清单，逐 (run, kind, epoch, item) 记录本次汇总里
           被当成 NaN 的点 —— 缺整张表、缺某个 epoch 的行、或某一列是 NaN。无缺失时也写，
           只有注释头。
@@ -2903,9 +3048,13 @@ class PeiN2p2:
             dir_summary: 汇总输出目录；默认就是 ``y_post/`` 本身。
             band: 色带取法，``'minmax'``（默认，逐 epoch 跨 run 上下限）或 ``'std'``
                 （mean ± 样本标准差，对应 chap_4 图 1.3 的透明背景读法）。
+            if_relative2dft: 默认 True，纵轴改画 ``(value - DFT) / DFT`` 百分比，
+                固定 ±10%（刻度 -10/-5/0/5/10），DFT 参考线落在 0；均值图与逐 run 图
+                同时生效。没有 DFT 参考、或参考值恰为 0 的量（FCC{100} 稳定层错能）
+                自动退回绝对值 + 自适应纵轴，y label 会写明是哪一种。
 
         Returns:
-            汇总输出目录。缺表的 run 只跳过并告警；三类全缺时只写 ``p_post_absence.txt``。
+            汇总输出目录。缺表的 run 只跳过并告警；六类全缺时只写 ``p_post_absence.txt``。
 
         Raises:
             ValueError: 未给 ldir_run、band 不是 'minmax'/'std'，或 dict_dft 结构不合法。
@@ -2919,7 +3068,17 @@ class PeiN2p2:
 
         os.makedirs(dir_summary, exist_ok=True)            # 只保证存在；不动已算好的 y_post/<run-id>/
 
-        lplot = {'stretch': my_plot_epoch_stretch, 'cij': my_plot_epoch_cij, 'gsfe': my_plot_epoch_gsfe}
+        lplot = {'stretch': my_plot_epoch_stretch, 'cij': my_plot_epoch_cij,
+                 'gsfe': my_plot_epoch_gsfe,
+                 'ssf': my_plot_epoch_planar, 'surface': my_plot_epoch_planar,
+                 'seqsf': my_plot_epoch_planar}
+        # 每个 kind 传给绘图入口的额外参数（列顺序 / 行的物理量）。与 post_epoch_scan
+        # 的 dict_planar 保持一致，否则汇总图和逐 run 图的面板会错位。
+        dict_plot_kwargs = {'gsfe': {'types': _ALL_GSFE_TYPES},
+                            'ssf': {'types': _SSF_NAMES, 'prefixes': ('ssf',)},
+                            'surface': {'types': _SURF_TYPES,
+                                        'prefixes': ('surf_unrel', 'surf_rel')},
+                            'seqsf': {'types': _SEQSF_NAMES, 'prefixes': ('ssf',)}}
         band_label = _BAND_LABEL[band]
 
         nwritten, dtable = 0, {}
@@ -2945,21 +3104,26 @@ class PeiN2p2:
                                '(std is the sample std, ddof=1, over runs)'],
                               df_out, float_format=float_format)
 
-            kwargs = {'types': _ALL_GSFE_TYPES} if kind == 'gsfe' else {}
+            kwargs = dict(dict_plot_kwargs.get(kind, {}),
+                          dft=dft[kind] if dft else None,
+                          if_relative2dft=if_relative2dft)
+            # _summary：跨 run 均值 + 上下限色带；_summary2：同一版式，改画逐 run 曲线
             lplot[kind](df_mean, dir_summary / f'p_post_epoch_{kind}_summary.pdf',
-                        dft=dft[kind] if dft else None,
                         df_lo=df_lo, df_hi=df_hi, band_label=band_label.format(n=len(ldf)),
                         **kwargs)
+            lplot[kind](df_mean, dir_summary / f'p_post_epoch_{kind}_summary2.pdf',
+                        druns=dtable[kind], **kwargs)
             nwritten += 1
             print(f'  {kind}: {len(ldf)} run(s), {len(df_out)} epoch(s) -> '
-                  f'p_post_epoch_{kind}_summary.txt/pdf')
+                  f'p_post_epoch_{kind}_summary.txt + _summary.pdf + _summary2.pdf')
 
-        # 缺失清单：三类产物看完再写，才能用跨 kind 的 epoch 并集判定缺行
+        # 缺失清单：六类产物看完再写，才能用跨 kind 的 epoch 并集判定缺行
         df_absence = self._scan_epoch_absence(ldir_run, dtable)
         self._write_absence(dir_summary / 'p_post_absence.txt', df_absence, ldir_run)
         print(f'  absence: {len(df_absence)} record(s) -> p_post_absence.txt')
 
-        print(f"✅ Ensemble epoch-scan summary ({band}) -> {dir_summary}: {nwritten}/3 group(s) written")
+        print(f"✅ Ensemble epoch-scan summary ({band}) -> {dir_summary}: "
+              f"{nwritten}/{len(_EPOCH_KINDS)} group(s) written")
         return dir_summary
 
     def post_training_summary(self, ldir_run: list = None, dir_summary: Path = None,

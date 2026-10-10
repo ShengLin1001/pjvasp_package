@@ -30,7 +30,9 @@ def create_gsfe_model(gsfe_type: str = None, a: float = None, c: float = None, s
     Args:
         gsfe_type: GSFE 模型类型。可选值包括：
             "FCC_111"、"FCC_100"、"HCP_basal"、"HCP_prism1w"、
-            "HCP_pyr1w" 和 "HCP_pyr2"。
+            "HCP_prism1n"、"HCP_pyr1w"、"HCP_pyr1n" 和 "HCP_pyr2"。
+            带 "n" 后缀的是**窄面**（narrow）变体：Prism I 与 Pyr. I 的层间距宽窄交替，
+            Yin 2017 图 2 中 Pyr. I 的 SF1 落在窄面、SF2/SF3 落在宽面，两者必须分开建模。
         a: 晶格常数 a。
         c: HCP 晶格常数 c。用于计算轴比 c/a。
         size: 超胞尺寸。若为 None，则根据 `gsfe_type` 使用默认尺寸。
@@ -45,7 +47,9 @@ def create_gsfe_model(gsfe_type: str = None, a: float = None, c: float = None, s
         "FCC_100": [1, 1, 5],
         "HCP_basal": [1, 1, 10],
         "HCP_prism1w": [1, 1, 5],
+        "HCP_prism1n": [1, 1, 5],
         "HCP_pyr1w": [1, 1, 10],
+        "HCP_pyr1n": [1, 1, 10],
         "HCP_pyr2": [1, 1, 5]
     }
 
@@ -62,9 +66,15 @@ def create_gsfe_model(gsfe_type: str = None, a: float = None, c: float = None, s
     elif gsfe_type == "HCP_prism1w":
         # 4n
         atoms = create_hcp_prism1(a=a, c=c, size = size)
+    elif gsfe_type == "HCP_prism1n":
+        # 4n，窄面：mode='narrow' 把整体沿面法向下移 0.05a，使切面落在窄间隔上
+        atoms = create_hcp_prism1(a=a, c=c, size = size, mode='narrow')
     elif gsfe_type == "HCP_pyr1w":
         # 2n
         atoms = vasp_create_hcp_pyr1(a, ca, size, bp=33)
+    elif gsfe_type == "HCP_pyr1n":
+        # 2n，窄面：bp=-33（见 vasp_create_hcp_pyr1 的 bp 约定）
+        atoms = vasp_create_hcp_pyr1(a, ca, size, bp=-33)
     elif gsfe_type == "HCP_pyr2":
         # 4n
         atoms = vasp_create_hcp_pyr2(a, ca, size)

@@ -659,7 +659,46 @@ def _stretch_lattice_values_for_epoch_convention(
 #              默认 cij_subdir='y_cij_energy_small'（小应变，harmonic 弹性常数），与训练/后处理统一
 #   gsfe     {tag}/{type}/y_gsfe_{type}/y_post_gsfe.txt -> usf_<type>=max(gamma), sf_<type>=最后一个 gamma
 # 缺文件不报错，跳过该项（DFT 归档可能只覆盖部分相/滑移系），返回的子字典只含读到的键。
+# ============================ 临时 DFT 参考值 ============================
+# ⚠️ TEMPORARY / PROVISIONAL —— 这些**不是**本项目自己算的 DFT 结果，
+# 而是文献里 Au 的 PBE 量级值（或同类面的类比估计），只为让新加的三张 epoch 扫描图
+# 先有一条参考线可看。**不得**用它们下"势函数准不准"的结论。
+#
+# 替换计划：用 vasp_utils/vasp_workflow_bulk/pei_vasp_run_surface_energy 和
+# vasp_workflow_planar_defects/ 自己算一轮，然后把本字典整体删掉、改走
+# read_dft_reference 从归档目录现读（与 stretch/cij/gsfe 同一条路径）。
+#
+# 只填有文献依据的项。**刻意留空**的（没有可信来源，必须等自算 DFT）：
+#   - HCP Au 的全部层错：basal I1/I2/I3、prism SF1/SF2、pyr I SF1/SF2/SF3、pyr II SF1
+#   - HCP Au 的 prism / pyr 表面能
+#   - FCC{100} 的稳定层错（本就不存在稳定 SF）
+# 留空的项在图上就是没有灰色虚线，这比编一个数更诚实。
+DICT_PLANAR_DFT_PROVISIONAL = {
+    'surface': {
+        # Au 的 PBE slab 表面能，文献区间 (111) ~0.70-0.83、(100) ~0.85-1.01 J/m^2，各取中值。
+        # 密排面的弛豫幅度只有百分之几，故未弛豫值按 +2~3% 给。
+        'surf_rel_FCC_111': 750.0,
+        'surf_unrel_FCC_111': 770.0,
+        'surf_rel_FCC_100': 920.0,
+        'surf_unrel_FCC_100': 950.0,
+        # 类比估计：HCP basal 与 FCC(111) 是同一个密排面，表面能应当非常接近。
+        'surf_rel_HCP_basal': 750.0,
+        'surf_unrel_HCP_basal': 770.0,
+    },
+    'ssf': {
+        # Au 本征层错能，PBE 文献区间 ~27-45 mJ/m^2，取 33。
+        'ssf_FCC_111_ISF': 33.0,
+    },
+    'seqsf': {
+        # 由 ISF 按教科书比例外推：gamma_ESF ~ gamma_ISF（略高）、gamma_TB ~ gamma_ISF/2。
+        'ssf_FCC_111_ESF': 38.0,
+        'ssf_FCC_111_TB': 17.0,
+    },
+}
+
+
 def read_dft_reference(dir_dft_root,
+                       if_planar_provisional=False,
                        lats=('fcc', 'bcc', 'hcp'),
                        cij_keys=('C11', 'C12', 'C13', 'C33', 'C44'),
                        stretch_tag=None, cij_tag=None, cij_subdir='y_cij_energy_small',
@@ -680,6 +719,12 @@ def read_dft_reference(dir_dft_root,
     Args:
         dir_dft_root (str | Path): Root of the DFT archive holding the ``A1x``/
             ``A2x`` tag directories.
+        if_planar_provisional (bool): Also return the ``ssf`` / ``surface`` /
+            ``seqsf`` groups, filled from :data:`DICT_PLANAR_DFT_PROVISIONAL` —
+            **literature-grade placeholders, not our own DFT**. Off by default;
+            turn it on only to get a reference line on the planar-defect epoch
+            plots, and print/remember that the numbers are provisional. Drop this
+            flag once the planar DFT runs exist and are read from the archive.
         lats (tuple): Phases to read for stretch/cij. Default ``('fcc','bcc','hcp')``.
         cij_keys (tuple): Elastic-constant keys to pull from each cij file.
         stretch_tag (dict, optional): phase -> tag for stretch files.
@@ -705,7 +750,9 @@ def read_dft_reference(dir_dft_root,
         verbose (bool): Print a line for each missing/skipped file.
 
     Returns:
-        dict: ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}}`` with flat
+        dict: ``{'stretch': {...}, 'cij': {...}, 'gsfe': {...}}`` — plus
+        ``'ssf'`` / ``'surface'`` / ``'seqsf'`` when ``if_planar_provisional`` —
+        with flat
         sub-dicts keyed like the ``post_epoch_scan`` columns (no ``epoch``).
         ``stretch``: ``a_<lat>``, ``c_<lat>``, ``E_<lat>`` (eV/atom) plus derived
         ``ca_hcp`` (-) and ``dE_hcp_fcc`` / ``dE_bcc_fcc`` (meV/atom). FCC/BCC
@@ -790,4 +837,14 @@ def read_dft_reference(dir_dft_root,
             gsfe[f'usf_{t}'] = g['usf_max'] if g['usf_max'] is not None else np.nan
             gsfe[f'sf_{t}'] = g['sf_min'] if g['sf_min'] is not None else np.nan
 
-    return {'stretch': stretch, 'cij': cij, 'gsfe': gsfe}
+    dict_ref = {'stretch': stretch, 'cij': cij, 'gsfe': gsfe}
+
+    # 临时参考值：默认不给。开了就在屏幕上喊一嗓子，避免有人把它当成自算 DFT。
+    if if_planar_provisional:
+        print('⚠️  planar DFT reference is PROVISIONAL (literature-grade placeholders, '
+              'not this project\'s own DFT). Do not draw accuracy conclusions from it; '
+              'replace via pei_vasp_run_surface_energy + vasp_workflow_planar_defects.')
+        for group, dict_val in DICT_PLANAR_DFT_PROVISIONAL.items():
+            dict_ref[group] = dict(dict_val)
+
+    return dict_ref

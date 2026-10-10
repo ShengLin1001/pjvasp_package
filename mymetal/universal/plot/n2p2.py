@@ -17,6 +17,9 @@ aggregated from the per-epoch mymetal post readers ``my_read_stretch`` /
     - my_plot_epoch_stretch  : a / c (c/a for HCP) / E vs epoch, 3 rows x phase cols
     - my_plot_epoch_cij      : C11/C12/C13/C33/C44 vs epoch, 5 rows x phase cols
     - my_plot_epoch_gsfe     : stable/unstable SFE vs epoch, 2 rows x slip-system cols
+    - my_plot_epoch_planar   : single-point planar-defect energies vs epoch
+                               (stable SFE / sequence faults / surface energy),
+                               1-2 rows x defect cols
 
 Cross-run (ensemble) summaries, driven by ``PeiN2p2.post_*_summary``:
 
@@ -48,6 +51,18 @@ used by ``PeiN2p2.post_epoch_scan_summary``: ``df`` becomes the across-run mean
 and the envelope is filled as a translucent C0 band under it, with a
 figure-level legend (mean / band / DFT line). The panel layout is identical to
 the single-run figure, so a summary panel sits where its per-run panel sat.
+
+Passing ``druns`` (``{run-id: DataFrame}``) instead gives the second ensemble
+form (``*_summary2.pdf``): the same panels, but with the individual runs drawn
+one line each (C0, C1, ...) rather than collapsed into mean + band, so a single
+outlying run is visible instead of only widening the envelope.
+
+``if_relative2dft`` (on by default) rescales every panel that has a finite,
+non-zero DFT reference to ``(value - DFT) / DFT`` in percent, on a fixed +-10%
+axis with ticks -10/-5/0/5/10 and the reference at zero. All panels then share
+one scale, so "how far from DFT" is comparable across properties. Panels whose
+DFT reference is absent or exactly zero (the FCC{100} stable SFE) keep absolute
+units and their auto-scaled axis, and say so in their y label.
 """
 
 import matplotlib
@@ -298,6 +313,15 @@ _EPOCH_HSPACE = 1.0
 _EPOCH_MARK_EVERY = 50
 _EPOCH_BAND_ALPHA = 0.25
 
+# ensemble「逐 run」图（``*_summary2.pdf``）的配色：run 依次取 C0, C1, ... 循环一轮。
+# 与均值图共用同一套面板布局，只是把「均值线 + 色带」换成每个 run 一条线。
+_EPOCH_RUN_NCOLOR = 10
+
+# if_relative2dft 打开后，所有能换算成「相对 DFT 偏差」的面板共用同一纵轴刻度，
+# 跨面板可直接横向比较偏差大小；超出 ±10% 的点被裁在轴外，属有意为之。
+_EPOCH_REL_YLIM = (-10.0, 10.0)
+_EPOCH_REL_TICKS = [-10, -5, 0, 5, 10]
+
 
 def _clear_default_labels(ax) -> None:
     """Drop the placeholder 'X-/Y-axis Label' that general_axes writes on every axis."""
@@ -325,31 +349,60 @@ def _dft_ref_val(dft: dict, key: str):
     return float(val)
 
 
-def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY,
-                 dft: dict = None, key: str = None,
-                 ylo=None, yhi=None) -> None:
-    """Draw one epoch series with house defaults and a data-driven y-limit.
+def _epoch_tail(v) -> np.ndarray:
+    """Finite values of the converged tail (last 75%) of one series."""
+    t = np.asarray(v, dtype=float)[int(round(0.25 * len(v))):]
+    return t[np.isfinite(t)]
 
-    Full line in the default style (C0, default linewidth) with a circle marker
-    every ``mark_every`` epochs placed via ``markevery`` on the same artist. The
-    markers are coloured C1 so they stand out against the C0 line;
-    marker size keeps its default. The y-limits span the last 75% of the (finite)
-    data with a 5% margin top and bottom, so the early, still-converging epochs
-    don't squash the converged tail. When a finite DFT reference (``dft[key]``)
-    lies outside that data range it is folded in as an extra bound, so the grey
-    dashed reference line drawn by :func:`_epoch_dft_ref` stays inside the axes
-    instead of falling off it. An all-NaN panel (e.g. a slip system without a
-    stable SFE) is left empty.
+
+def _epoch_ylim(a, lseries: list, ref=None) -> None:
+    """Set the panel y-limit from the converged tail of every series drawn on it.
+
+    The limits span the last 75% of the (finite) data with a 5% margin top and
+    bottom, so the early, still-converging epochs don't squash the converged
+    tail. ``lseries`` holds every curve on the panel (the mean plus both
+    envelope edges, or one entry per training run), so an ensemble band or a
+    single outlying run still stays on-axes. A finite DFT reference is folded in
+    as an extra bound, keeping the grey dashed line inside the axes. A panel
+    with no finite data is left at its default limits.
+    """
+    ltail = [t for t in (_epoch_tail(v) for v in lseries) if t.size]
+    if not ltail:
+        return
+    lo = min(float(t.min()) for t in ltail)
+    hi = max(float(t.max()) for t in ltail)
+    if ref is not None:
+        lo, hi = min(lo, ref), max(hi, ref)
+    span = hi - lo
+    pad = 0.05 * span if span > 0 else (0.05 * abs(hi) if hi else 0.05)
+    a.set_ylim(lo - pad, hi + pad)
+
+
+def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY,
+                 ylo=None, yhi=None, color: str = 'C0',
+                 color_marker: str = 'C1', label: str = None) -> list:
+    """Draw one epoch series (optionally with its envelope band) on panel ``a``.
+
+    Full line in the default style (``color``, default linewidth) with a circle
+    marker every ``mark_every`` epochs placed via ``markevery`` on the same
+    artist. On the single-series grids the markers are coloured C1 so they stand
+    out against the C0 line; the per-run ensemble figure passes the run's own
+    colour for both, so a run is one colour throughout. Marker size keeps its
+    default. An all-NaN series (e.g. a slip system without a stable SFE) draws
+    nothing.
 
     When ``ylo`` / ``yhi`` are given (ensemble summary over several training
     runs), ``y`` is the across-run mean and the ``[ylo, yhi]`` envelope is filled
-    as a translucent C0 band underneath it; the band's converged tail widens the
-    y-limit the same way the mean does, so the whole envelope stays on-axes.
+    as a translucent band underneath it.
+
+    Returns:
+        list: The series actually drawn (mean plus both envelope edges), for
+        :func:`_epoch_ylim` to take the panel limits from.
     """
     x = np.asarray(x)
     y = np.asarray(y, dtype=float)
     if not np.isfinite(y).any():
-        return
+        return []
     mark_idx = np.nonzero(x % mark_every == 0)[0]          # marker 落在 epoch 的整 mark_every 倍处
 
     lband = []
@@ -360,26 +413,12 @@ def _epoch_panel(a, x, y, mark_every: int = _EPOCH_MARK_EVERY,
         if ok.any():
             # 色带先画（zorder 低于线），where=ok 让缺失段自然断开而不是插值连过去
             a.fill_between(x, ylo, yhi, where=ok, alpha=_EPOCH_BAND_ALPHA,
-                           color='C0', linewidth=0, zorder=1.5)
+                           color=color, linewidth=0, zorder=1.5)
             lband = [ylo, yhi]
 
-    a.plot(x, y, marker='o', markevery=mark_idx.tolist(),
-           markeredgecolor='C1', zorder=2)     # 线默认 C0，marker 统一用 C1
-
-    def _tail(v):                                          # 后 75% 的有限值，定 ylim
-        t = np.asarray(v, dtype=float)[int(round(0.25 * len(v))):]
-        return t[np.isfinite(t)]
-
-    ltail = [t for t in (_tail(v) for v in [y, *lband]) if t.size]
-    if ltail:
-        lo = min(float(t.min()) for t in ltail)
-        hi = max(float(t.max()) for t in ltail)
-        ref = _dft_ref_val(dft, key)                       # DFT 参考也算作数据边界，避免虚线跑出坐标轴
-        if ref is not None:
-            lo, hi = min(lo, ref), max(hi, ref)
-        span = hi - lo
-        pad = 0.05 * span if span > 0 else (0.05 * abs(hi) if hi else 0.05)
-        a.set_ylim(lo - pad, hi + pad)
+    a.plot(x, y, marker='o', markevery=mark_idx.tolist(), color=color,
+           markeredgecolor=color_marker, label=label, zorder=2)
+    return [y, *lband]
 
 
 def _epoch_dft_ref(a, dft: dict, key: str) -> None:
@@ -402,39 +441,126 @@ def _epoch_col(d, key: str):
     return d[key].to_numpy(dtype=float)
 
 
-def _epoch_cell(a, x, d, key: str, dft: dict = None, df_lo=None, df_hi=None) -> None:
-    """Populate one grid cell: the ``key`` series (+ optional band) and its DFT line.
+def _rel2dft(v, ref: float):
+    """``(value - ref) / |ref|`` in percent; ``None`` passes through unchanged.
 
-    Collapses the per-panel pattern shared by the three epoch grids — draw the
-    column when present, then always try the grey dashed DFT reference (a phase
-    can have a DFT value even where the LAMMPS column is missing).
+    The denominator is the **absolute** reference so that "above DFT" is always
+    positive: several of the quantities plotted here have a negative reference
+    (the HCP basal stacking-fault energies, every energy per atom), and dividing
+    by the signed value would flip the sign of the deviation on exactly those
+    panels.
     """
-    if key in d:
-        _epoch_panel(a, x, d[key].to_numpy(), dft=dft, key=key,
-                     ylo=_epoch_col(df_lo, key), yhi=_epoch_col(df_hi, key))
-    _epoch_dft_ref(a, dft, key)
+    if v is None:
+        return None
+    return (np.asarray(v, dtype=float) - ref) / abs(ref) * 100.0
+
+
+def _rel_ylabel(label: str) -> str:
+    """'$C_{11}$ (GPa)' -> '$C_{11}$ dev. from DFT (%)'.
+
+    Drops the physical unit (always the trailing parenthetical in this module's
+    y labels) and states what the axis now shows, so a relative panel can never
+    be misread as an absolute one.
+    """
+    return label.rsplit('(', 1)[0].strip() + ' dev. from DFT (%)'
+
+
+def _epoch_cell(a, x, d, key: str, dft: dict = None, df_lo=None, df_hi=None,
+                druns: dict = None, if_relative2dft: bool = False) -> bool:
+    """Populate one grid cell: the ``key`` series (+ band / per-run lines) and its DFT line.
+
+    Collapses the per-panel pattern shared by all epoch grids. Three drawing
+    modes, all sharing the same panel geometry:
+
+    - ``d`` alone: one series (single run, or the across-run mean);
+    - ``d`` + ``df_lo`` / ``df_hi``: that mean plus its translucent envelope;
+    - ``druns`` (``{run-id: DataFrame}``): one line per training run, coloured
+      C0, C1, ... in the dict's order (``*_summary2.pdf``); ``d`` is ignored.
+
+    With ``if_relative2dft`` the panel switches to ``(value - DFT) / DFT`` in
+    percent on a fixed ±10% axis, and the DFT line becomes the zero line. That
+    needs a finite, **non-zero** DFT reference, so a quantity whose reference is
+    absent (most HCP planar faults) or exactly zero (the FCC{100} stable SFE)
+    silently keeps its absolute values and auto-scaled axis.
+
+    Returns:
+        bool: whether the panel was converted to relative units — the callers
+        need it to label that panel's y axis with :func:`_rel_ylabel`.
+    """
+    ref = _dft_ref_val(dft, key)
+    rel = bool(if_relative2dft and ref is not None and ref != 0.0)
+
+    lseries = []
+    if druns is not None:
+        for i, (rid, d_run) in enumerate(druns.items()):
+            if key not in d_run:
+                continue
+            color = f'C{i % _EPOCH_RUN_NCOLOR}'            # run 之间只靠颜色区分，marker 同色
+            lseries += _epoch_panel(a, d_run['epoch'].to_numpy(),
+                                    _rel2dft(d_run[key].to_numpy(), ref) if rel
+                                    else d_run[key].to_numpy(),
+                                    color=color, color_marker=color, label=rid)
+    elif key in d:
+        y, ylo, yhi = d[key].to_numpy(), _epoch_col(df_lo, key), _epoch_col(df_hi, key)
+        if rel:
+            y, ylo, yhi = _rel2dft(y, ref), _rel2dft(ylo, ref), _rel2dft(yhi, ref)
+        lseries = _epoch_panel(a, x, y, ylo=ylo, yhi=yhi)
+
+    if rel:
+        a.axhline(0.0, ls='--', color='gray', zorder=1)    # 相对图里 DFT 参考就是 0 线
+        a.set_ylim(*_EPOCH_REL_YLIM)
+        a.set_yticks(_EPOCH_REL_TICKS)
+    else:
+        # 相 / 滑移系可能有 DFT 值却没有 LAMMPS 列，故参考线与数据分开画
+        _epoch_dft_ref(a, dft, key)
+        _epoch_ylim(a, lseries, ref)
+    return rel
 
 
 def _epoch_legend(fig, dft: dict = None, mean_label: str = None,
-                  band_label: str = None) -> None:
+                  band_label: str = None, lrun: list = None) -> None:
     """Figure-level legend for the ensemble grids (mean line / band / DFT line).
 
     Only the summary plots call this: the single-run grids identify each panel by
     its column title and y label and deliberately carry no legend. Anchored just
     above the top row, so ``bbox_inches='tight'`` keeps it in the saved figure.
+
+    ``lrun`` switches it to the per-run form (``*_summary2.pdf``): one entry per
+    training run in the same C0, C1, ... order the panels use, instead of the
+    mean + band pair.
     """
     from matplotlib.lines import Line2D
     from matplotlib.patches import Patch
 
-    lhandle = [Line2D([], [], color='C0', marker='o', markeredgecolor='C1',
-                      label=mean_label or 'Mean over runs'),
-               Patch(facecolor='C0', alpha=_EPOCH_BAND_ALPHA,
-                     label=band_label or 'Min-max over runs')]
+    if lrun is not None:
+        lhandle = [Line2D([], [], color=f'C{i % _EPOCH_RUN_NCOLOR}', marker='o',
+                          markeredgecolor=f'C{i % _EPOCH_RUN_NCOLOR}', label=rid)
+                   for i, rid in enumerate(lrun)]
+    else:
+        lhandle = [Line2D([], [], color='C0', marker='o', markeredgecolor='C1',
+                          label=mean_label or 'Mean over runs'),
+                   Patch(facecolor='C0', alpha=_EPOCH_BAND_ALPHA,
+                         label=band_label or 'Min-max over runs')]
     if dft:
         lhandle.append(Line2D([], [], color='gray', ls='--', label='DFT reference'))
     legend = fig.legend(handles=lhandle, loc='lower center', bbox_to_anchor=(0.5, 1.0),
                         ncol=len(lhandle))
     general_modify_legend(legend)
+
+
+def _epoch_summary_legend(fig, dft: dict = None, band_label: str = None,
+                          df_lo=None, df_hi=None, druns: dict = None) -> None:
+    """Add the figure legend only when the grid is an ensemble one.
+
+    The single-run grids carry no legend at all (panel = column title + y label),
+    so every epoch grid funnels its "do I need a legend" decision through here:
+    per-run lines (``druns``) list the runs, a mean + envelope lists mean / band,
+    and a plain single-run figure gets nothing.
+    """
+    if druns is not None:
+        _epoch_legend(fig, dft, lrun=list(druns))
+    elif df_lo is not None and df_hi is not None:
+        _epoch_legend(fig, dft, band_label=band_label)
 
 
 def _pretty_type(t: str) -> str:
@@ -444,7 +570,8 @@ def _pretty_type(t: str) -> str:
 
 def my_plot_epoch_stretch(df=None, file_path: str = None,
                           phases=('hcp', 'fcc', 'bcc'), dft=None,
-                          df_lo=None, df_hi=None, band_label: str = None) -> tuple:
+                          df_lo=None, df_hi=None, band_label: str = None,
+                          druns: dict = None, if_relative2dft: bool = True) -> tuple:
     """Equilibrium stretch quantities versus training epoch (3 rows x phase cols).
 
     One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch). Rows top to
@@ -465,6 +592,17 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
             columns as ``df``), filled as a translucent band under the mean line
             and summarised by a figure legend.
         band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
+        druns: Optional ``{run-id: DataFrame}`` (same columns as ``df``). When
+            given, each panel shows one line per training run, coloured C0, C1,
+            ... in the dict's order, with a figure legend of run ids instead of
+            the mean + band (this is the ``*_summary2.pdf`` form); ``df`` is then
+            read only for its ``epoch`` column.
+        if_relative2dft: Plot ``(value - DFT) / DFT`` in percent on a fixed
+            +-10% axis (ticks -10/-5/0/5/10) instead of the absolute value, the
+            DFT reference becoming the zero line. On by default; a quantity whose
+            DFT reference is missing or exactly zero (e.g. the FCC{100} stable
+            SFE, whose DFT value is 0) keeps its absolute values and auto-scaled
+            axis.
     """
     d = df.copy()
     ep = d['epoch'].to_numpy()
@@ -475,21 +613,18 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
     _clear_default_labels(ax)
 
     for j, p in enumerate(phases):
-        _epoch_cell(ax[0, j], ep, d, f'a_{p}', dft, df_lo, df_hi)          # row 0: a
-        ax[0, j].set_ylabel(r'$a$ ($\mathrm{\AA}$)')
-        if p == 'hcp':                                     # row 1: HCP 列画 c/a
-            _epoch_cell(ax[1, j], ep, d, 'ca_hcp', dft, df_lo, df_hi)
-            ax[1, j].set_ylabel(r'$c/a$ (-)')
-        else:                                              # row 1: 立方相画 c
-            _epoch_cell(ax[1, j], ep, d, f'c_{p}', dft, df_lo, df_hi)
-            ax[1, j].set_ylabel(r'$c$ ($\mathrm{\AA}$)')
-        _epoch_cell(ax[2, j], ep, d, f'E_{p}', dft, df_lo, df_hi)          # row 2: E
-        ax[2, j].set_ylabel('Energy (eV/atom)')
+        # row 1：HCP 列画 c/a，立方相画 c —— 两者共用同一行，故先挑好列名和 y label
+        key_row1, lab_row1 = (('ca_hcp', r'$c/a$ (-)') if p == 'hcp'
+                              else (f'c_{p}', r'$c$ ($\mathrm{\AA}$)'))
+        for i, (key, lab) in enumerate(((f'a_{p}', r'$a$ ($\mathrm{\AA}$)'),
+                                        (key_row1, lab_row1),
+                                        (f'E_{p}', 'Energy (eV/atom)'))):
+            rel = _epoch_cell(ax[i, j], ep, d, key, dft, df_lo, df_hi, druns, if_relative2dft)
+            ax[i, j].set_ylabel(_rel_ylabel(lab) if rel else lab)
         ax[0, j].set_title(p.upper())                      # 列标题：相
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
 
-    if df_lo is not None and df_hi is not None:
-        _epoch_legend(fig, dft, band_label=band_label)
+    _epoch_summary_legend(fig, dft, band_label, df_lo, df_hi, druns)
 
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
@@ -499,7 +634,8 @@ def my_plot_epoch_stretch(df=None, file_path: str = None,
 def my_plot_epoch_cij(df=None, file_path: str = None,
                       phases=('hcp', 'fcc', 'bcc'),
                       comps=('11', '12', '13', '33', '44'), dft=None,
-                      df_lo=None, df_hi=None, band_label: str = None) -> tuple:
+                      df_lo=None, df_hi=None, band_label: str = None,
+                      druns: dict = None, if_relative2dft: bool = True) -> tuple:
     """Elastic constants Cij versus training epoch (5 rows x phase cols).
 
     One column per phase (titles ``HCP|FCC|BCC``), shared x (epoch); rows top to
@@ -520,6 +656,17 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
             columns as ``df``), filled as a translucent band under the mean line
             and summarised by a figure legend.
         band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
+        druns: Optional ``{run-id: DataFrame}`` (same columns as ``df``). When
+            given, each panel shows one line per training run, coloured C0, C1,
+            ... in the dict's order, with a figure legend of run ids instead of
+            the mean + band (this is the ``*_summary2.pdf`` form); ``df`` is then
+            read only for its ``epoch`` column.
+        if_relative2dft: Plot ``(value - DFT) / DFT`` in percent on a fixed
+            +-10% axis (ticks -10/-5/0/5/10) instead of the absolute value, the
+            DFT reference becoming the zero line. On by default; a quantity whose
+            DFT reference is missing or exactly zero (e.g. the FCC{100} stable
+            SFE, whose DFT value is 0) keeps its absolute values and auto-scaled
+            axis.
     """
     d = df.copy()
     ep = d['epoch'].to_numpy()
@@ -531,15 +678,15 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
 
     for i, c in enumerate(comps):
         for j, p in enumerate(phases):
-            _epoch_cell(ax[i, j], ep, d, f'C{c}_{p}', dft, df_lo, df_hi)
-            ax[i, j].set_ylabel(rf'$C_{{{c}}}$ (GPa)')     # 每个面板都标 y
+            rel = _epoch_cell(ax[i, j], ep, d, f'C{c}_{p}', dft, df_lo, df_hi, druns, if_relative2dft)
+            lab = rf'$C_{{{c}}}$ (GPa)'
+            ax[i, j].set_ylabel(_rel_ylabel(lab) if rel else lab)   # 每个面板都标 y
             if i == 0:
                 ax[i, j].set_title(p.upper())              # 列标题：相
     for j in range(ax.shape[1]):
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
 
-    if df_lo is not None and df_hi is not None:
-        _epoch_legend(fig, dft, band_label=band_label)
+    _epoch_summary_legend(fig, dft, band_label, df_lo, df_hi, druns)
 
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
@@ -547,7 +694,8 @@ def my_plot_epoch_cij(df=None, file_path: str = None,
 
 
 def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None,
-                       df_lo=None, df_hi=None, band_label: str = None) -> tuple:
+                       df_lo=None, df_hi=None, band_label: str = None,
+                       druns: dict = None, if_relative2dft: bool = True) -> tuple:
     """Stacking-fault energies versus training epoch (2 rows x slip-system cols).
 
     One column per slip system (title = system name), shared x (epoch); top row
@@ -569,6 +717,17 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None,
             columns as ``df``), filled as a translucent band under the mean line
             and summarised by a figure legend.
         band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
+        druns: Optional ``{run-id: DataFrame}`` (same columns as ``df``). When
+            given, each panel shows one line per training run, coloured C0, C1,
+            ... in the dict's order, with a figure legend of run ids instead of
+            the mean + band (this is the ``*_summary2.pdf`` form); ``df`` is then
+            read only for its ``epoch`` column.
+        if_relative2dft: Plot ``(value - DFT) / DFT`` in percent on a fixed
+            +-10% axis (ticks -10/-5/0/5/10) instead of the absolute value, the
+            DFT reference becoming the zero line. On by default; a quantity whose
+            DFT reference is missing or exactly zero (e.g. the FCC{100} stable
+            SFE, whose DFT value is 0) keeps its absolute values and auto-scaled
+            axis.
     """
     if types is None:
         types = ['FCC_111', 'FCC_100', 'HCP_basal', 'HCP_prism1w', 'HCP_pyr1w', 'HCP_pyr2']
@@ -586,13 +745,91 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None,
                'usf': r'$\gamma_{\mathrm{usf}}$ (mJ/m$^2$)'}
     for j, t in enumerate(types):
         for i, pref in enumerate(('sf', 'usf')):
-            _epoch_cell(ax[i, j], ep, d, f'{pref}_{t}', dft, df_lo, df_hi)
-            ax[i, j].set_ylabel(ylabels[pref])             # 每个面板都标 y
+            rel = _epoch_cell(ax[i, j], ep, d, f'{pref}_{t}', dft, df_lo, df_hi, druns, if_relative2dft)
+            ax[i, j].set_ylabel(_rel_ylabel(ylabels[pref]) if rel else ylabels[pref])
         ax[0, j].set_title(_pretty_type(t))                # 列标题：滑移系（首字母大写）
         ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
 
-    if df_lo is not None and df_hi is not None:
-        _epoch_legend(fig, dft, band_label=band_label)
+    _epoch_summary_legend(fig, dft, band_label, df_lo, df_hi, druns)
+
+    fig.savefig(file_path, bbox_inches='tight')
+    plt.close(fig)
+    return fig, ax
+
+
+# 平面缺陷单点物性的 y 轴标注：键是 epoch 扫描表的列名前缀（见
+# mymetal.build.bulk.planar.get_planar_columns），值是该行的 y label。
+_PLANAR_YLABEL = {
+    'ssf': r'$\gamma_{\mathrm{ssf}}$ (mJ/m$^2$)',
+    'surf_unrel': r'$\gamma_{\mathrm{surf}}^{\mathrm{unrel}}$ (mJ/m$^2$)',
+    'surf_rel': r'$\gamma_{\mathrm{surf}}^{\mathrm{rel}}$ (mJ/m$^2$)',
+}
+
+
+def my_plot_epoch_planar(df=None, file_path: str = None, types=None,
+                         prefixes=('ssf',), dft=None,
+                         df_lo=None, df_hi=None, band_label: str = None,
+                         druns: dict = None, if_relative2dft: bool = True) -> tuple:
+    """Single-point planar-defect energies versus training epoch (prefix rows x defect cols).
+
+    Same drawing convention as :func:`my_plot_epoch_gsfe` — one column per defect,
+    shared x (epoch), one C0 line with a C1 circle marker every 50 epochs, and no
+    legend on the single-run grids (the defect is the column title, the quantity is
+    the row's y label). Drives all three single-point groups:
+
+    - ``prefixes=('ssf',)`` for the tilted-cell stable SFEs and the stacking-sequence
+      faults (I1 / I3 / ESF / TB), one row;
+    - ``prefixes=('surf_unrel', 'surf_rel')`` for surface energies, two rows.
+
+    Args:
+        df: DataFrame with column ``epoch`` plus ``<prefix>_<type>`` columns, as
+            built in ``PeiN2p2.post_epoch_scan``. For an ensemble summary this holds
+            the across-run mean.
+        file_path: Output figure path (e.g. p_post_epoch_ssf.pdf).
+        types: Column order of defects (e.g. ``['FCC_111_ISF', ...]``).
+        prefixes: One row per prefix; each must be a key of :data:`_PLANAR_YLABEL`.
+        dft: Optional ``read_dft_reference(...)`` sub-dict for this group; each
+            matching quantity is drawn as a grey dashed horizontal reference line.
+        df_lo, df_hi: Optional lower/upper envelope over the training runs (same
+            columns as ``df``), filled as a translucent band under the mean line
+            and summarised by a figure legend.
+        band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
+        druns: Optional ``{run-id: DataFrame}`` (same columns as ``df``). When
+            given, each panel shows one line per training run, coloured C0, C1,
+            ... in the dict's order, with a figure legend of run ids instead of
+            the mean + band (this is the ``*_summary2.pdf`` form); ``df`` is then
+            read only for its ``epoch`` column.
+        if_relative2dft: Plot ``(value - DFT) / DFT`` in percent on a fixed
+            +-10% axis (ticks -10/-5/0/5/10) instead of the absolute value, the
+            DFT reference becoming the zero line. On by default; a quantity whose
+            DFT reference is missing or exactly zero (e.g. the FCC{100} stable
+            SFE, whose DFT value is 0) keeps its absolute values and auto-scaled
+            axis.
+
+    Returns:
+        tuple: ``(fig, ax)``, ``ax`` always 2-D.
+    """
+    if types is None:
+        types = [c[len(prefixes[0]) + 1:] for c in df.columns
+                 if c.startswith(prefixes[0] + '_')]
+
+    d = df.copy()
+    ep = d['epoch'].to_numpy()
+
+    fig, ax = my_plot(fig_subp=[len(prefixes), len(types)], fig_sharex=True, grid=False,
+                      if_keep_wspace_hspace=True, hspace=_EPOCH_HSPACE)
+    ax = np.atleast_2d(ax)
+    _clear_default_labels(ax)
+
+    for j, t in enumerate(types):
+        for i, pref in enumerate(prefixes):
+            rel = _epoch_cell(ax[i, j], ep, d, f'{pref}_{t}', dft, df_lo, df_hi, druns, if_relative2dft)
+            lab = _PLANAR_YLABEL[pref]
+            ax[i, j].set_ylabel(_rel_ylabel(lab) if rel else lab)   # 每个面板都标 y
+        ax[0, j].set_title(_pretty_type(t))                # 列标题：缺陷名
+        ax[-1, j].set_xlabel('Epoch (-)')                  # 仅底排写 x 轴
+
+    _epoch_summary_legend(fig, dft, band_label, df_lo, df_hi, druns)
 
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)
@@ -600,7 +837,8 @@ def my_plot_epoch_gsfe(df=None, file_path: str = None, types=None, dft=None,
 
 
 def my_plot_epoch_rmse(df=None, file_path: str = None,
-                       df_lo=None, df_hi=None, band_label: str = None) -> tuple:
+                       df_lo=None, df_hi=None, band_label: str = None,
+                       druns: dict = None) -> tuple:
     """Training-set energy/force RMSE versus epoch (2 rows x 1 col).
 
     Same drawing convention as the epoch property grids (:func:`my_plot_epoch_cij`
@@ -618,6 +856,8 @@ def my_plot_epoch_rmse(df=None, file_path: str = None,
         file_path: Output figure path (e.g. p_post_rmse_summary.pdf).
         df_lo, df_hi: Optional lower/upper envelope over the training runs.
         band_label: Legend text for that band (e.g. ``'Min-max over 10 runs'``).
+        druns: Optional ``{run-id: DataFrame}``; given, one line per training run
+            (C0, C1, ...) with a run-id legend instead of the mean + band.
     """
     d = df.copy()
     ep = d['epoch'].to_numpy()
@@ -628,12 +868,11 @@ def my_plot_epoch_rmse(df=None, file_path: str = None,
     _clear_default_labels(ax)
 
     for a, (col, yl) in zip(ax, _RMSE_PANELS):
-        _epoch_cell(a, ep, d, col, None, df_lo, df_hi)
+        _epoch_cell(a, ep, d, col, None, df_lo, df_hi, druns)    # RMSE 没有 DFT 参考，恒为绝对值
         a.set_ylabel(yl)
     ax[-1].set_xlabel('Epoch (-)')                         # 仅底排写 x 轴
 
-    if df_lo is not None and df_hi is not None:
-        _epoch_legend(fig, None, band_label=band_label)
+    _epoch_summary_legend(fig, None, band_label, df_lo, df_hi, druns)
 
     fig.savefig(file_path, bbox_inches='tight')
     plt.close(fig)

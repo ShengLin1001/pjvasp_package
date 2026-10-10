@@ -1,0 +1,28 @@
+# Sequence stacking faults：单剪切**无法**生成的层错，必须显式改堆垛层序。
+#   HCP basal I1 = (AB)n-(AC)n，I3(extrinsic E) = (AB)n-C-(AB)(n-1)-C   —— Yin 2017 §3
+#   FCC {111} ESF = 插入一层，TB = 上半胞层序反向
+# 周期边界下每胞含 2 个等价层错，post 侧按 2A 归一。
+
+# For dump dir
+shell mkdir ../dump
+
+############################ reference: perfect stacking ############################
+include general_init.mod
+
+shell python_path_template slurm/seqsf_model.py
+read_data ./data.ref
+
+include general_potential.mod
+
+# 参考胞与层错胞用同一套弛豫设置，dE 才干净。
+fix br all box/relax z  0  xz  0  yz  0  fixedpoint 0 0 0 scaleyz no scalexy no scalexz no
+min_style   cg
+minimize ${etol} ${ftol} ${maxiter} ${maxeval}
+unfix       br
+
+variable i    equal 1
+variable jobn string "0.000000000000e+00"
+include general_output.mod
+
+############################ faulted stacking ############################
+include seqsf.mod

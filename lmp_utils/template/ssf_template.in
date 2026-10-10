@@ -1,0 +1,32 @@
+# Stable stacking fault energy (SSF) by the tilted-cell method.
+# 参考：Yin et al., Acta Mater. 2017 §3（references/Yin-2017-...pdf）与
+#       chap_4_TL §1.4.3「稳定层错能时原子可沿所有方向运动，超晶胞弛豫至 σ3j = 0」。
+#
+# 与 gsfe_template.in 的关系：同一批滑移面模型、同一套 Δxz/Δyz 倾斜约定，
+# 但不扫 γ-line，只在已知的层错矢量上做**一个点**，且放开全部面外自由度。
+
+# For dump dir
+shell mkdir ../dump
+
+############################ reference ############################
+# 无层错的同尺寸参考胞。只弛豫原子、不动胞：a0/c0 已由 y_stretch 定死，
+# 若这里也放开 zz，参考能量会把体相弛豫和层错的面外膨胀混在一起。
+
+include general_init.mod
+
+shell python_path_template slurm/gsfe_model.py
+read_data ./data.ini
+
+include general_potential.mod
+
+min_style   cg
+minimize ${etol} ${ftol} ${maxiter} ${maxeval}
+
+write_data ../dump/data.ref
+
+variable i    equal 1
+variable jobn string "0.000000000000e+00"
+include general_output.mod
+
+############################ tilt + full relax ############################
+include ssf.mod
