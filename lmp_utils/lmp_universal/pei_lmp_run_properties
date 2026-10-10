@@ -2,6 +2,21 @@
 
 launcher="${MY_LAUNCHER:-srun}"
 myroot=$(pwd)
+
+# 可选开关，先从参数里摘掉再做位置参数赋值，这样它放在哪个位置都不会顶掉 $1..$5：
+#   -if_planar  在 stretch/Cij/gsfe 之外**追加**平面缺陷三段（ssf / surface / seqsf）。
+#               默认关：这三段是后加的物性，老的作业脚本和老的 epoch 目录都不带它，
+#               默认开会让所有已完成的 epoch 被判为未完成而整体重投。
+if_planar=0
+largs=()
+for arg in "$@"; do
+    case "$arg" in
+        -if_planar) if_planar=1 ;;
+        *)          largs+=("$arg") ;;
+    esac
+done
+set -- "${largs[@]}"
+
 # 可在运行时按位置覆盖（不传则用原默认值）：
 #   $1 pair_style  $2 pair_coeff  $3 python_path  $4 mass_content  $5 lmp_template_path
 #   mass_content：写入各 workdir 的 general_mass.mod（多行用 \n 连接，下方 printf '%b' 展开）
@@ -10,10 +25,17 @@ pair_coeff="${2:-${myroot}/potential/Au_u3.eam}"
 python_path="${3:-python}"
 mass_content="${4:-mass 1 196.97}"
 lmp_template_path="${5:-${myroot}/template}"
+post_path="${PEI_PROPERTY_POST_PATH:-${myroot}/post}"
+[[ ! -d "${myroot}/slurm/post" ]] || post_path="${myroot}/slurm/post"
 
 echo ""
 echo "================ 📁 ${myroot}"
 echo "📍 Current dir: $(pwd)"
+if (( if_planar )); then
+    echo "📍 planar properties (ssf / surface / seqsf): ✅ on (-if_planar)"
+else
+    echo "📍 planar properties (ssf / surface / seqsf): ⏭️  off (pass -if_planar to enable)"
+fi
 
 # 失败收集：每个 lmp / post 步骤非 0 退出都记下「标签 (exit 码)」，最后汇总到 📊 Summary 并决定退出码。
 failed_steps=()
@@ -22,34 +44,82 @@ record_fail () {   # $1=步骤标签  $2=退出码
     echo "❌ $1 失败 (exit $2)"
 }
 
-# 带重试退避地跑 lmp：只对「srun 创建 step 失败」这种瞬时错误重试（高并发提交时 slurmctld
-# 偶发 "srun: error: Unable to create step ...: Unexpected message received"）。
-# 真·LAMMPS 错误（输入错、势文件缺失等）立即返回，不浪费时间反复重试。
-# 次数/间隔可用环境变量覆盖；默认最多尝试 10 次（含首次），每次失败后 sleep 10s。
-LMP_MAX_TRY="${LMP_MAX_TRY:-99}"
-LMP_RETRY_SLEEP="${LMP_RETRY_SLEEP:-5}"
-run_lmp_retry () {   # 参数原样转给 lmp，例如：run_lmp_retry -in foo.in -screen none
-    local attempt=1 rc errlog
-    errlog="$(mktemp)"
-    while : ; do
-        $launcher lmp "$@" 2> "$errlog"
-        rc=$?
-        cat "$errlog" >&2          # 这次的 stderr 照常进 slurm-*.out，不吞日志
-        if (( rc == 0 )); then rm -f "$errlog"; return 0; fi
-        if (( attempt < LMP_MAX_TRY )) && grep -qE 'Unable to create step|Unexpected message received' "$errlog"; then
-            echo "⚠️  srun step 创建失败（第 ${attempt}/${LMP_MAX_TRY} 次尝试，exit ${rc}），${LMP_RETRY_SLEEP}s 后重试…"
-            sleep "${LMP_RETRY_SLEEP}"
-            (( attempt++ ))
-            continue
-        fi
-        rm -f "$errlog"
-        return "$rc"               # 非瞬时错误，或已达最大尝试次数 → 交给 record_fail
-    done
+# 共用包装器只重试启动失败，不重跑已经执行过但失败的计算。
+run_lmp_retry () {
+    pei_slurm_univ_launch_retry $launcher lmp "$@" </dev/null
+    local rc=$?
+    if (( rc == 0 )) && grep -q '^Total wall time:' log.lammps; then
+        touch .pei_lmp_done
+        return 0
+    fi
+    (( rc != 0 )) || rc=1
+    return "$rc"
 }
 
-rm -rf y_stretch
-rm -rf y_Cij_energy
-rm -rf y_gsfe
+# 同一输出根只许一个 runner；锁文件保留，不删除历史产物。
+exec 8> "${myroot}/.pei_properties.lock"
+flock -n 8 || { echo '❌ 此目录已有物性 runner 正在运行。'; exit 1; }
+
+# 固定势、参数和源模板身份，防止续跑时把两套势或模板的结果混在一起。
+# 开关不纳入身份：允许在已完成三组的目录安全补算平面缺陷。
+signature="$(${python_path} - "$pair_style" "$pair_coeff" "$mass_content" "$lmp_template_path" "$post_path" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+digest = hashlib.sha256('\0'.join(sys.argv[1:4]).encode('utf-8'))
+for path_root in [Path(sys.argv[4]), Path(sys.argv[5]), Path('potential')]:
+    for path_file in sorted(path_root.rglob('*')):
+        if path_file.is_file() and '__pycache__' not in path_file.parts:
+            digest.update(str(path_file.relative_to(path_root)).encode('utf-8'))
+            digest.update(path_file.read_bytes())
+print(digest.hexdigest())
+PY
+)" || exit 1
+if [[ -f .pei_properties_signature ]]; then
+    [[ "$(< .pei_properties_signature)" == "$signature" ]] || {
+        echo '❌ 势／参数／模板已改变，请使用独立输出目录；不覆盖已有结果。'; exit 1;
+    }
+else
+    for group in y_stretch y_Cij_energy y_gsfe y_ssf y_surface y_seqsf; do
+        if [[ -e "$group" ]]; then
+            echo "❌ 已有未登记的 ${group}，请使用独立输出目录；不清理旧结果。"
+            exit 1
+        fi
+    done
+    printf '%s\n' "$signature" > .pei_properties_signature
+fi
+
+# 下游模型必须用真实平衡胞的 a/c，而不是把 HCP 的 c 随拟合 a 作各向同性外推。
+get_lattice () {
+    ${python_path} - "$myroot/y_stretch/$1/dump/data.full_relax" <<'PY'
+import sys
+import numpy as np
+from ase.io import read
+atoms = read(sys.argv[1], format='lammps-data', style='atomic')
+print('%.16f %.16f' % (np.linalg.norm(atoms.cell[0]), np.linalg.norm(atoms.cell[2])))
+PY
+}
+
+# 单个失败算例整体改名保留，重新计算不会向残缺 dump 追加；候选的正常路径不变。
+# 已完成算例不再运行 LAMMPS，post 仍可读已有原始文件重建表格。
+prepare_case () {
+    local path_case="${workdir%/y_dir}" path_archive
+    if [[ -f "${workdir}/.pei_lmp_done" ]]; then
+        if [[ -s "${workdir}/log.lammps" && -d "${path_case}/dump" ]]; then
+            echo "⏭️ 已完成，保留 ${path_case}"
+            return 1
+        fi
+    fi
+    if [[ -d "$path_case" ]] && [[ -n "$(find "$path_case" -mindepth 1 -print -quit)" ]]; then
+        path_archive="${path_case}.partial.$(date +%Y%m%dT%H%M%S).$$"
+        [[ ! -e "$path_archive" ]] || return 2
+        mv -- "$path_case" "$path_archive" || return 2
+        echo "⚠️ 残缺算例保留于 ${path_archive}"
+    fi
+    mkdir -p "$workdir" || return 2
+    cd "$workdir" || return 2
+}
 
 ############ Found equilibrium lattice constant ############
 echo ""
@@ -57,8 +127,8 @@ echo "================ 🧪 stretch — 平衡晶格常数"
 for lat in fcc bcc hcp; do
     workdir="${myroot}/y_stretch/${lat}/y_dir"
     dumpdir="${myroot}/y_stretch/${lat}/dump"
-    mkdir -p ${workdir}
-    cd ${workdir}
+    prepare_case; rc_case=$?
+    (( rc_case == 0 )) || { (( rc_case == 1 )) || record_fail "prepare ${workdir}" "$rc_case"; continue; }
 
     for file in \
         "${lmp_template_path}/stretch.mod" \
@@ -71,7 +141,12 @@ for lat in fcc bcc hcp; do
         "${lmp_template_path}/general_output.mod" \
         "${lmp_template_path}/general_structural_info.mod";
     do
-        cp "${file}" .
+        if [[ "$file" == *.py ]]; then
+            mkdir -p slurm
+            cp "${file}" slurm/
+        else
+            cp "${file}" .
+        fi
     done
 
     # bcc:3, fcc:2, hcp:1
@@ -107,7 +182,7 @@ for lat in fcc bcc hcp; do
 done
 
 echo "▶️  post: stretch.py"
-${python_path} post/stretch.py; rc_stretch=$?
+${python_path} ${post_path}/stretch.py; rc_stretch=$?
 (( rc_stretch == 0 )) || record_fail "post/stretch.py" "${rc_stretch}"
 
 
@@ -117,13 +192,13 @@ echo "================ 🧪 Cij — 弹性常数"
 for lat in fcc bcc hcp; do
     workdir="${myroot}/y_Cij_energy/${lat}/y_dir"
     dumpdir="${myroot}/y_Cij_energy/${lat}/dump"
-    mkdir -p ${workdir}
-    cd ${workdir}
+    prepare_case; rc_case=$?
+    (( rc_case == 0 )) || { (( rc_case == 1 )) || record_fail "prepare ${workdir}" "$rc_case"; continue; }
 
     # read equilibrium lattice constant
     stretch_output_dir="${myroot}/y_stretch/${lat}"
-    a0=`sed -n '21,21p' $stretch_output_dir/p_post_stretch.txt | awk '{printf "%.16f", $1}'`
-    c0=`sed -n '21,21p' $stretch_output_dir/p_post_stretch.txt | awk '{printf "%.16f", $3}'`
+    lattice="$(get_lattice "$lat")" || { record_fail "equilibrium ${lat}" "$?"; cd "$myroot"; continue; }
+    read -r a0 c0 <<< "$lattice"
 
     for file in \
         "${lmp_template_path}/stretch_model.mod" \
@@ -135,7 +210,12 @@ for lat in fcc bcc hcp; do
         "${lmp_template_path}/Cij_energy.mod" \
         "${lmp_template_path}/Cij_energy_output.mod";
     do
-        cp "${file}" .
+        if [[ "$file" == *.py ]]; then
+            mkdir -p slurm
+            cp "${file}" slurm/
+        else
+            cp "${file}" .
+        fi
     done
 
 
@@ -149,6 +229,8 @@ for lat in fcc bcc hcp; do
 
     sed -i "s/lat_template/${latnum}/g" stretch_model.mod
     sed -i "s/aa_template/${a0}/g"      stretch_model.mod
+    sed -i -e "/include general_init.mod/a variable lat equal ${latnum}" \
+        -e "s|equilibrium_path_template|${myroot}/y_stretch/${lat}/dump/data.full_relax|g" Cij_energy_template.in
     sed -i "s|pair_style_template|${pair_style}|g" general_potential.mod
     sed -i "s|pair_coeff_template|${pair_coeff}|g" general_potential.mod
     printf '%b\n' "$mass_content" > general_mass.mod
@@ -160,7 +242,7 @@ for lat in fcc bcc hcp; do
 done
 
 echo "▶️  post: Cij_energy.py"
-${python_path} post/Cij_energy.py; rc_cij=$?
+${python_path} ${post_path}/Cij_energy.py; rc_cij=$?
 (( rc_cij == 0 )) || record_fail "post/Cij_energy.py" "${rc_cij}"
 
 ############ gsfe ############
@@ -193,14 +275,14 @@ for lat in fcc hcp; do
 
     # read equilibrium lattice constant
     stretch_output_dir="${myroot}/y_stretch/${lat}"
-    a0=`sed -n '21,21p' $stretch_output_dir/p_post_stretch.txt | awk '{printf "%.16f", $1}'`
-    c0=`sed -n '21,21p' $stretch_output_dir/p_post_stretch.txt | awk '{printf "%.16f", $3}'`
+    lattice="$(get_lattice "$lat")" || { record_fail "equilibrium ${lat}" "$?"; cd "$myroot"; continue; }
+    read -r a0 c0 <<< "$lattice"
 
     for gsfe_type in "${lgsfe_type[@]}"; do
         workdir="${myroot}/y_gsfe/${lat}/${gsfe_type}/y_dir"
         dumpdir="${myroot}/y_gsfe/${lat}/${gsfe_type}/dump"
-        mkdir -p ${workdir}
-        cd ${workdir}
+        prepare_case; rc_case=$?
+        (( rc_case == 0 )) || { (( rc_case == 1 )) || record_fail "prepare ${workdir}" "$rc_case"; continue; }
 
         for file in \
             "${lmp_template_path}/gsfe_model.py" \
@@ -210,7 +292,12 @@ for lat in fcc hcp; do
             "${lmp_template_path}/general_potential.mod" \
             "${lmp_template_path}/general_output.mod" ;
         do
-            cp "${file}" .
+            if [[ "$file" == *.py ]]; then
+                mkdir -p slurm
+                cp "${file}" slurm/
+            else
+                cp "${file}" .
+            fi
         done
 
         # 每个滑移系的剪切偏移 (bp1, bp2)，与 DFT vasp_utils/.../pei_vasp_run_gsfe 完全一致：
@@ -224,10 +311,10 @@ for lat in fcc hcp; do
             *) echo "Unknown gsfe_type for bp1/bp2: ${gsfe_type}"; exit 1 ;;
         esac
 
-        sed -i "s/lat_template/${latnum}/g"              gsfe_model.py
-        sed -i "s|gsfe_type_template|${gsfe_type}|g"     gsfe_model.py
-        sed -i "s/aa_template/${a0}/g"                   gsfe_model.py
-        sed -i "s/cc_template/${c0}/g"                   gsfe_model.py
+        sed -i "s/lat_template/${latnum}/g"              slurm/gsfe_model.py
+        sed -i "s|gsfe_type_template|${gsfe_type}|g"     slurm/gsfe_model.py
+        sed -i "s/aa_template/${a0}/g"                   slurm/gsfe_model.py
+        sed -i "s/cc_template/${c0}/g"                   slurm/gsfe_model.py
         sed -i "s|gsfe_bp1_template|${bp1}|g"            gsfe.mod
         sed -i "s|gsfe_bp2_template|${bp2}|g"            gsfe.mod
         sed -i "s|pair_style_template|${pair_style}|g" general_potential.mod
@@ -244,17 +331,189 @@ for lat in fcc hcp; do
 done
 
 echo "▶️  post: gsfe.py"
-${python_path} post/gsfe.py; rc_gsfe=$?
+${python_path} ${post_path}/gsfe.py; rc_gsfe=$?
 (( rc_gsfe == 0 )) || record_fail "post/gsfe.py" "${rc_gsfe}"
+
+############ 平面缺陷物性（ssf / surface / seqsf）############
+# 整段受 -if_planar 控制。不重排内部缩进：包一层 if 只是为了默认不跑，
+# 段内逻辑与 stretch/Cij/gsfe 三段保持逐行同构，便于对照。
+if (( if_planar )); then
+
+############ 平面缺陷物性的共用配置 ############
+# 唯一来源是 mymetal.build.bulk.planar，bash 侧不再抄表，避免三处漂移。
+# 取表失败就跳过这三段（但不静默：记进 failed_steps，Summary 会报）。
+read_planar_table () {   # $1 = ssf | surface | seqsf
+    ${python_path} -c "from mymetal.build.bulk.planar import format_planar_table; print(format_planar_table('$1'))"
+}
+
+# 各相的平衡晶格常数只读一次，三段共用
+declare -A dict_a0 dict_c0
+for lat in fcc hcp; do
+    stretch_output_dir="${myroot}/y_stretch/${lat}"
+    lattice="$(get_lattice "$lat")" || { record_fail "equilibrium ${lat}" "$?"; continue; }
+    read -r dict_a0[$lat] dict_c0[$lat] <<< "$lattice"
+done
+
+# bcc:3, fcc:2, hcp:1（与 stretch/Cij/gsfe 段同一套编号）
+declare -A dict_latnum=( [bcc]=3 [fcc]=2 [hcp]=1 )
+
+############ ssf ############
+# 稳定层错能：tilted-cell 单点 + σ3j = 0 全弛豫（Yin 2017 §3 / chap_4_TL §1.4.3）。
+# 与 gsfe 段的差别只在 ssf.mod 里：不扫 γ-line、原子 x,y,z 全放开。
+echo ""
+echo "================ 🧪 ssf — 稳定层错能"
+table_ssf="$(read_planar_table ssf)" || record_fail "read_planar_table ssf" "$?"
+# read -u 9：循环数据走 fd 9，与子命令的 stdin 彻底隔离（见 run_lmp_retry 的 </dev/null）
+while read -r -u 9 lat gsfe_type fault t1 t2; do
+    [[ -z "${lat}" ]] && continue
+    name="${gsfe_type}_${fault}"
+    workdir="${myroot}/y_ssf/${lat}/${name}/y_dir"
+    prepare_case; rc_case=$?
+    (( rc_case == 0 )) || { (( rc_case == 1 )) || record_fail "prepare ${workdir}" "$rc_case"; continue; }
+
+    for file in \
+        "${lmp_template_path}/gsfe_model.py" \
+        "${lmp_template_path}/ssf_template.in" \
+        "${lmp_template_path}/ssf.mod" \
+        "${lmp_template_path}/general_init.mod" \
+        "${lmp_template_path}/general_potential.mod" \
+        "${lmp_template_path}/general_output.mod" ;
+    do
+        if [[ "$file" == *.py ]]; then
+            mkdir -p slurm
+            cp "${file}" slurm/
+        else
+            cp "${file}" .
+        fi
+    done
+
+    sed -i "s/lat_template/${dict_latnum[$lat]}/g"        slurm/gsfe_model.py
+    sed -i "s|gsfe_type_template|${gsfe_type}|g"          slurm/gsfe_model.py
+    sed -i "s/aa_template/${dict_a0[$lat]}/g"             slurm/gsfe_model.py
+    sed -i "s/cc_template/${dict_c0[$lat]}/g"             slurm/gsfe_model.py
+    sed -i "s|ssf_t1_template|${t1}|g"                    ssf.mod
+    sed -i "s|ssf_t2_template|${t2}|g"                    ssf.mod
+    sed -i "s|pair_style_template|${pair_style}|g"        general_potential.mod
+    sed -i "s|pair_coeff_template|${pair_coeff}|g"        general_potential.mod
+    sed -i "s|python_path_template|${python_path}|g"      ssf_template.in
+    printf '%b\n' "$mass_content" > general_mass.mod
+    echo "▶️  ssf ${lat}/${name} (t0 = ${t1}, ${t2}): $launcher lmp -in ssf_template.in -screen none"
+    run_lmp_retry -in ssf_template.in -screen none || record_fail "ssf ${lat}/${name} (lmp)" "$?"
+
+    cd $myroot
+done 9<<< "${table_ssf}"
+
+echo "▶️  post: ssf.py"
+${python_path} ${post_path}/ssf.py; rc_ssf=$?
+(( rc_ssf == 0 )) || record_fail "post/ssf.py" "${rc_ssf}"
+
+############ surface ############
+# 表面能：复用同一批滑移面 slab，插真空劈成两个自由表面，取未弛豫 + 弛豫两个值。
+echo ""
+echo "================ 🧪 surface — 表面能"
+table_surface="$(read_planar_table surface)" || record_fail "read_planar_table surface" "$?"
+surf_vacuum="$(${python_path} -c 'from mymetal.build.bulk.planar import SURF_VACUUM; print(SURF_VACUUM)')"
+while read -r -u 9 lat gsfe_type; do
+    [[ -z "${lat}" ]] && continue
+    workdir="${myroot}/y_surface/${lat}/${gsfe_type}/y_dir"
+    prepare_case; rc_case=$?
+    (( rc_case == 0 )) || { (( rc_case == 1 )) || record_fail "prepare ${workdir}" "$rc_case"; continue; }
+
+    for file in \
+        "${lmp_template_path}/gsfe_model.py" \
+        "${lmp_template_path}/surface_template.in" \
+        "${lmp_template_path}/surface.mod" \
+        "${lmp_template_path}/general_init.mod" \
+        "${lmp_template_path}/general_potential.mod" \
+        "${lmp_template_path}/general_output.mod" ;
+    do
+        if [[ "$file" == *.py ]]; then
+            mkdir -p slurm
+            cp "${file}" slurm/
+        else
+            cp "${file}" .
+        fi
+    done
+
+    sed -i "s/lat_template/${dict_latnum[$lat]}/g"        slurm/gsfe_model.py
+    sed -i "s|gsfe_type_template|${gsfe_type}|g"          slurm/gsfe_model.py
+    sed -i "s/aa_template/${dict_a0[$lat]}/g"             slurm/gsfe_model.py
+    sed -i "s/cc_template/${dict_c0[$lat]}/g"             slurm/gsfe_model.py
+    sed -i "s|surface_vacuum_template|${surf_vacuum}|g"   surface.mod
+    sed -i "s|pair_style_template|${pair_style}|g"        general_potential.mod
+    sed -i "s|pair_coeff_template|${pair_coeff}|g"        general_potential.mod
+    sed -i "s|python_path_template|${python_path}|g"      surface_template.in
+    printf '%b\n' "$mass_content" > general_mass.mod
+    echo "▶️  surface ${lat}/${gsfe_type} (vacuum ${surf_vacuum} Ang): $launcher lmp -in surface_template.in -screen none"
+    run_lmp_retry -in surface_template.in -screen none || record_fail "surface ${lat}/${gsfe_type} (lmp)" "$?"
+
+    cd $myroot
+done 9<<< "${table_surface}"
+
+echo "▶️  post: surface.py"
+${python_path} ${post_path}/surface.py; rc_surface=$?
+(( rc_surface == 0 )) || record_fail "post/surface.py" "${rc_surface}"
+
+############ seqsf ############
+# 堆垛序列层错：Basal I1 / I3(E) 与 FCC ESF / TB —— 单剪切生成不了，必须显式改层序。
+echo ""
+echo "================ 🧪 seqsf — 层序型层错 (I1 / I3 / ESF / TB)"
+table_seqsf="$(read_planar_table seqsf)" || record_fail "read_planar_table seqsf" "$?"
+while read -r -u 9 lat fault_type n_repeat; do
+    [[ -z "${lat}" ]] && continue
+    workdir="${myroot}/y_seqsf/${lat}/${fault_type}/y_dir"
+    prepare_case; rc_case=$?
+    (( rc_case == 0 )) || { (( rc_case == 1 )) || record_fail "prepare ${workdir}" "$rc_case"; continue; }
+
+    for file in \
+        "${lmp_template_path}/seqsf_model.py" \
+        "${lmp_template_path}/seqsf_template.in" \
+        "${lmp_template_path}/seqsf.mod" \
+        "${lmp_template_path}/general_init.mod" \
+        "${lmp_template_path}/general_potential.mod" \
+        "${lmp_template_path}/general_output.mod" ;
+    do
+        if [[ "$file" == *.py ]]; then
+            mkdir -p slurm
+            cp "${file}" slurm/
+        else
+            cp "${file}" .
+        fi
+    done
+
+    sed -i "s|seqsf_type_template|${fault_type}|g"        slurm/seqsf_model.py
+    sed -i "s|seqsf_n_template|${n_repeat}|g"             slurm/seqsf_model.py
+    sed -i "s/aa_template/${dict_a0[$lat]}/g"             slurm/seqsf_model.py
+    sed -i "s/cc_template/${dict_c0[$lat]}/g"             slurm/seqsf_model.py
+    sed -i "s|pair_style_template|${pair_style}|g"        general_potential.mod
+    sed -i "s|pair_coeff_template|${pair_coeff}|g"        general_potential.mod
+    sed -i "s|python_path_template|${python_path}|g"      seqsf_template.in
+    printf '%b\n' "$mass_content" > general_mass.mod
+    echo "▶️  seqsf ${lat}/${fault_type} (n = ${n_repeat}): $launcher lmp -in seqsf_template.in -screen none"
+    run_lmp_retry -in seqsf_template.in -screen none || record_fail "seqsf ${lat}/${fault_type} (lmp)" "$?"
+
+    cd $myroot
+done 9<<< "${table_seqsf}"
+
+echo "▶️  post: seqsf.py"
+${python_path} ${post_path}/seqsf.py; rc_seqsf=$?
+(( rc_seqsf == 0 )) || record_fail "post/seqsf.py" "${rc_seqsf}"
+
+fi   # if_planar
 
 ############ Summary ############
 echo ""
 echo "================ 📊 Summary  📁 ${myroot}"
-# 最关心的三个 post（python 自身已打印细节 emoji，这里只汇总通过/失败）
+# 各 post（python 自身已打印细节 emoji，这里只汇总通过/失败）；后三个仅在 -if_planar 时存在
 fmt_rc () { (( $1 == 0 )) && echo "✅ ok" || echo "❌ exit $1"; }
 echo "  post/stretch.py     : $(fmt_rc ${rc_stretch:-1})"
 echo "  post/Cij_energy.py  : $(fmt_rc ${rc_cij:-1})"
 echo "  post/gsfe.py        : $(fmt_rc ${rc_gsfe:-1})"
+if (( if_planar )); then
+    echo "  post/ssf.py         : $(fmt_rc ${rc_ssf:-1})"
+    echo "  post/surface.py     : $(fmt_rc ${rc_surface:-1})"
+    echo "  post/seqsf.py       : $(fmt_rc ${rc_seqsf:-1})"
+fi
 
 if (( ${#failed_steps[@]} > 0 )); then
     echo "❌ 失败步骤 (${#failed_steps[@]})："
@@ -262,5 +521,9 @@ if (( ${#failed_steps[@]} > 0 )); then
     echo "❌ Done with failures."
     exit 1
 fi
-echo "🎉 Done: stretch + Cij + gsfe 全部完成，三个 post 均正常。"
+if (( if_planar )); then
+    echo "🎉 Done: stretch + Cij + gsfe + ssf + surface + seqsf 全部完成，六个 post 均正常。"
+else
+    echo "🎉 Done: stretch + Cij + gsfe 全部完成，三个 post 均正常（平面缺陷三段未启用）。"
+fi
 exit 0

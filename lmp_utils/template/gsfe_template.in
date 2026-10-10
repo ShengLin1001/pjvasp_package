@@ -1,7 +1,6 @@
 # Using tilted-cell methods to calculate the stacking Fault Energy
 
 # For dump dir
-shell rmdir ../dump
 shell mkdir ../dump
 
 ############################ Full relax ############################
@@ -9,7 +8,7 @@ shell mkdir ../dump
 
 include general_init.mod
 
-shell python_path_template gsfe_model.py
+shell python_path_template slurm/gsfe_model.py
 read_data ./data.ini
 
 include general_potential.mod

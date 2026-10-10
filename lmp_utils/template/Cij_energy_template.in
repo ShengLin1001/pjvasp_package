@@ -1,14 +1,14 @@
 # Find equlibrium lattice constant of gold
 
 # For dump dir
-shell rmdir ../dump
 shell mkdir ../dump
 
 ############################ Full relax ############################
 # To get equlibrium lattice constant
 
 include general_init.mod
-include stretch_model.mod
+# 应变必须起于该势的实际平衡胞；重建理想 c/a 会扭曲 HCP 的弹性曲率。
+read_data equilibrium_path_template
 include general_potential.mod
 
 include stretch_constrained_relax.mod

@@ -1,7 +1,6 @@
 # Find equlibrium lattice constant of gold
 
 # For dump dir
-shell rmdir ../dump
 shell mkdir ../dump
 
 ############################ Full relax ############################
