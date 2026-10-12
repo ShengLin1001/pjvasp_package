@@ -74,5 +74,25 @@ class TestReadSsf(unittest.TestCase):
         self.assertTrue(all(np.isfinite(value) for value in dict_read.values()))
 
 
+class TestReadDftReferencePlanar(unittest.TestCase):
+    def test_planar_groups_keep_only_values(self):
+        import json
+        from mymetal.ml.n2p2.dataset import read_dft_reference
+        dict_json = {'meta': {'status': 'final', 'open_items': []},
+                     'surface': {'surf_rel_FCC_111': {'value': 973.7}},
+                     'ssf': {'ssf_FCC_111_ISF': {'value': 35.6},
+                             'ssf_HCP_prism1w_SF2': {'value': None, 'not_converged_reason': 'no_stable_run'}},
+                     'seqsf': {'ssf_FCC_111_TB': {'value': 14.88}}}
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / 'A5x_reference.json').write_text(json.dumps(dict_json), encoding='utf-8')
+            dict_ref = read_dft_reference(tmp, verbose=False)
+            dict_skip = read_dft_reference(tmp, planar_ref=None, verbose=False)
+        self.assertEqual(dict_ref['surface'], {'surf_rel_FCC_111': 973.7})
+        # 无稳定层错（value=None）不给参考线
+        self.assertEqual(dict_ref['ssf'], {'ssf_FCC_111_ISF': 35.6})
+        self.assertEqual(dict_ref['seqsf'], {'ssf_FCC_111_TB': 14.88})
+        self.assertNotIn('ssf', dict_skip)
+
+
 if __name__ == '__main__':
     unittest.main()
