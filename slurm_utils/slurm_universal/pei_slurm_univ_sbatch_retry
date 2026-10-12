@@ -3,12 +3,21 @@
 # pei_slurm_univ_sbatch_retry —— sbatch「提交」限流 + 失败重试包装器（轮询检测）。
 #
 # Usage:
-#   pei_slurm_univ_sbatch_retry [sbatch args...]
+#   pei_slurm_univ_sbatch_retry [-dedup_hit_fail] [sbatch args...]
 #
 # 例：
 #   pei_slurm_univ_sbatch_retry --wait sub_slurm_univ.sh
 #   pei_slurm_univ_sbatch_retry sub.544.sh
 #   pei_slurm_univ_sbatch_retry sub.*
+#   pei_slurm_univ_sbatch_retry -dedup_hit_fail sub_slurm_each_subdir_parent.sh
+#
+# -dedup_hit_fail（只认第一个参数，剥掉后不传给 sbatch）：首次提交前去重标签命中在队作业时
+#   按**失败**退出（exit 1），不补 "Submitted batch job"。给顶层父作业提交用
+#   （mymetal.slurm.submit.submit_parent_scripts）：那里命中意味着同一脚本的上一个父作业还在队、
+#   这次什么也没交 —— 2026-10-11 A5 就是这样被静默跳过的。worker 内的 `--wait sub_slurm_univ.sh`
+#   不带它，命中仍按 emit_reconciled_success 对账（补作业号 + 复刻 --wait）。已经提交过一次后
+#   （回执丢失核对）命中的是本次自己的作业，仍算成功。刻意不做成环境变量：sbatch 默认
+#   --export=ALL 会把它带进父作业，让 worker 的对账也变成「命中即失败」。
 #
 # 本脚本只管「提交」这一步，但管三件事：
 #   0) 去重（dedup）：**任何一次 sbatch 之前**（首次提交与每一次重投都算）先去 squeue 里查
@@ -80,6 +89,7 @@
 # Exit codes:
 #   提交成功：原样透传 sbatch（含 --wait 的作业结果）退出码。
 #   永久性错误 / 重试耗尽：返回最后一次 sbatch 的退出码。
+#   -dedup_hit_fail 且首次提交前去重命中：1（没有提交任何作业）。
 
 # ================ ⚙️  可调参数（环境变量覆盖，无需改本文件）
 : "${PEI_SBATCH_RETRY_MAX:=99}"        # 提交失败最多尝试次数（含第一次）
@@ -158,8 +168,14 @@ SBATCH_AMBIGUOUS_PATTERNS=(
 # to here ================
 
 # ====== check ======
+# 本包装器自己的开关只认第一个参数，剥掉后其余参数原样交给 sbatch（见文件头 -dedup_hit_fail）。
+if_dedup_hit_fail=0
+if [[ "${1:-}" == "-dedup_hit_fail" ]]; then
+    if_dedup_hit_fail=1
+    shift
+fi
 if (( $# < 1 )); then
-    echo "❌ ERROR: 用法: pei_slurm_univ_sbatch_retry [sbatch args...]" >&2
+    echo "❌ ERROR: 用法: pei_slurm_univ_sbatch_retry [-dedup_hit_fail] [sbatch args...]" >&2
     exit 1
 fi
 # sbatch 不在 PATH 就别进重试循环：否则每次都拿 127「command not found」空转 99×60s。
@@ -494,6 +510,13 @@ dedup_gate() {
         if [[ -n "$comment_tag" ]]; then
             if ids="$(find_jobs_by_tag "$comment_tag")"; then
                 if [[ -n "$ids" ]]; then
+                    # 顶层父作业提交：首次提交前就命中 = 上一个同脚本父作业还在队，本次一个作业都没交。
+                    # 报失败而不是补作业号，调用方才知道「没交成」。已提交过一次后的命中是本次自己的作业。
+                    if (( if_dedup_hit_fail == 1 && if_submitted_once == 0 )); then
+                        echo "❌ 去重标签命中在队作业 ${ids% }：同一脚本的上一个作业仍在队，本次没有提交任何新作业（-dedup_hit_fail）: sbatch $sbatch_args_display" >&2
+                        echo "   等它离开队列后再提交；确认命令: squeue -u \"${USER:-$(whoami)}\" -o '%.12i %.20j %.10T %Z'" >&2
+                        exit 1
+                    fi
                     echo "✅ 该脚本已有在队作业（标签命中，作业号: ${ids% }）。" >&2
                     emit_reconciled_success "${ids%% *}" "标签命中在队作业"
                 fi

@@ -5,7 +5,7 @@ import subprocess
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from mymetal.slurm.submit import (
     check_chunk_parent_layout,
@@ -91,7 +91,7 @@ class TestChunkParentLayout(unittest.TestCase):
 
     def test_sequential_script_is_written_as_utf8_with_unix_newlines(self):
         path_output = Path("/work/slurm/chunk001.sh")
-        with patch.object(Path, "write_text") as mock_write:
+        with patch("mymetal.slurm.submit.write_text_atomic") as mock_write:
             line = generate_slurm_script_sequential(
                 partition="debug",
                 nodes=1,
@@ -106,9 +106,8 @@ class TestChunkParentLayout(unittest.TestCase):
                 path_save=path_output,
             )
 
-        mock_write.assert_called_once_with(
-            line, encoding="utf-8", newline="\n"
-        )
+        # 写盘一律走原子替换（换 inode），由 write_text_atomic 负责 UTF-8 + "\n"。
+        mock_write.assert_called_once_with(path_output, line)
 
     def run_submit(
             self,
@@ -122,7 +121,15 @@ class TestChunkParentLayout(unittest.TestCase):
         with ExitStack() as stack:
             mock_chdir = stack.enter_context(patch("mymetal.slurm.submit.os.chdir"))
             mock_mkdir = stack.enter_context(patch.object(Path, "mkdir"))
-            mock_system = stack.enter_context(patch("mymetal.slurm.submit.os.system"))
+            mock_idle = stack.enter_context(
+                patch("mymetal.slurm.submit.check_slurm_dir_idle")
+            )
+            mock_sbatch = stack.enter_context(
+                patch(
+                    "mymetal.slurm.submit.subprocess.run",
+                    return_value=MagicMock(returncode=0),
+                )
+            )
             mock_get_lsubdir = stack.enter_context(
                 patch("mymetal.slurm.submit.get_lsubdir", return_value=lsubdir)
             )
@@ -157,7 +164,8 @@ class TestChunkParentLayout(unittest.TestCase):
         return {
             "chdir": mock_chdir,
             "mkdir": mock_mkdir,
-            "system": mock_system,
+            "idle": mock_idle,
+            "sbatch": mock_sbatch,
             "get_lsubdir": mock_get_lsubdir,
             "base": mock_base,
             "worker": mock_worker,
@@ -179,7 +187,14 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["base"].call_count, 3)
         self.assertEqual(dict_mock["worker"].call_count, 3)
         self.assertEqual(dict_mock["shared"].call_count, 1)
-        self.assertEqual(dict_mock["system"].call_count, 1)
+        self.assertEqual(dict_mock["sbatch"].call_count, 1)
+        # 写脚本前先查 slurm/ 在队作业；父作业提交带 -dedup_hit_fail，从 slurm/ 提交。
+        dict_mock["idle"].assert_called_once_with(Path("/work/slurm"))
+        self.assertEqual(
+            dict_mock["sbatch"].call_args.args[0][:2],
+            ["pei_slurm_univ_sbatch_retry", "-dedup_hit_fail"],
+        )
+        self.assertEqual(dict_mock["sbatch"].call_args.kwargs["cwd"], "/work/slurm")
 
         # 子作业保留用户资源；只负责 sbatch --wait 的 chunk worker 修正为 1/1。
         self.assertEqual(dict_mock["base"].call_args_list[0].args[1:3], (2, 16))
@@ -192,7 +207,7 @@ class TestChunkParentLayout(unittest.TestCase):
 
         self.assertEqual(dict_mock["worker"].call_count, 3)
         self.assertEqual(dict_mock["shared"].call_count, 0)
-        self.assertEqual(dict_mock["system"].call_count, 3)
+        self.assertEqual(dict_mock["sbatch"].call_count, 3)
 
     def test_single_alloc_chunks_remain_separate_parent_jobs(self):
         dict_mock = self.run_submit("single_alloc", chunks=3)
@@ -200,7 +215,7 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["base"].call_count, 0)
         self.assertEqual(dict_mock["worker"].call_count, 3)
         self.assertEqual(dict_mock["shared"].call_count, 0)
-        self.assertEqual(dict_mock["system"].call_count, 3)
+        self.assertEqual(dict_mock["sbatch"].call_count, 3)
         self.assertEqual(dict_mock["worker"].call_args_list[0].args[1:3], (2, 16))
 
     def test_parallel_submits_one_single_core_submitter_job(self):
@@ -211,7 +226,7 @@ class TestChunkParentLayout(unittest.TestCase):
         self.assertEqual(dict_mock["base"].call_count, 3)
         self.assertEqual(dict_mock["worker"].call_count, 1)
         self.assertEqual(dict_mock["shared"].call_count, 0)
-        self.assertEqual(dict_mock["system"].call_count, 1)
+        self.assertEqual(dict_mock["sbatch"].call_count, 1)
         # 子作业保留用户资源；只负责 sbatch 的提交作业修正为 1/1。
         self.assertEqual(dict_mock["base"].call_args_list[0].args[1:3], (2, 16))
         self.assertEqual(dict_mock["worker"].call_args_list[0].args[1:3], (1, 1))
@@ -225,7 +240,7 @@ class TestChunkParentLayout(unittest.TestCase):
         dict_mock = self.run_submit("parallel", chunks=3)
 
         self.assertEqual(dict_mock["worker"].call_count, 1)
-        self.assertEqual(dict_mock["system"].call_count, 1)
+        self.assertEqual(dict_mock["sbatch"].call_count, 1)
         self.assertEqual(len(dict_mock["worker"].call_args.kwargs["group"]), 3)
 
     def test_chunk_scripts_stay_in_path_root_slurm_directory(self):

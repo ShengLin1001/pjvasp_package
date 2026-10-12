@@ -676,7 +676,7 @@ class PeiN2p2MD(PeiN2p2):
         if if_sbatch:
             # pei_slurm_univ_submit 不回传作业号；用提交前后的 squeue 差集捕获新增作业。
             before = self._snapshot_jobids()
-            os.system(f'pei_slurm_univ_submit.py {cli_args}')
+            self._run_submit_cli(cli_args, label='submit_md')
             after = self._snapshot_jobids()
             self.last_jobids = sorted(after - before)
             print(f"  submit_md observed {len(self.last_jobids)} new Slurm job(s): {self.last_jobids}")
@@ -1029,7 +1029,7 @@ class PeiN2p2MD(PeiN2p2):
         self.last_jobids = []
         if if_sbatch:
             before = self._snapshot_jobids()
-            os.system(f'pei_slurm_univ_submit.py {cli_args}')
+            self._run_submit_cli(cli_args, label='submit_compare')
             after = self._snapshot_jobids()
             self.last_jobids = sorted(after - before)
             print(f"  submit_compare observed {len(self.last_jobids)} new Slurm job(s): "
@@ -1610,7 +1610,7 @@ class PeiN2p2MD(PeiN2p2):
         self.last_jobids = []
         if if_sbatch:
             before = self._snapshot_jobids()
-            os.system(f'pei_slurm_univ_submit.py {cli_args}')
+            self._run_submit_cli(cli_args, label='prepare_dft')
             after = self._snapshot_jobids()
             self.last_jobids = sorted(after - before)
             print(f"  prepare_dft observed {len(self.last_jobids)} new Slurm job(s): "

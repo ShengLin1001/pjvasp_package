@@ -5,19 +5,28 @@ Functions:
     generate_comment_tag: Mint the unique --comment de-duplication tag of one script.
     stamp_comment_tag: Write that tag into an existing Slurm script.
     read_comment_tag: Read back the tag of an existing script (regenerating keeps it).
+    write_text_atomic: Replace a text file via a same-directory temp file + os.replace.
+    wrap_script_body: Wrap a script body so bash parses all of it before running it.
+    get_queue_jobs: Snapshot the user's queued jobs (squeue, polled retry).
+    check_slurm_dir_idle: Refuse to touch a slurm/ dir that still has queued jobs.
     generate_slurm_script_base: Generate one calculation job script.
     generate_slurm_script_sequential: Generate one chunk worker (submitter or runner).
     generate_slurm_script_shared_parent: Generate one parent for chunk workers.
     get_y_dir_lsubdir: Recursively discover jobs below every y_dir directory.
     split_chunks: Split calculation directories into balanced scheduling lanes.
+    submit_parent_scripts: sbatch the parent/worker scripts; a dedup hit is a failure.
     pei_slurm_univ_submit: Orchestrate script generation and optional submission.
 """
 
+import getpass
 import os
 import re
 import secrets
 import shlex
+import stat
+import subprocess
 import textwrap
+import time
 from pathlib import Path
 
 import numpy as np
@@ -42,6 +51,27 @@ SBATCH_RETRY_WRAPPER = "pei_slurm_univ_sbatch_retry"
 COMMENT_TAG_DIGITS = 100
 CHUNK_PARENT_LAYOUTS = ["auto", "shared", "per_chunk"]
 WALL_TIME_PATTERN = re.compile(r"^[0-9]+(?:-[0-9]+)?(?::[0-9]+){0,2}$")
+
+# ================ 在跑脚本保护（2026-10-11 F3：提交器就地改写正在执行的 chunk 脚本）
+# shared 父作业用 `bash <chunk 脚本>` 从磁盘逐段读取执行 worker。旧实现在同一 slurm/ 里重跑提交器时
+# 先截断重写全部脚本、再由 sbatch_retry 发现同标签父作业在队而静默跳过：在跑的 worker 循环结束后
+# 从旧字节偏移读到新内容，报语法错误（A51-2/A52-2/A51-3/A52-3 实测）。四道防线：
+#   A 写任何脚本之前查 squeue，本 slurm/ 还有作业（父 / chunk）在队就拒绝，dry run 也一样；
+#   B 脚本一律「同目录临时文件 + os.replace」换 inode，在跑的 bash 继续读旧 inode；
+#   C 顶层父作业提交命中去重标签按失败处理（sbatch_retry -dedup_hit_fail），不再静默跳过；
+#   E worker / parent 主体包进 `{ ... }; exit`，bash 先整体解析再执行。
+# 不用 flock：/public3 是 Lustre localflock，锁只在本节点有效。
+# squeue 查询失败按 99 次 × 10s 轮询重试（环境变量可调）；最终失败同样拒绝，绝不把空输出当队列空。
+SQUEUE_RETRY_MAX_ENV = "PEI_SUBMIT_SQUEUE_RETRY_MAX"
+SQUEUE_RETRY_SLEEP_ENV = "PEI_SUBMIT_SQUEUE_RETRY_SLEEP"
+SQUEUE_RETRY_MAX_DEFAULT = 99
+SQUEUE_RETRY_SLEEP_DEFAULT = 10
+SQUEUE_TIMEOUT = 60
+# 与 slurm/ 同 WorkDir 但不执行本目录脚本的作业：监测作业常从 <path_root>/slurm 提交。
+LSKIP_QUEUE_JOB_NAME = ["sub.monitor.sh"]
+# sbatch_retry 的开关：只认第一个参数，剥掉后再交给 sbatch，不经环境变量 —— 环境变量会被
+# sbatch（默认 --export=ALL）带进父作业，让 worker 的 --wait 对账也变成「命中即失败」。
+DEDUP_HIT_FAIL_FLAG = "-dedup_hit_fail"
 
 # generate_script
 
@@ -128,13 +158,170 @@ def stamp_comment_tag(path_script: Path, tag: str = None) -> str:
         index_last = 0 if (lline and lline[0].startswith("#!")) else -1
     lline.insert(index_last + 1, "#SBATCH --comment=" + tag)
 
-    path_script.write_text("\n".join(lline) + "\n", encoding="utf-8", newline="\n")
+    # 被盖标签的脚本可能正被某个作业执行（如续算重投），同样不能原地截断。
+    write_text_atomic(path_script, "\n".join(lline) + "\n")
     return tag
 
 
+def write_text_atomic(path_save: Path, content: str) -> None:
+    """Replace a text file through a same-directory temp file and ``os.replace``.
+
+    ``Path.write_text`` truncates and rewrites the existing inode. A bash process that is
+    executing that file reads it piecewise from a byte offset, so after the rewrite it reads
+    the *new* content from the *old* offset and dies with a syntax error (or, worse, runs a
+    misaligned fragment). Renaming a fresh file over the path gives it a new inode; running
+    bash keeps its open descriptor on the old inode and finishes the old script intact.
+
+    The existing file's permission bits are carried over (scripts may be executable);
+    a new file gets ``0o666 & ~umask`` like ``write_text``. A symlink at ``path_save`` is
+    replaced by a regular file, not followed.
+
+    Args:
+        path_save: Target path.
+        content: Text to write as UTF-8 with ``\\n`` newlines.
+    """
+    path_save = Path(path_save)
+    mode_old = stat.S_IMODE(path_save.stat().st_mode) if path_save.exists() else None
+    # 临时文件必须与目标同目录：os.replace 只在同一文件系统内是原子的 rename。
+    path_tmp = path_save.with_name(
+        "." + path_save.name + "." + str(os.getpid()) + "." + secrets.token_hex(4) + ".tmp"
+    )
+    fd = os.open(path_tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(content)
+        if mode_old is not None:
+            os.chmod(path_tmp, mode_old)
+        os.replace(path_tmp, path_save)
+    except BaseException:
+        # 只清理本函数刚建的这一个临时文件，绝不碰目标文件。
+        if path_tmp.exists():
+            path_tmp.unlink()
+        raise
+
+
 def _write_slurm_script(path_save: Path, content: str) -> None:
-    """Write a generated Bash script as deterministic UTF-8 text."""
-    Path(path_save).write_text(content, encoding="utf-8", newline="\n")
+    """Write a generated Bash script as deterministic UTF-8 text (atomic replace)."""
+    write_text_atomic(path_save, content)
+
+
+def wrap_script_body(body: str) -> str:
+    """Wrap a generated script body in ``{ ... }; exit`` (defence in depth, F3-E).
+
+    bash parses a whole compound command -- and the rest of the line it ends on -- before
+    executing any of it, so the entire body plus the trailing ``exit`` is in memory before
+    the first command runs. Even if the file on disk were rewritten mid-run, bash would never
+    go back to it for more input.
+
+    Args:
+        body: Script body placed after the ``#SBATCH`` / module header.
+
+    Returns:
+        str: The wrapped body.
+    """
+    return (
+        "# 主体包在 { } 里并在同一行 exit：bash 先把整段读进内存再执行，运行中脚本被改写也不会\n"
+        "# 从旧字节偏移读到新内容（2026-10-11 F3）。\n"
+        "{\n" + body.rstrip("\n") + "\n}; exit\n"
+    )
+
+
+def get_queue_jobs(user: str = None, retry_max: int = None, retry_sleep: int = None) -> list[tuple[str, str, str]]:
+    """Snapshot the user's queued jobs as ``(jobid, name, workdir)`` (any state squeue lists).
+
+    squeue occasionally fails (busy slurmctld / timeout) with an empty stdout; an empty
+    stdout is trusted only when ``returncode == 0``. Failures are polled ``retry_max`` times
+    ``retry_sleep`` s apart (defaults 99 × 10 s, overridable through
+    ``PEI_SUBMIT_SQUEUE_RETRY_MAX`` / ``PEI_SUBMIT_SQUEUE_RETRY_SLEEP``). A missing ``squeue``
+    is permanent and fails at once.
+
+    Args:
+        user: Slurm user; None -> ``$USER`` or :func:`getpass.getuser`.
+        retry_max: Attempts including the first; None -> env / default.
+        retry_sleep: Seconds between attempts; None -> env / default.
+
+    Returns:
+        list[tuple[str, str, str]]: One tuple per queued job.
+
+    Raises:
+        SystemExit: squeue missing, or still failing after ``retry_max`` attempts.
+    """
+    user = user or os.environ.get("USER") or getpass.getuser()
+    if retry_max is None:
+        retry_max = os.environ.get(SQUEUE_RETRY_MAX_ENV, SQUEUE_RETRY_MAX_DEFAULT)
+    retry_max = check_positive_int(retry_max, SQUEUE_RETRY_MAX_ENV)
+    if retry_sleep is None:
+        retry_sleep = os.environ.get(SQUEUE_RETRY_SLEEP_ENV, SQUEUE_RETRY_SLEEP_DEFAULT)
+    if not str(retry_sleep).isdigit():
+        fail(SQUEUE_RETRY_SLEEP_ENV + " must be a non-negative integer: " + str(retry_sleep))
+    retry_sleep = int(retry_sleep)
+
+    message = ""
+    for attempt in range(1, retry_max + 1):
+        try:
+            result = subprocess.run(["squeue", "-u", user, "-h", "-o", "%i|%j|%Z"],
+                                    capture_output=True, text=True, timeout=SQUEUE_TIMEOUT)
+        except FileNotFoundError:
+            fail("squeue not found on PATH; cannot confirm that no job is still running "
+                 "the scripts about to be rewritten")
+        except subprocess.TimeoutExpired:
+            message = "timeout after " + str(SQUEUE_TIMEOUT) + "s"
+        else:
+            if result.returncode == 0:
+                ljob = []
+                for line in result.stdout.splitlines():
+                    if not line.strip():
+                        continue
+                    jobid, name, workdir = (line.split("|", 2) + ["", ""])[:3]
+                    ljob.append((jobid.strip(), name.strip(), workdir.strip()))
+                return ljob
+            message = "rc=" + str(result.returncode) + " " + result.stderr.strip()
+        warn("[squeue " + str(attempt) + "/" + str(retry_max) + "] query failed (" + message
+             + "); retry in " + str(retry_sleep) + "s")
+        if attempt < retry_max:
+            time.sleep(retry_sleep)
+    fail("squeue failed " + str(retry_max) + " times (" + message + "); refusing to touch "
+         "the job scripts without knowing whether a job is still executing them")
+
+
+def check_slurm_dir_idle(slurm_dir: Path, lskip_job_name: list = LSKIP_QUEUE_JOB_NAME,
+                         ljob: list = None) -> None:
+    """Refuse to (re)generate scripts in ``slurm_dir`` while any job submitted from it is queued.
+
+    Parent and chunk jobs are always sbatch'ed with ``cwd = slurm_dir``, so their Slurm
+    WorkDir equals it. Such a job may be a shared parent whose chunk workers are bash
+    processes reading ``slurm_dir/sub_slurm_*_chunk*.sh`` from disk; regenerating there is
+    exactly what broke the 2026-10-11 A5 workers. It also means a resubmission would only
+    hit the de-duplication tag of the queued parent. Applies to dry runs as well.
+
+    Args:
+        slurm_dir: The ``<path_root>/slurm`` directory about to be written.
+        lskip_job_name: Job names that share the WorkDir but run no script from it
+            (the monitor job).
+        ljob: Pre-fetched :func:`get_queue_jobs` result; None -> query squeue now.
+
+    Raises:
+        SystemExit: A queued job runs from ``slurm_dir``, or squeue cannot be queried.
+    """
+    slurm_dir = Path(slurm_dir)
+    set_dir = {str(slurm_dir).rstrip("/")}
+    try:
+        set_dir.add(str(slurm_dir.resolve()).rstrip("/"))
+    except OSError:
+        pass
+    if ljob is None:
+        ljob = get_queue_jobs()
+
+    lbusy = [(jobid, name, workdir) for jobid, name, workdir in ljob
+             if workdir.rstrip("/") in set_dir and name not in lskip_job_name]
+    if lbusy:
+        print("❌ 以下作业仍在队，且从 " + str(slurm_dir) + " 提交（其 chunk worker 正从这里读脚本）:")
+        for jobid, name, workdir in lbusy:
+            print("  - " + jobid + "  " + name + "  " + workdir)
+        fail("refusing to rewrite job scripts under " + str(slurm_dir) + " while "
+             + str(len(lbusy)) + " job(s) submitted from it are still queued (dry run included); "
+             "wait until they leave the queue (squeue -u $USER -o '%i %j %T %Z')")
+    print("✅ no queued job runs from " + str(slurm_dir) + " (checked squeue before writing scripts)")
 
 
 def check_wall_time(wall_time: str = None) -> str | None:
@@ -361,7 +548,8 @@ def generate_slurm_script_sequential(partition: str, nodes: int, ncores: int, mo
         "# 该脚本由程序自动生成，每次运行都会被覆盖。\n"
     )
     line_loop = generate_loop(group, mode, line_launcher)
-    line = line_header + "\n\n" + line_myheader + "\n\n" + line_loop
+    # shared 父作业以 `bash <本脚本>` 从磁盘执行它：主体整体包起来（F3-E）。
+    line = line_header + "\n\n" + line_myheader + "\n\n" + wrap_script_body(line_loop)
 
     if if_output:
         _write_slurm_script(path_save, line)
@@ -487,7 +675,8 @@ def generate_slurm_script_shared_parent(
         'echo "🎉 Done: 所有 chunk worker 均已完成！"\n'
         "exit 0\n"
     )
-    line = line_header + "\n\n" + line_myheader + "\n\n" + line_worker_array + "\n" + line_parent
+    line = (line_header + "\n\n" + line_myheader + "\n\n"
+            + wrap_script_body(line_worker_array + "\n" + line_parent))
 
     if if_output:
         _write_slurm_script(path_save, line)
@@ -801,6 +990,55 @@ def check_chunk_parent_layout(
     return chunk_parent_layout
 
 
+def submit_parent_scripts(lpath_submit: list[Path], slurm_dir: Path) -> list[Path]:
+    """sbatch every parent/worker script from ``slurm_dir`` through the retry wrapper.
+
+    Each call goes through ``pei_slurm_univ_sbatch_retry -dedup_hit_fail``: a de-duplication
+    tag that already matches a queued job is a **failure** here, not a silent "already
+    submitted" (F3-C) -- at the top level it means a previous parent of the same script is
+    still queued, i.e. nothing new was submitted. Inside chunk workers the wrapper keeps its
+    reconcile semantics (no flag there). All scripts are attempted before failing, so one
+    rejected parent does not hide the outcome of the others.
+
+    Args:
+        lpath_submit: Absolute script paths to submit.
+        slurm_dir: Directory to submit from (becomes the jobs' WorkDir).
+
+    Returns:
+        list[Path]: Scripts whose submission succeeded.
+
+    Raises:
+        SystemExit: Any submission failed (listed in the summary).
+    """
+    lok, lfailed = [], []
+    for path_submit in lpath_submit:
+        print("")
+        print("================ ▶️ 提交父作业")
+        # 先 flush：子进程直接写同一 fd，否则重定向到文件时本进程的缓冲输出会排到它后面。
+        print("  script: " + str(path_submit), flush=True)
+        # 父作业提交同样经 pei_slurm_univ_sbatch_retry：撞上在队上限时先等队列，
+        # 提交抖动时轮询重投，避免整批任务因为一次抖动直接漏投。输出直接透传到终端。
+        try:
+            result = subprocess.run([SBATCH_RETRY_WRAPPER, DEDUP_HIT_FAIL_FLAG, str(path_submit)],
+                                    cwd=str(slurm_dir), check=False)
+            returncode = result.returncode
+        except FileNotFoundError:
+            print("❌ " + SBATCH_RETRY_WRAPPER + " not found on PATH")
+            returncode = 127
+        if returncode == 0:
+            lok.append(path_submit)
+        else:
+            print("❌ 提交失败 (exit " + str(returncode) + "): " + str(path_submit))
+            lfailed.append(path_submit)
+    print("")
+    print("================ 📊 父作业提交: " + str(len(lok)) + " 成功, " + str(len(lfailed)) + " 失败")
+    if lfailed:
+        for path_submit in lfailed:
+            print("  - ❌ " + str(path_submit))
+        fail(str(len(lfailed)) + " parent script(s) not submitted (see the sbatch_retry messages above)")
+    return lok
+
+
 # main body
 def pei_slurm_univ_submit(
                     path_root: Path = None,
@@ -926,6 +1164,11 @@ def pei_slurm_univ_submit(
     os.chdir(path_root)
     print(f"path_root: {path_root}")
 
+    # 写任何脚本之前（dry run 也一样）先确认本 slurm/ 没有作业在队（F3-A）：在跑的 shared 父作业
+    # 正从这里逐段读 chunk 脚本，重写会让它读错位；而且重投也只会撞上在队父作业的去重标签。
+    slurm_dir = path_root / "slurm"
+    check_slurm_dir_idle(slurm_dir)
+
     # 把当前路径全部转化为绝对路径
     dir_root = path_root / dir_root
 
@@ -962,8 +1205,7 @@ def pei_slurm_univ_submit(
     # 编排脚本(chunk)及其 slurm-<jobid>.out 单独收进 path_root/slurm/ —— 否则会
     # 直接堆在 path_root 里，与后处理产物(y_post_*.txt 等)混在一起。
     # 从 slurm_dir 里 sbatch，默认的 slurm-*.out 也就落在这里；子作业(base script)在各自
-    # subdir 内提交，其输出仍留在对应 subdir，不受影响。
-    slurm_dir = path_root / "slurm"
+    # subdir 内提交，其输出仍留在对应 subdir，不受影响。slurm_dir 已在写脚本前查过在队作业。
     slurm_dir.mkdir(parents=True, exist_ok=True)
     # 始终保留历史 chunk 文件名：既能被 shared parent 当普通 Bash worker 调用，也能在
     # per_chunk 兼容模式或故障恢复时单独 sbatch。只把本次生成的明确列表交给 shared
@@ -999,18 +1241,10 @@ def pei_slurm_univ_submit(
         lpath_submit = [path_parent.resolve()]
 
     if if_sbatch:
-        for path_submit in lpath_submit:
-            print("")
-            print("================ ▶️ 提交父作业")
-            print("  mode: " + mode)
-            print("  chunk_parent_layout: " + chunk_parent_layout)
-            print("  script: " + str(path_submit))
-            # 父作业提交同样经 pei_slurm_univ_sbatch_retry：撞上在队上限时先等队列，
-            # 提交抖动时轮询重投，避免整批任务因为一次抖动直接漏投。
-            os.system(
-                "cd " + shlex.quote(str(slurm_dir))
-                + " && " + SBATCH_RETRY_WRAPPER + " " + shlex.quote(str(path_submit))
-            )
+        print("")
+        print("  mode: " + mode)
+        print("  chunk_parent_layout: " + chunk_parent_layout)
+        submit_parent_scripts(lpath_submit, slurm_dir)
 
     ################################### Main control flow to here
     return None

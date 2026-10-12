@@ -2023,6 +2023,29 @@ class PeiN2p2:
                 parts.append(f'-{key} {shlex.quote(str(value))}')
         return ' '.join(parts)
 
+    @staticmethod
+    def _run_submit_cli(cli_args: str, label: str = 'submit') -> None:
+        """运行 ``pei_slurm_univ_submit.py``，非 0 退出即抛错（dry run 也一样）。
+
+        引擎会在这些情况下拒绝并以非 0 退出：本 ``slurm/`` 还有作业在队（重写脚本会让在跑的
+        chunk worker 读错位，2026-10-11 F3）、父作业去重命中、参数非法等。以前这里只
+        ``os.system`` 不看返回值，拒绝后调用方照样打印「dry run only / observed 0 job(s)」，
+        读起来像成功；现在统一在这里停下，原因见上方引擎自己的 ❌ 输出。
+
+        Args:
+            cli_args: :meth:`_dict_to_cli_args` 生成的参数串。
+            label: 报错里标明是哪一步调用的。
+
+        Raises:
+            RuntimeError: 引擎非 0 退出（或被信号终止）。
+        """
+        status = os.system(f'pei_slurm_univ_submit.py {cli_args}')
+        code = os.waitstatus_to_exitcode(status) if status != 0 else 0
+        if code != 0:
+            raise RuntimeError(f"❌ {label}: pei_slurm_univ_submit.py exited with {code}; nothing "
+                               f"(re)submitted by this call -- see the ❌ lines printed above "
+                               f"(e.g. a job from the same slurm/ dir is still queued).")
+
 
     # y_n2p2_train/y_post
     @staticmethod
@@ -2310,7 +2333,7 @@ class PeiN2p2:
             # squeue 差集捕获本次新增 Slurm 作业；只要 shared 父作业仍在等待，它就能
             # 覆盖后续尚未提交的 chunk 子作业尾部。
             before = self._snapshot_jobids()
-            os.system(f'pei_slurm_univ_submit.py {cli_args}')
+            self._run_submit_cli(cli_args, label='post_properties')
             after = self._snapshot_jobids()
             self.last_jobids = sorted(after - before)
             print(f"  post_properties observed {len(self.last_jobids)} new Slurm job(s): {self.last_jobids}")
