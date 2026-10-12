@@ -16,6 +16,7 @@ LAMMPS 侧的约定（lmp_utils/template 的 ``ssf.mod`` / ``surface.mod`` / ``s
       原子位移 ``u = X - x``。
 
 Functions:
+    - get_layer_gap_change: 弛豫前后层间距变化中位数，识别整胞相变。
     - post_ssf: 稳定层错能后处理（tilted-cell 与堆垛序列共用）。
     - post_surface: 表面能后处理（未弛豫 + 弛豫）。
     - read_ssf: 读回 post_ssf 写出的 txt。
@@ -134,6 +135,39 @@ def get_displacement(atoms_ideal=None, atoms_relaxed=None) -> np.ndarray:
     return dpos - dpos.mean(axis=0)           # 扣掉刚体平移零模
 
 
+def get_layer_gap_change(atoms_ideal=None, atoms_relaxed=None) -> float:
+    """弛豫前后逐个层间距变化量的中位数（Å），用来识别整胞相变。
+
+    层序按弛豫前构型排，原子按编号配对，而不是两边各自排序：末态 z 折回会改变窄/宽层间距
+    的排列相位，各自排序会把相位差误当成层间距变化。a1/a2 锁在 xy 面内，所以层间距直接用
+    a3 方向的分数坐标乘 c_z（tilted cell 的 a3 带面内分量也成立）。
+
+    正常层错只在层错面附近弛豫，绝大多数层间距不动，中位数近 0；整胞相变（如 HCP prism1w SF2
+    的 20 个波纹层全部压平成 10 个平层）每层都变，中位数就是变化幅度本身。
+
+    Args:
+        atoms_ideal: 弛豫前的理想层错构型。
+        atoms_relaxed: 弛豫后的构型（原子编号与 atoms_ideal 一一对应）。
+
+    Returns:
+        float: 层间距变化量绝对值的中位数（Å）。
+
+    Raises:
+        SystemExit: 两个构型原子数不一致。
+    """
+    if len(atoms_ideal) != len(atoms_relaxed):
+        fail('ideal/relaxed atom count mismatch: %d vs %d'
+             % (len(atoms_ideal), len(atoms_relaxed)))
+
+    s0 = atoms_ideal.get_scaled_positions(wrap=True)[:, 2]
+    s1 = atoms_relaxed.get_scaled_positions(wrap=False)[:, 2]
+    order = np.argsort(s0)
+    gap0 = np.diff(np.append(s0[order], s0[order[0]] + 1.0))
+    gap1 = np.diff(np.append(s1[order], s1[order[0]] + 1.0))
+    gap1 -= np.round(gap1 - gap0)              # 末态个别原子跨周期边界折回，差整数个周期
+    return float(np.median(np.abs(gap1 * atoms_relaxed.cell[2, 2] - gap0 * atoms_ideal.cell[2, 2])))
+
+
 ### main —— 两个对外后处理入口 ###
 
 def post_ssf(post_data_path: Union[str, Path] = None,
@@ -144,6 +178,7 @@ def post_ssf(post_data_path: Union[str, Path] = None,
              label: str = 'SSF',
              dt_tol: float = 0.25,
              gamma_tol: float = 1.0,
+             gap_tol: float = 0.2,
              save_txt_path: Union[str, Path] = './y_post_ssf.txt') -> Dict[str, Any]:
     """稳定层错能后处理（tilted-cell 单点 与 堆垛序列层错 共用）。
 
@@ -165,11 +200,16 @@ def post_ssf(post_data_path: Union[str, Path] = None,
         dt_tol: 层错矢量相对初猜的面内漂移容差（以 a1/a2 为单位）。超过就判定构型
             已经滑出目标层错的势阱（通常是滑回完整晶格），见 ``stable`` 字段。
         gamma_tol: 判定「其实没有层错」的能量阈值（mJ/m²）。
+        gap_tol: 整胞相变判据（Å）：弛豫前后层间距变化量的中位数超过它，就判定整个胞变成了
+            另一种结构，gamma 随原子数增长、不是层错能。0.2 取自 DFT（A51-2，2026-10-11）：
+            正常层错 ≤ 0.063，prism1w SF2 为 0.80；stage2 六势 LAMMPS 正常层错 ≤ 0.03。
+            没有 ideal 构型时不判。
         save_txt_path: 输出 txt 路径。
 
     Returns:
         Dict[str, Any]: ``gamma``、``Asf``、``E0bulk``、``t1``/``t2``、``dt1``/``dt2``、
-        ``da33``、``umax``、``uabs``（逐原子位移模长）、``stable``（bool）。
+        ``da33``、``umax``、``uabs``（逐原子位移模长）、``gap_change``（Å，无 ideal 时为 nan）、
+        ``transformed``（整胞相变，bool）、``stable``（bool，整胞相变也算不稳定）。
 
     Raises:
         SystemExit: 帧数不对、面内基矢被弛豫、或原子数/元素不一致。
@@ -196,6 +236,7 @@ def post_ssf(post_data_path: Union[str, Path] = None,
     # 相对理想倾斜位置的面内弛豫量 —— 这正是「标准法」与「全弛豫法」的差别所在
     dt1 = dt2 = 0.0
     uabs = np.zeros(len(atoms_sf))
+    gap_change = float('nan')
     if ideal_path is not None and Path(ideal_path).is_file():
         atoms_ideal = read(str(ideal_path), format=latoms_format, index='-1')
         da3_ideal = (np.array(atoms_ideal.cell[2, :], dtype=float)
@@ -203,16 +244,25 @@ def post_ssf(post_data_path: Union[str, Path] = None,
         dt1 = t1 - da3_ideal[0] / a11
         dt2 = t2 - da3_ideal[1] / a22
         uabs = np.linalg.norm(get_displacement(atoms_ideal, atoms_sf), axis=1)
+        gap_change = get_layer_gap_change(atoms_ideal, atoms_sf)
     else:
-        warn('no ideal config at %s, in-plane relaxation dt1/dt2 and u are reported as 0'
-             % ideal_path)
+        warn('no ideal config at %s, in-plane relaxation dt1/dt2 and u are reported as 0, '
+             'whole-cell transformation not checked' % ideal_path)
 
-    # 这个层错到底存不存在。两种「不存在」都会给出 gamma ~ 0，但成因不同，必须报出来
+    # 这个层错到底存不存在。三种「不存在」成因不同（前两种给出 gamma ~ 0），必须报出来
     # 而不是当成一个层错能：
     #   - 面内滑走（|dt| > dt_tol）：初猜位置不是势阱，弛豫把它推回完整晶格（HCP 窄面 Pyr. I 常见）；
     #   - 停在原地但 gamma ~ 0：该位置本身就等价于一个完整的点阵平移（如 FCC {100} 的 (1/2,1/2)）。
-    stable = (abs(dt1) <= dt_tol) and (abs(dt2) <= dt_tol) and (abs(gamma) > gamma_tol)
-    if not stable:
+    #   - 整胞相变（gap_change > gap_tol）：dt 可以很小、gamma 也不小，但每一层都变了，
+    #     gamma 是两种结构的能量差、随原子数增长（DFT 与 LAMMPS 的 prism1w SF2 都如此）。
+    transformed = bool(gap_change > gap_tol)          # nan（无 ideal）比较为 False，即不判
+    stable = (abs(dt1) <= dt_tol) and (abs(dt2) <= dt_tol) and (abs(gamma) > gamma_tol) \
+        and not transformed
+    if transformed:
+        warn('%s: whole cell transformed (median layer-gap change %.4f Ang > %.2f) — '
+             'gamma = %.4f mJ/m^2 is an energy difference between two structures, '
+             'not a fault energy' % (label, gap_change, gap_tol, gamma))
+    elif not stable:
         warn('%s: no stable stacking fault here '
              '(gamma = %.4f mJ/m^2, dt = %.4f, %.4f) — the relaxed cell is the perfect '
              'lattice, do not read gamma as a fault energy' % (label, gamma, dt1, dt2))
@@ -221,6 +271,7 @@ def post_ssf(post_data_path: Union[str, Path] = None,
                 'E0bulk': E0bulk, 'dE': dE, 'nfault': nfault,
                 't1': t1, 't2': t2, 'dt1': dt1, 'dt2': dt2,
                 'da33': da33, 'umax': float(uabs.max()), 'uabs': uabs,
+                'gap_change': gap_change, 'transformed': transformed,
                 'stable': stable}
     write_ssf_output(dict_out, label=label, save_txt_path=save_txt_path)
     return dict_out
@@ -308,6 +359,8 @@ def write_ssf_output(dict_out: dict = None, label: str = 'SSF',
         f.write('%20s: %16.8f \n' % ('gamma_ssf (mJ/m^2)', dict_out['gamma']))
         f.write('%20s: %16.8f \n' % ('dE (eV)', dict_out['dE']))
         f.write('%20s: %16s \n' % ('stable', 'yes' if dict_out['stable'] else 'no'))
+        f.write('%20s: %16s \n' % ('transformed', 'yes' if dict_out['transformed'] else 'no'))
+        f.write('%20s: %16.8f \n' % ('gap_change (Ang)', dict_out['gap_change']))
 
         # t1/t2 是弛豫后的真实层错矢量；dt1/dt2 是它相对理想倾斜位置的面内弛豫，
         # 非零就说明「标准法」（面内锁死）会低估这个层错的稳定性。
@@ -376,18 +429,24 @@ def read_ssf(save_txt_path: Union[str, Path] = './y_post_ssf.txt') -> Dict[str, 
         save_txt_path: txt 路径。
 
     Returns:
-        Dict[str, Any]: ``{'gamma': ..., 'dE': ..., 'stable': ...}``；文件不存在或字段
-        缺失时数值为 ``nan``、``stable`` 为 False。
+        Dict[str, Any]: ``{'gamma': ..., 'dE': ..., 'stable': ..., 'transformed': ...}``；
+        文件不存在或字段缺失时数值为 ``nan``、``stable`` 为 False。加整胞相变判据前写的
+        旧 txt 没有 ``transformed`` 行，读作 False（即当时未判）。
+
+        不返回 ``gap_change``：调用方（mymetal.post.property）要求返回值全部有限，旧 txt
+        读不到它会是 nan，整族就被判失败。
     """
     path_txt = Path(save_txt_path)
     if not path_txt.is_file():
-        return {'gamma': float('nan'), 'dE': float('nan'), 'stable': False}
+        return {'gamma': float('nan'), 'dE': float('nan'), 'stable': False, 'transformed': False}
     lline = path_txt.read_text(encoding='utf-8').splitlines()
     stable = any(line.strip().startswith('stable') and line.strip().endswith('yes')
                  for line in lline)
+    transformed = any(line.strip().startswith('transformed') and line.strip().endswith('yes')
+                      for line in lline)
     return {'gamma': read_scalar_line(lline, 'gamma_ssf'),
             'dE': read_scalar_line(lline, 'dE (eV)'),
-            'stable': stable}
+            'stable': stable, 'transformed': transformed}
 
 
 def read_surface(save_txt_path: Union[str, Path] = './y_post_surface.txt') -> Dict[str, Any]:

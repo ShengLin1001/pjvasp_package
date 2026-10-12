@@ -529,6 +529,7 @@ def export_property_structures(path_root: Path = None, path_out: Path = None,
                                  property_keys=get_rule_property_keys(dict_rule, state),
                                  potential_sha256=dict_potential_hash, strain=strain,
                                  stable=dict_values.get('stable'),
+                                 transformed=dict_values.get('transformed'),
                                  selection_reason='attribute_specific_state_not_last_frame',
                                  normalization='per_atom_bulk_reference' if group in ['ssf', 'seqsf'] else None)
                 for key in ['nfault', 'nsurface', 'sequence_reference', 'sequence_fault',
@@ -580,9 +581,11 @@ def export_property_structures(path_root: Path = None, path_out: Path = None,
                 status = 'overlap'
             elif any(record.get('geometry_status') == 'stacking_changed' for record in lmodel_record):
                 status = 'stacking_changed'
-            elif dict_values.get('stable') is False:
+            # post_ssf 的整胞相变也置 stable=False，但它不是「回到完整晶格」，归入层错面消失。
+            elif dict_values.get('stable') is False and not dict_values.get('transformed'):
                 status = 'unstable'
-            elif any(record.get('geometry_status') == 'fault_lost' for record in lmodel_record):
+            elif dict_values.get('transformed') \
+                    or any(record.get('geometry_status') == 'fault_lost' for record in lmodel_record):
                 status = 'fault_lost'
             else:
                 status = 'ok'
@@ -622,7 +625,7 @@ DICT_ACTION_NOTE = {
     'returned_to_lattice': '无稳定层错：弛豫帧回到完整晶格，与 reference 等价',
     'perfect_lattice': '未弛豫帧的错排矢量是晶格平移，即完整晶格换了胞，与 reference 等价',
     'stacking_changed': '弛豫后层序改变，同族未弛豫帧代替送算',
-    'fault_lost': '弛豫后层错面消失（比同族未弛豫帧多出纯平移，整胞变成另一种晶体），'
+    'fault_lost': '弛豫后层错面消失（比同族未弛豫帧多出纯平移，或层间距整体改变，整胞变成另一种结构），'
                   '不是层错构型，同族未弛豫帧代替送算',
 }
 LSOURCE_KEY = ['round', 'run', 'epoch', 'seed', 'phase', 'property_group', 'model', 'state',
@@ -761,6 +764,9 @@ def get_frame_action(dict_record, ldefer_model: list = None) -> str:
         return 'spurious_basin'
     if 'dmin_hard' in lflag:
         return 'overlap'
+    # 整胞相变时 post_ssf 也给 stable=False，要先于「回到完整晶格」判，标签才对。
+    if dict_record.get('transformed') and state == 'relaxed':
+        return 'fault_lost'
     if dict_record.get('stable') is False and state == 'relaxed':
         return 'returned_to_lattice'
     if dict_record.get('geometry_status') == 'perfect_lattice':

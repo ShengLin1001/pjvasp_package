@@ -123,6 +123,11 @@ class TestPropertySelect(unittest.TestCase):
         # 无稳定层错（回到完整晶格）优先于层错面消失：两者都多出平移，前者语义更具体。
         self.assertEqual(get_frame_action(dict(record, stable=False, geometry_status='fault_lost')),
                          'returned_to_lattice')
+        # 整胞相变：post_ssf 给 transformed=yes 且 stable=no，归入层错面消失而非回到完整晶格；
+        # 未弛豫帧照送。
+        self.assertEqual(get_frame_action(dict(record, stable=False, transformed=True)), 'fault_lost')
+        self.assertEqual(get_frame_action(dict(record, state='ideal', stable=False, transformed=True,
+                                               geometry_status='fault')), 'selected')
 
     def test_translation_count_fault_lost(self):
         atoms_perfect, atoms_fault = get_fcc_pair()
