@@ -26,7 +26,9 @@ Functions:
 # 这样 ssf 的结果可以直接和 γ-line 端点对拍 —— 对称性禁止面内弛豫的体系（如 FCC ISF）
 # 两者必须重合，这是最好的回归基准。
 # t1/t2 是 Cartesian Δxz/lx 与 Δyz/ly，不是斜 a2 基矢上的分数。
-# Pyr. I 窄面 e2 与 Yin 图 2 同向，表 3 的 SF1 第二分量为负（初猜 -0.11）。
+# Pyr. I 窄面 e2 与 Yin 图 2 同向，表 3 的 SF1 第二分量为负（原初猜 -0.11）。
+# 2026-10-11 PJ：DFT（A51-2，从 t2=±0.11 两个起点弛豫）都落到 t2≈-0.17，初猜改为 -0.17；
+# 此前（stage2、stage3 round 0）的 Pyr. I-SF1 物性结果是 -0.11 起点，跨轮比较时注明。
 # t1/t2 写成 LAMMPS equal-style 可求值的表达式字符串，交给 LAMMPS 求值，避免这里先转浮点掉精度。
 LIST_SSF_FAULT = [
     ('fcc', 'FCC_111',     'ISF', '-0.5',     '1.0/3.0'),
@@ -34,7 +36,7 @@ LIST_SSF_FAULT = [
     ('hcp', 'HCP_basal',   'I2',  '-0.5',     '1.0/3.0'),
     ('hcp', 'HCP_prism1w', 'SF1', '0.5',      '0.0'),
     ('hcp', 'HCP_prism1w', 'SF2', '0.5',      '0.5'),
-    ('hcp', 'HCP_pyr1n',   'SF1', '0.5',      '-0.11'),
+    ('hcp', 'HCP_pyr1n',   'SF1', '0.5',      '-0.17'),
     ('hcp', 'HCP_pyr1w',   'SF2', '0.0',      '0.43'),
     ('hcp', 'HCP_pyr1w',   'SF3', '0.5',      '0.49'),
     ('hcp', 'HCP_pyr2',    'SF1', '0.0',      '0.46'),
