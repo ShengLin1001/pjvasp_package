@@ -372,7 +372,7 @@ while read -r -u 9 lat gsfe_type fault t1 t2; do
     (( rc_case == 0 )) || { (( rc_case == 1 )) || record_fail "prepare ${workdir}" "$rc_case"; continue; }
 
     for file in \
-        "${lmp_template_path}/gsfe_model.py" \
+        "${lmp_template_path}/ssf_model.py" \
         "${lmp_template_path}/ssf_template.in" \
         "${lmp_template_path}/ssf.mod" \
         "${lmp_template_path}/general_init.mod" \
@@ -387,10 +387,11 @@ while read -r -u 9 lat gsfe_type fault t1 t2; do
         fi
     done
 
-    sed -i "s/lat_template/${dict_latnum[$lat]}/g"        slurm/gsfe_model.py
-    sed -i "s|gsfe_type_template|${gsfe_type}|g"          slurm/gsfe_model.py
-    sed -i "s/aa_template/${dict_a0[$lat]}/g"             slurm/gsfe_model.py
-    sed -i "s/cc_template/${dict_c0[$lat]}/g"             slurm/gsfe_model.py
+    # ssf_model.py 与 gsfe_model.py 同构，只是超胞尺寸按 planar.DICT_SSF_SIZE 单独取
+    sed -i "s/lat_template/${dict_latnum[$lat]}/g"        slurm/ssf_model.py
+    sed -i "s|gsfe_type_template|${gsfe_type}|g"          slurm/ssf_model.py
+    sed -i "s/aa_template/${dict_a0[$lat]}/g"             slurm/ssf_model.py
+    sed -i "s/cc_template/${dict_c0[$lat]}/g"             slurm/ssf_model.py
     sed -i "s|ssf_t1_template|${t1}|g"                    ssf.mod
     sed -i "s|ssf_t2_template|${t2}|g"                    ssf.mod
     sed -i "s|pair_style_template|${pair_style}|g"        general_potential.mod

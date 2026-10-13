@@ -14,7 +14,7 @@ shell mkdir ../dump
 
 include general_init.mod
 
-shell python_path_template slurm/gsfe_model.py
+shell python_path_template slurm/ssf_model.py
 read_data ./data.ini
 
 include general_potential.mod

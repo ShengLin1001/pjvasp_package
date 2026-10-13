@@ -11,6 +11,7 @@ planar submodule
 
 Functions:
     - format_planar_table: 把某一类的配置渲染成每行一条记录的纯文本（供 bash 读）。
+    - get_ssf_size: tilted-cell SSF 的超胞尺寸（只覆盖 :data:`DICT_SSF_SIZE` 里的滑移面）。
     - get_planar_columns: 某一类在 epoch 扫描表里的列名顺序。
 """
 
@@ -41,6 +42,15 @@ LIST_SSF_FAULT = [
     ('hcp', 'HCP_pyr1w',   'SF3', '0.5',      '0.49'),
     ('hcp', 'HCP_pyr2',    'SF1', '0.0',      '0.46'),
 ]
+
+# tilted-cell SSF 的超胞尺寸，只覆盖这里列出的滑移面，其余用 create_gsfe_model 的默认尺寸。
+# 单独配而不改默认值：γ-line（gsfe 段）与表面能共用那套默认尺寸，不跟着变。
+# PJ 2026-10-13：HCP pyr2 默认 [1,1,5]（20 原子、胞高 12.4 Å）对 SF1 太薄，弛豫场贯穿整胞、
+# 没有一个原子回到体相环境（mymetal.post.planar.get_bulk_deviation 0.09–0.16 Å，被判 transformed）；
+# 审阅复跑 run 003：N3 = 5 / 10 / 20 时 γ = 155.4 / 158.6 / 158.6 mJ/m²，[1,1,10] 起收敛。
+DICT_SSF_SIZE = {
+    'HCP_pyr2': [1, 1, 10],
+}
 
 # 表面能：(相, 滑移面模型)。真空插在超胞的 z 边界上，切开的就是该模型 z 偏移所选的那个面，
 # 所以 Prism / Pyr 一律用**宽面**（wide）变体 —— 层间距大的那个面才是物理上的解理面。
@@ -98,6 +108,18 @@ def format_planar_table(group: str = None) -> str:
              % (group, sorted(DICT_PLANAR_TABLE)))
     return '\n'.join(' '.join(str(field) for field in lrow)
                      for lrow in DICT_PLANAR_TABLE[group])
+
+
+def get_ssf_size(gsfe_type: str = None):
+    """tilted-cell SSF 的超胞尺寸；不在 :data:`DICT_SSF_SIZE` 里时返回 None（用默认尺寸）。
+
+    Args:
+        gsfe_type: 滑移面模型名，如 ``'HCP_pyr2'``。
+
+    Returns:
+        list 或 None: 传给 ``create_gsfe_model(size=...)``。
+    """
+    return DICT_SSF_SIZE.get(gsfe_type)
 
 
 def get_ssf_name(gsfe_type: str = None, fault: str = None) -> str:
