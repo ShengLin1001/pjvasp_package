@@ -105,14 +105,23 @@ _EPOCH_KINDS = {
              'usf = max(gamma), sf = last gamma value; units mJ/m^2'),
     'ssf': (_COLS_SSF, '12.4f',
             'tilted-cell stable SFE (all atoms free, sigma_3j = 0); units mJ/m^2. '
-            'A value near 0 means the fault relaxed back to the perfect lattice '
-            '(see "stable" in the per-epoch y_post_ssf.txt)'),
+            'Only stable faults are kept; nan = no stable fault or whole-cell transformed '
+            '(reason in p_post_epoch_ssf_state.txt)'),
     'surface': (_COLS_SURF, '12.4f',
                 'surface energy from a 20 Ang vacuum cleave; unrel = rigid cleave, '
                 'rel = atoms relaxed at fixed cell; units mJ/m^2'),
     'seqsf': (_COLS_SEQSF, '12.4f',
-              'stacking-sequence faults (I1 / I3 / ESF / TB), 2 faults per cell; units mJ/m^2'),
+              'stacking-sequence faults (I1 / I3 / ESF / TB), 2 faults per cell; units mJ/m^2. '
+              'Only stable faults are kept; nan = no stable fault or whole-cell transformed '
+              '(reason in p_post_epoch_seqsf_state.txt)'),
 }
+
+# ssf / seqsf 的逐格状态码，写进 p_post_epoch_<kind>_state.txt（与值表同列）。
+# PJ 2026-10-13：值表只留稳定层错的 gamma，其余写 NaN —— 回到完整晶格的 ~0 和整胞相变后的
+# 能量差此前直接进了跨 run 均值（pyr1n SF1 的均值是 0 与 ~300 混平均）。状态码保留 NaN 的原因，
+# 汇总据此数稳定的 run（<col>_nstable），缺失清单据此区分「不稳定」与「缺数据」。
+_SSF_STATE = {1: 'stable', 0: 'no_stable_fault', -1: 'transformed'}
+_STATE_KINDS = ('ssf', 'seqsf')
 
 # 训练误差表的列（post_training 写出，post_training_summary 读回）：
 #   _COLS_RMSE            p_post_learning_curve.txt：逐 epoch 的训练集 E/F RMSE
@@ -134,6 +143,8 @@ _ABSENCE_STATUS = {
     'missing_table': 'run 没有该 kind 的 p_post_epoch_<kind>.txt（epoch = -1, item = 表名）',
     'missing_epoch': '表在，但没有这个 epoch 的行 —— post_epoch_scan 当时判定该 epoch 输入不全（item = *）',
     'missing_value': '有该 epoch 的行，但 item 这一列是 NaN/inf',
+    'no_stable_fault': 'ssf/seqsf：层错弛豫回完整晶格或本就不是层错，值表按设计写 NaN（不是缺数据）',
+    'transformed': 'ssf/seqsf：整胞相变或胞内已无体相原子，值表按设计写 NaN（不是缺数据）',
 }
 
 # 逐 epoch 物性扫描默认丢弃的「热身段」：epoch <= 该值的权重快照不参与物性计算与汇总。
@@ -2354,9 +2365,11 @@ class PeiN2p2:
         - ``p_post_epoch_stretch.txt/pdf``：每 epoch 各相平衡 a/c、c/a(HCP)、E/atom、ΔE(相-FCC)。
         - ``p_post_epoch_cij.txt/pdf``：每 epoch 各相弹性常数 Cij。
         - ``p_post_epoch_gsfe.txt/pdf``：每 epoch 各滑移系的不稳定/稳定层错能（usf/sf）。
-        - ``p_post_epoch_ssf.txt/pdf``：每 epoch 各 tilted-cell 稳定层错能（全弛豫，σ3j = 0）。
+        - ``p_post_epoch_ssf.txt/pdf``：每 epoch 各 tilted-cell 稳定层错能（全弛豫，σ3j = 0），
+          另附 ``p_post_epoch_ssf_state.txt`` 逐格状态码（见 :data:`_SSF_STATE`）。
         - ``p_post_epoch_surface.txt/pdf``：每 epoch 各面的未弛豫 / 弛豫表面能。
-        - ``p_post_epoch_seqsf.txt/pdf``：每 epoch 的层序型层错能（Basal I1/I3、FCC ESF/TB）。
+        - ``p_post_epoch_seqsf.txt/pdf``：每 epoch 的层序型层错能（Basal I1/I3、FCC ESF/TB），
+          另附 ``p_post_epoch_seqsf_state.txt``。
 
         物理量全部经 mymetal 的逐 epoch post 读取器取得（单一数据来源，避免重复解析逻辑）：
         ``my_read_stretch`` 读 p_post_stretch.txt 的 Extr infos(E)/rvector(a,c)，
@@ -2367,8 +2380,9 @@ class PeiN2p2:
         Note:
             某 epoch 缺 stretch/cij 的任一相则该表跳过此 epoch；gsfe 按滑移系逐个读取，
             缺失留 NaN。六表行数与 epoch 数不一致时只告警、不报错。
-            ssf 表里接近 0 的值表示该层错弛豫回了完整晶格（不是一个真实的层错能），
-            判据见逐 epoch 的 ``y_post_ssf.txt`` 里的 ``stable`` 字段。
+            ssf / seqsf 值表只留稳定层错的 gamma（逐 epoch ``y_post_ssf.txt`` 的 ``stable``）；
+            回到完整晶格、整胞相变或胞内无体相原子的格写 NaN，原因写进同名 ``_state`` 表
+            （1 stable / 0 no_stable_fault / -1 transformed）。
 
         Args:
             dir_run: n2p2 训练运行目录。
@@ -2424,6 +2438,7 @@ class PeiN2p2:
 
         rows_stretch, rows_cij, rows_gsfe = [], [], []
         rows_ssf, rows_surf, rows_seqsf = [], [], []
+        dict_state_rows = {kind: [] for kind in _STATE_KINDS}
         for ep in epochs:
             epp = f'{ep:06d}'
 
@@ -2478,16 +2493,17 @@ class PeiN2p2:
             if not if_planar:          # 平面缺陷三段没跑，跳过 4)-6) 的读取
                 continue
 
-            # 4) ssf：tilted-cell 稳定层错能，逐层错读一个标量
-            rec, ok = {'epoch': ep}, True
+            # 4) ssf：tilted-cell 稳定层错能，逐层错读一个标量；不稳定的写 NaN、原因进状态表
+            rec, rec_state, ok = {'epoch': ep}, {'epoch': ep}, True
             for lat, gsfe_type, fault, t1, t2 in LIST_SSF_FAULT:
                 name = get_ssf_name(gsfe_type, fault)
                 pf = scan / epp / 'y_ssf' / lat / name / 'y_post_ssf.txt'
                 if not pf.is_file():
                     ok = False; break
-                rec[f'ssf_{name}'] = read_ssf(str(pf))['gamma']
+                rec[f'ssf_{name}'], rec_state[f'ssf_{name}'] = self._get_ssf_cell(read_ssf(str(pf)))
             if ok:
                 rows_ssf.append(rec)
+                dict_state_rows['ssf'].append(rec_state)
             else:
                 print(f'skip epoch {epp}: incomplete ssf')
 
@@ -2506,14 +2522,16 @@ class PeiN2p2:
                 print(f'skip epoch {epp}: incomplete surface')
 
             # 6) seqsf：层序型层错，与 ssf 同一份 txt 格式（nfault=2 已在 post 侧归一）
-            rec, ok = {'epoch': ep}, True
+            rec, rec_state, ok = {'epoch': ep}, {'epoch': ep}, True
             for lat, fault_type, n_repeat in LIST_SEQSF_FAULT:
                 pf = scan / epp / 'y_seqsf' / lat / fault_type / 'y_post_ssf.txt'
                 if not pf.is_file():
                     ok = False; break
-                rec[f'ssf_{fault_type}'] = read_ssf(str(pf))['gamma']
+                rec[f'ssf_{fault_type}'], rec_state[f'ssf_{fault_type}'] = \
+                    self._get_ssf_cell(read_ssf(str(pf)))
             if ok:
                 rows_seqsf.append(rec)
+                dict_state_rows['seqsf'].append(rec_state)
             else:
                 print(f'skip epoch {epp}: incomplete seqsf')
 
@@ -2594,6 +2612,14 @@ class PeiN2p2:
                               [f'# LAMMPS (pair_style hdnnp) {note} vs training epoch',
                                f'# {_EPOCH_KINDS[kind][2]}'],
                               df_planar, float_format='12.4f')
+            if kind in _STATE_KINDS:
+                df_state = (pd.DataFrame(dict_state_rows[kind]).sort_values('epoch')
+                            .reset_index(drop=True).reindex(columns=cols))
+                self._write_table(dir_scan / f'p_post_epoch_{kind}_state.txt',
+                                  [f'# State of each cell in p_post_epoch_{kind}.txt',
+                                   '# ' + ', '.join(f'{code} = {name}' for code, name in _SSF_STATE.items())
+                                   + '; only state 1 keeps its gamma, the others are nan there'],
+                                  df_state, float_format='12.0f')
             my_plot_epoch_planar(df_planar, dir_scan / f'p_post_epoch_{kind}.pdf',
                                  types=ltype, prefixes=prefixes,
                                  dft=dft[kind] if dft else None,
@@ -2807,6 +2833,26 @@ class PeiN2p2:
 
     # summary y_post 下的所有信息：check_interface、properties、training
     @staticmethod
+    def _get_ssf_cell(dict_ssf: dict) -> tuple:
+        """把 ``read_ssf`` 的结果变成 epoch 扫描表的一格：``(值, 状态码)``。
+
+        只有稳定层错给 gamma；回到完整晶格（或本就是点阵平移）与整胞相变都写 NaN，
+        状态码见 :data:`_SSF_STATE`。整胞相变时 ``stable`` 也是 False，故先判 ``transformed``。
+
+        Args:
+            dict_ssf: :func:`mymetal.post.planar.read_ssf` 的返回值。
+
+        Returns:
+            tuple: ``(gamma 或 nan, 1 / 0 / -1)``。
+        """
+        if dict_ssf['transformed']:
+            return np.nan, -1
+        if dict_ssf['stable']:
+            return dict_ssf['gamma'], 1
+        return np.nan, 0
+
+
+    @staticmethod
     def _read_epoch_table(path: Path) -> pd.DataFrame:
         """读回 ``post_epoch_scan`` 写出的 ``p_post_epoch_*.txt`` 定宽表。
 
@@ -2883,6 +2929,35 @@ class PeiN2p2:
             df_out[f'{c}_std'] = std[:, j]
 
         return _frame(mean), _frame(lo), _frame(hi), df_out
+
+
+    @staticmethod
+    def _add_nstable(df_out: pd.DataFrame, ldf_state: list, cols: list) -> pd.DataFrame:
+        """给 ssf/seqsf 汇总宽表的每个量补一列 ``<col>_nstable``（该 epoch 层错稳定的 run 数）。
+
+        状态表与值表同列（见 :data:`_SSF_STATE`），按 epoch 并集对齐后数状态码为 1 的 run；
+        新列紧跟在该量的 ``_std`` 之后。
+
+        Args:
+            df_out: :meth:`_ensemble_stats` 的写盘宽表。
+            ldf_state: 各 run 的 ``p_post_epoch_<kind>_state.txt``。
+            cols: 值表列顺序（含 ``epoch``）。
+
+        Returns:
+            加了 ``_nstable`` 列的宽表。
+        """
+        lcol = [c for c in cols if c != 'epoch']
+        lkey = list(df_out['epoch'])
+        arr = np.full((len(ldf_state), len(lkey), len(lcol)), np.nan)
+        for i, df in enumerate(ldf_state):
+            arr[i] = df.set_index('epoch').reindex(index=lkey, columns=lcol).to_numpy(dtype=float)
+        nstable = (arr == 1).sum(axis=0)
+        df_out = df_out.copy()
+        lorder = ['epoch', 'n_runs']
+        for j, c in enumerate(lcol):
+            df_out[f'{c}_nstable'] = nstable[:, j]
+            lorder += [f'{c}_mean', f'{c}_min', f'{c}_max', f'{c}_std', f'{c}_nstable']
+        return df_out[lorder]
 
 
     @staticmethod
@@ -2973,7 +3048,7 @@ class PeiN2p2:
 
 
     @staticmethod
-    def _scan_epoch_absence(ldir_run: list, dtable: dict) -> pd.DataFrame:
+    def _scan_epoch_absence(ldir_run: list, dtable: dict, dstate: dict = None) -> pd.DataFrame:
         """逐 (run, kind, epoch) 找出 epoch 扫描三张表里缺了什么。
 
         epoch 全集取**跨 run 跨 kind 的并集**：只有某个 run 的某张表独有的 epoch，才能
@@ -2983,6 +3058,8 @@ class PeiN2p2:
         Args:
             ldir_run: 参与汇总的 run 目录列表（只用其 ``name``）。
             dtable: ``kind -> {run-id: DataFrame}``，post_epoch_scan_summary 已读到的表。
+            dstate: ``kind -> {run-id: DataFrame}``，ssf/seqsf 的状态表；给定时按设计写 NaN 的
+                格记为 ``no_stable_fault`` / ``transformed``，不混进 ``missing_value``。
 
         Returns:
             以 :data:`_COLS_ABSENCE` 为列的 DataFrame，无缺失时为空表。
@@ -3000,6 +3077,15 @@ class PeiN2p2:
                     continue
 
                 lcol = [c for c in cols if c != 'epoch']
+                # 状态表里 0 / -1 的格是按设计写的 NaN，换成对应状态名
+                df_state = (dstate or {}).get(kind, {}).get(rid)
+                dict_status = {}
+                if df_state is not None:
+                    for _, row in df_state.iterrows():
+                        for col in lcol:
+                            code = row.get(col)
+                            if code in (0, -1):
+                                dict_status[(int(row['epoch']), col)] = _SSF_STATE[int(code)]
                 # reindex 到 epoch 全集 x 期望列：缺行、缺列、写进去的 NaN 统一变成 NaN
                 d = df.set_index('epoch').reindex(index=leps, columns=lcol).apply(pd.to_numeric, errors='coerce')
                 bad = ~np.isfinite(d.to_numpy(dtype=float))
@@ -3011,7 +3097,8 @@ class PeiN2p2:
                         continue
                     for j in np.flatnonzero(bad[i]):
                         rows.append({'run': rid, 'kind': kind, 'epoch': ep,
-                                     'status': 'missing_value', 'item': lcol[j]})
+                                     'status': dict_status.get((ep, lcol[j]), 'missing_value'),
+                                     'item': lcol[j]})
         return pd.DataFrame(rows, columns=_COLS_ABSENCE)
 
 
@@ -3046,7 +3133,8 @@ class PeiN2p2:
         下写好 ``p_post_epoch_{stretch,cij,gsfe}.txt``；本方法只**读**这些表，跨 run 对齐
         epoch 后统计，把汇总产物直接写在 ``y_post/`` 下（与各 run 目录平级）：
 
-        - ``p_post_epoch_<kind>_summary.txt``：跨 run 统计宽表
+        - ``p_post_epoch_<kind>_summary.txt``：跨 run 统计宽表；ssf/seqsf 每个量多一列
+          ``_nstable``（该 epoch 层错稳定的 run 数，读各 run 的 ``_state`` 表）
         - ``p_post_epoch_<kind>_summary.pdf``：跨 run 均值线 + 上下限色带
         - ``p_post_epoch_<kind>_summary2.pdf``：同一版式，但画逐 run 曲线
           （run 依次 C0/C1/...，共用一个图例），用来看清是哪个 run 把包络撑开的
@@ -3104,7 +3192,7 @@ class PeiN2p2:
                             'seqsf': {'types': _SEQSF_NAMES, 'prefixes': ('ssf',)}}
         band_label = _BAND_LABEL[band]
 
-        nwritten, dtable = 0, {}
+        nwritten, dtable, dstate = 0, {}, {}
         for kind, (cols, float_format, unit_note) in _EPOCH_KINDS.items():
             ldf, lrid = self._collect_run_tables(
                 ldir_run, dir_post_root, Path('properties') / 'y_epoch_scan' / f'p_post_epoch_{kind}.txt')
@@ -3119,12 +3207,23 @@ class PeiN2p2:
                       f"aligning on the union and using nan-aware statistics.")
 
             df_mean, df_lo, df_hi, df_out = self._ensemble_stats(ldf, cols, 'epoch', band)
+            lheader_state = []
+            if kind in _STATE_KINDS:
+                # 2026-10-13 前的扫描没有状态表：只跳过 nstable 列，值表照常汇总
+                ldf_state, lrid_state = self._collect_run_tables(
+                    ldir_run, dir_post_root,
+                    Path('properties') / 'y_epoch_scan' / f'p_post_epoch_{kind}_state.txt')
+                dstate[kind] = dict(zip(lrid_state, ldf_state))
+                if ldf_state:
+                    df_out = self._add_nstable(df_out, ldf_state, cols)
+                    lheader_state = [f'# _nstable = runs whose fault is stable at this epoch '
+                                     f'({len(ldf_state)} state table(s)); _mean/_min/_max/_std use stable runs only']
             self._write_table(dir_summary / f'p_post_epoch_{kind}_summary.txt',
                               [f'# Ensemble summary of LAMMPS (pair_style hdnnp) {kind} vs training epoch',
                                f'# {unit_note}',
                                f'# {len(ldf)} run(s): {", ".join(lrid)}',
                                '# n_runs = runs contributing to this epoch; per quantity: _mean/_min/_max/_std '
-                               '(std is the sample std, ddof=1, over runs)'],
+                               '(std is the sample std, ddof=1, over runs)'] + lheader_state,
                               df_out, float_format=float_format)
 
             kwargs = dict(dict_plot_kwargs.get(kind, {}),
@@ -3141,7 +3240,7 @@ class PeiN2p2:
                   f'p_post_epoch_{kind}_summary.txt + _summary.pdf + _summary2.pdf')
 
         # 缺失清单：六类产物看完再写，才能用跨 kind 的 epoch 并集判定缺行
-        df_absence = self._scan_epoch_absence(ldir_run, dtable)
+        df_absence = self._scan_epoch_absence(ldir_run, dtable, dstate)
         self._write_absence(dir_summary / 'p_post_absence.txt', df_absence, ldir_run)
         print(f'  absence: {len(df_absence)} record(s) -> p_post_absence.txt')
 

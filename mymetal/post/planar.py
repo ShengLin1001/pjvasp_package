@@ -17,6 +17,8 @@ LAMMPS 侧的约定（lmp_utils/template 的 ``ssf.mod`` / ``surface.mod`` / ``s
 
 Functions:
     - get_layer_gap_change: 弛豫前后层间距变化中位数，识别整胞相变。
+    - get_nn_spectrum: 逐原子前 n 个近邻距离（升序），即局域环境的指纹。
+    - get_bulk_deviation: 层错胞里最像体相的原子偏离参考胞的程度，识别面内 shuffle 型整胞相变与薄胞。
     - post_ssf: 稳定层错能后处理（tilted-cell 与堆垛序列共用）。
     - post_surface: 表面能后处理（未弛豫 + 弛豫）。
     - read_ssf: 读回 post_ssf 写出的 txt。
@@ -30,6 +32,7 @@ from pathlib import Path
 from typing import Any, Dict, Union
 
 from ase.io import read
+from ase.neighborlist import neighbor_list
 from myvasp import vasp_func as vf
 
 
@@ -168,6 +171,59 @@ def get_layer_gap_change(atoms_ideal=None, atoms_relaxed=None) -> float:
     return float(np.median(np.abs(gap1 * atoms_relaxed.cell[2, 2] - gap0 * atoms_ideal.cell[2, 2])))
 
 
+def get_nn_spectrum(atoms=None, nneigh: int = 12, cutoff: float = None) -> np.ndarray:
+    """逐原子前 ``nneigh`` 个近邻的距离（升序），即局域环境的指纹。
+
+    截断内不足 ``nneigh`` 个近邻时用 ``cutoff`` 补齐 —— 近邻被推出截断本身就是“不像体相”，
+    补成截断值让它在 :func:`get_bulk_deviation` 里显出大偏差，而不是被悄悄忽略。
+    不区分元素（Au 单元素；多元素体系须另按元素配对）。
+
+    Args:
+        atoms: 结构。
+        nneigh: 取前几个近邻；密排金属第一壳层为 12。
+        cutoff: 近邻搜索截断（Å）。
+
+    Returns:
+        np.ndarray: 形状 (natoms, nneigh)。
+    """
+    li, ld = neighbor_list('id', atoms, cutoff)
+    spectrum = np.full((len(atoms), nneigh), float(cutoff))
+    for i in range(len(atoms)):
+        dist = np.sort(ld[li == i])[:nneigh]
+        spectrum[i, :len(dist)] = dist
+    return spectrum
+
+
+def get_bulk_deviation(atoms_ref=None, atoms_relaxed=None, nneigh: int = 12) -> float:
+    """层错胞里**最像体相**的那个原子，其近邻谱偏离参考胞的程度（Å）。
+
+    逐原子取近邻谱对参考胞各原子近邻谱的最大分量差，再对参考原子取最小（参考胞不必每个原子
+    都等价），最后对层错胞所有原子取最小。孤立层错离层错面远的原子回到体相环境，值近 0；
+    整个胞没有一个原子像体相时值很大 —— 两种成因：
+
+    - 面内 shuffle 型整胞相变：层间距不变，:func:`get_layer_gap_change` 抓不到。
+      DFT 的 HCP pyr2 SF1（A21-3，20 原子）每个原子都变成 10 个近邻 2.79–2.86 Å + 2 个 3.43 Å，
+      本值 0.516 Å，而层间距中位数只变 0.002 Å（2026-10-13 审阅）；
+    - 胞太薄，层错的弛豫场贯穿整个胞，不存在孤立层错（LAMMPS pyr2 [1,1,5] 为 0.09–0.16 Å）。
+
+    Args:
+        atoms_ref: 同尺寸的无层错参考胞（已弛豫）。
+        atoms_relaxed: 弛豫后的层错胞（原子数可与参考胞不同，如 FCC ESF）。
+        nneigh: 近邻数。
+
+    Returns:
+        float: 偏差（Å）。
+    """
+    # 截断取参考胞第 nneigh 近邻的 1.5 倍：盖住第一壳层，又够大，被推远的近邻落在截断内
+    li, ld = neighbor_list('id', atoms_ref, 6.0)
+    d_last = max(np.sort(ld[li == i])[nneigh - 1] for i in range(len(atoms_ref)))
+    cutoff = 1.5 * float(d_last)
+    spectrum_ref = get_nn_spectrum(atoms_ref, nneigh, cutoff)
+    spectrum = get_nn_spectrum(atoms_relaxed, nneigh, cutoff)
+    ldev = np.abs(spectrum[:, None, :] - spectrum_ref[None, :, :]).max(axis=2).min(axis=1)
+    return float(ldev.min())
+
+
 ### main —— 两个对外后处理入口 ###
 
 def post_ssf(post_data_path: Union[str, Path] = None,
@@ -179,6 +235,7 @@ def post_ssf(post_data_path: Union[str, Path] = None,
              dt_tol: float = 0.25,
              gamma_tol: float = 1.0,
              gap_tol: float = 0.2,
+             bulk_tol: float = 0.05,
              save_txt_path: Union[str, Path] = './y_post_ssf.txt') -> Dict[str, Any]:
     """稳定层错能后处理（tilted-cell 单点 与 堆垛序列层错 共用）。
 
@@ -204,12 +261,18 @@ def post_ssf(post_data_path: Union[str, Path] = None,
             另一种结构，gamma 随原子数增长、不是层错能。0.2 取自 DFT（A51-2，2026-10-11）：
             正常层错 ≤ 0.063，prism1w SF2 为 0.80；stage2 六势 LAMMPS 正常层错 ≤ 0.03。
             没有 ideal 构型时不判。
+        bulk_tol: 体相保留判据（Å）：层错胞里最像体相的原子，其 12 近邻谱偏离参考胞超过它，
+            就判定胞里已没有体相原子（面内 shuffle 型整胞相变，或胞太薄容不下孤立层错），
+            归入 ``transformed``，见 :func:`get_bulk_deviation`。0.05 取自 2026-10-13 标定：
+            正常层错 DFT（A21-3/A51/A52）≤ 0.015、M1 六势 LAMMPS ≤ 0.013；DFT pyr2 SF1 0.516、
+            prism1w SF2 ≥ 0.068，LAMMPS pyr2 [1,1,5] 0.09–0.16。
         save_txt_path: 输出 txt 路径。
 
     Returns:
         Dict[str, Any]: ``gamma``、``Asf``、``E0bulk``、``t1``/``t2``、``dt1``/``dt2``、
         ``da33``、``umax``、``uabs``（逐原子位移模长）、``gap_change``（Å，无 ideal 时为 nan）、
-        ``transformed``（整胞相变，bool）、``stable``（bool，整胞相变也算不稳定）。
+        ``bulk_dev``（Å）、``transformed``（整胞相变或无体相原子，bool）、
+        ``stable``（bool，整胞相变也算不稳定）。
 
     Raises:
         SystemExit: 帧数不对、面内基矢被弛豫、或原子数/元素不一致。
@@ -249,19 +312,30 @@ def post_ssf(post_data_path: Union[str, Path] = None,
         warn('no ideal config at %s, in-plane relaxation dt1/dt2 and u are reported as 0, '
              'whole-cell transformation not checked' % ideal_path)
 
-    # 这个层错到底存不存在。三种「不存在」成因不同（前两种给出 gamma ~ 0），必须报出来
+    bulk_dev = get_bulk_deviation(atoms_ref, atoms_sf)
+
+    # 这个层错到底存不存在。四种「不存在」成因不同（前两种给出 gamma ~ 0），必须报出来
     # 而不是当成一个层错能：
     #   - 面内滑走（|dt| > dt_tol）：初猜位置不是势阱，弛豫把它推回完整晶格（HCP 窄面 Pyr. I 常见）；
     #   - 停在原地但 gamma ~ 0：该位置本身就等价于一个完整的点阵平移（如 FCC {100} 的 (1/2,1/2)）。
     #   - 整胞相变（gap_change > gap_tol）：dt 可以很小、gamma 也不小，但每一层都变了，
     #     gamma 是两种结构的能量差、随原子数增长（DFT 与 LAMMPS 的 prism1w SF2 都如此）。
-    transformed = bool(gap_change > gap_tol)          # nan（无 ideal）比较为 False，即不判
+    #   - 没有体相原子（bulk_dev > bulk_tol）：层间距没变、面内 shuffle 了整个胞（DFT pyr2 SF1），
+    #     或胞太薄、弛豫场贯穿全胞，同样不是孤立层错的能量。
+    if_gap = bool(gap_change > gap_tol)               # nan（无 ideal）比较为 False，即不判
+    if_bulk_lost = bool(bulk_dev > bulk_tol)
+    transformed = if_gap or if_bulk_lost
     stable = (abs(dt1) <= dt_tol) and (abs(dt2) <= dt_tol) and (abs(gamma) > gamma_tol) \
         and not transformed
-    if transformed:
+    if if_gap:
         warn('%s: whole cell transformed (median layer-gap change %.4f Ang > %.2f) — '
              'gamma = %.4f mJ/m^2 is an energy difference between two structures, '
              'not a fault energy' % (label, gap_change, gap_tol, gamma))
+    elif if_bulk_lost:
+        warn('%s: no bulk-like atom left (NN-spectrum deviation of the most bulk-like atom '
+             '%.4f Ang > %.2f) — in-plane whole-cell transformation or cell too thin; '
+             'gamma = %.4f mJ/m^2 is not an isolated fault energy'
+             % (label, bulk_dev, bulk_tol, gamma))
     elif not stable:
         warn('%s: no stable stacking fault here '
              '(gamma = %.4f mJ/m^2, dt = %.4f, %.4f) — the relaxed cell is the perfect '
@@ -271,8 +345,8 @@ def post_ssf(post_data_path: Union[str, Path] = None,
                 'E0bulk': E0bulk, 'dE': dE, 'nfault': nfault,
                 't1': t1, 't2': t2, 'dt1': dt1, 'dt2': dt2,
                 'da33': da33, 'umax': float(uabs.max()), 'uabs': uabs,
-                'gap_change': gap_change, 'transformed': transformed,
-                'stable': stable}
+                'gap_change': gap_change, 'bulk_dev': bulk_dev,
+                'transformed': transformed, 'stable': stable}
     write_ssf_output(dict_out, label=label, save_txt_path=save_txt_path)
     return dict_out
 
@@ -361,6 +435,7 @@ def write_ssf_output(dict_out: dict = None, label: str = 'SSF',
         f.write('%20s: %16s \n' % ('stable', 'yes' if dict_out['stable'] else 'no'))
         f.write('%20s: %16s \n' % ('transformed', 'yes' if dict_out['transformed'] else 'no'))
         f.write('%20s: %16.8f \n' % ('gap_change (Ang)', dict_out['gap_change']))
+        f.write('%20s: %16.8f \n' % ('bulk_dev (Ang)', dict_out['bulk_dev']))
 
         # t1/t2 是弛豫后的真实层错矢量；dt1/dt2 是它相对理想倾斜位置的面内弛豫，
         # 非零就说明「标准法」（面内锁死）会低估这个层错的稳定性。
