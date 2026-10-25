@@ -68,7 +68,7 @@ class TestPropertyExport(unittest.TestCase):
 
     def test_rules_complete_and_not_last_frame(self):
         lrule = get_property_frame_rules()
-        self.assertEqual(len(lrule), 31)
+        self.assertEqual(len(lrule), 32)            # 2026-10-25 ssf 加 HCP_prism1w_valley：31 -> 32
         self.assertEqual(len([rule for rule in lrule if rule['group'] == 'cij']), 10)
         lsurface = [rule for rule in lrule if rule['group'] == 'surface']
         self.assertEqual(len(lsurface), 6)

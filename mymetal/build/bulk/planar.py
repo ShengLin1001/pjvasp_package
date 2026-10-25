@@ -31,12 +31,18 @@ Functions:
 # 2026-10-11 PJ：DFT（A51-2，从 t2=±0.11 两个起点弛豫）都落到 t2≈-0.17，初猜改为 -0.17；
 # 此前（stage2、stage3 round 0）的 Pyr. I-SF1 物性结果是 -0.11 起点，跨轮比较时注明。
 # t1/t2 写成 LAMMPS equal-style 可求值的表达式字符串，交给 LAMMPS 求值，避免这里先转浮点掉精度。
+# 2026-10-25 PJ：Prism I-W 加 'valley' (0.5, 0.18)。Au 的 SF1 (0.5, 0) 不是稳定层错：NNP 里是对称性锁住的
+# 鞍点（微扰 0.005 即滑走），DFT 从 (0.506, 0) 起步滑回完整晶格；破对称后 NNP 大多落进这个谷，DFT 从谷起步
+# 停在 (0.499, 0.181)、γ 202.25 mJ/m²（construct_dataset A51-2 HCP_prism1w_valley018_n10）。Yin 表 3 没有这个位置，
+# 不叫 SF3：Yin 的 Prism I SF3 是 (0, a2/2) 的能量极大。SF1 保留（PJ 定不破对称），两列并存。
+# dt_tol = 0.25 分不出 SF1 → 谷（dt2 ≈ 0.18），所以谷必须有自己的初猜。
 LIST_SSF_FAULT = [
     ('fcc', 'FCC_111',     'ISF', '-0.5',     '1.0/3.0'),
     ('fcc', 'FCC_100',     'SF',  '0.5',      '0.5'),
     ('hcp', 'HCP_basal',   'I2',  '-0.5',     '1.0/3.0'),
     ('hcp', 'HCP_prism1w', 'SF1', '0.5',      '0.0'),
     ('hcp', 'HCP_prism1w', 'SF2', '0.5',      '0.5'),
+    ('hcp', 'HCP_prism1w', 'valley', '0.5',   '0.18'),
     ('hcp', 'HCP_pyr1n',   'SF1', '0.5',      '-0.17'),
     ('hcp', 'HCP_pyr1w',   'SF2', '0.0',      '0.43'),
     ('hcp', 'HCP_pyr1w',   'SF3', '0.5',      '0.49'),
