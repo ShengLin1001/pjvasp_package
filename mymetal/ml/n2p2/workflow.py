@@ -2329,8 +2329,11 @@ class PeiN2p2:
         # 提交引擎拒绝 chunks > 作业目录数（直接 fail、一个作业都不交）：LEPOCH 只点名 9 个 epoch
         # 却沿用 chunks=10 时整批静默落空（stage2/0 round 1 实测），补投只剩几个 epoch 时同理。
         args_to_submit = self._clamp_chunks(args_to_submit, len(ldir_todo))
+        # 一律显式点名 epoch：提交引擎递归找 y_dir，epoch 目录里一旦有算例（y_ssf/.../y_dir/），
+        # 不带 -lsubdir 就会把嵌套的 y_dir/slurm 等都当成作业目录（2026-10-22 M2 补算 prism1w，
+        # 9 个 epoch 全未完成时引擎发现 216 个目录；父作业在投到嵌套目录之前已 scancel）。
+        args_to_submit['lsubdir'] = [d.name for d in ldir_todo]
         if ldir_done:
-            args_to_submit['lsubdir'] = [d.name for d in ldir_todo]
             print(f"  submit only {len(ldir_todo)} incomplete epoch dir(s) "
                   f"(skip {len(ldir_done)} already complete): "
                   f"{' '.join(d.name for d in ldir_todo)}")
