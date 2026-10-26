@@ -68,6 +68,7 @@ python docs/examples/getting_started_au111.py --output docs/_build/example-au111
 | `slurm_utils/` | 软件无关的 SLURM 生成/提交入口与 runner |
 | `lmp_utils/` | LAMMPS 模板和 workflow 脚本 |
 | `n2p2_utils/` | n2p2 scaling/training 辅助脚本 |
+| `ssh_utils/` | Windows 本地 ssh 维护脚本（如清理 zcm6-proxy 残留转发） |
 | `docs/` | Sphinx canonical documentation、可运行示例与图片生成脚本 |
 | `mymetal/example/` | 原始研究/回归素材，不等同于已发布 Tutorial |
 

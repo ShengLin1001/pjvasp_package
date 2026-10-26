@@ -1,0 +1,2 @@
+# ssh_utils 在 Windows git bash 上运行；autocrlf=true 检出成 CRLF 后 bash 会因 \r 报错
+ssh_utils/** text eol=lf

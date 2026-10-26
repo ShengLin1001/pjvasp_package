@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# 清理 ln2 上残留的 zcm6-proxy sshd，释放 RemoteForward 端口。
+# 症状：ssh zcm6-proxy 报 "remote port forwarding failed for listen port 37897"。
+# 原因：本地客户端已退出，但 本地→网关→ln2 这一跳没断，ln2 的 sshd 察觉不到，继续占着端口。
+# 用法（Windows git bash，ssh_utils/ 已在 ~/.bash_soft_env 加入 PATH）：pei_ssh_univ_clean_zcm6_proxy
+set -uo pipefail
+
+HOST=zcm6              # 用普通 zcm6 登录做清理：它没有 RemoteForward，不会被残留端口卡住
+PROXY_HOST=zcm6-proxy
+PORT=37897
+
+fail() { echo "❌ ERROR: $1" >&2; exit 1; }
+# 走 stderr：get_kill_pids 在 $(...) 里调用，stdout 只能放 PID
+warn() { echo "⚠️  $1" >&2; }
+
+# OpenSSH 10 每次连接都打印两遍后量子警告；只滤掉这一类 stderr，其它报错照常显示
+ssh_remote() {
+    ssh "$HOST" bash -s "$@" 2> >(grep -v -E 'post-quantum|store now|pq\.html|be upgraded' >&2)
+}
+
+get_local_proxy() {
+    # MSYS 的 ps 看不到参数；Win32_Process 能看到 git bash 和 Windows OpenSSH 两种 ssh.exe 的完整命令行
+    powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process | Where-Object Name -eq ssh.exe | ForEach-Object { "$($_.ProcessId) $($_.CommandLine)" }' \
+        | tr -d '\r' | grep -w -- "$PROXY_HOST"
+}
+
+get_remote_state() {
+    # 输出 "LISTEN 0|1"，以及每个交互式 sshd 一行 "CAND pid tty idle=.. start=.."
+    ssh_remote "$PORT" <<'EOF'
+port=$1
+if netstat -tln 2>/dev/null | grep -q "127.0.0.1:$port "; then echo "LISTEN 1"; else echo "LISTEN 0"; fi
+# 交互式 ssh（含 zcm6-proxy）的 sshd 进程名是 "sshd: 用户@pts/N"；VS Code 走 @notty、不带转发，不列入
+for pid in $(pgrep -u "$USER" -f '^sshd: [^ ]+@pts/'); do
+    tty=$(ps -o args= -p "$pid" | sed 's/.*@//')
+    idle=$(w -h "$USER" | awk -v t="$tty" '$2 == t {print $5}')
+    echo "CAND $pid $tty idle=${idle:-?} start=$(ps -o lstart= -p "$pid")"
+done
+EOF
+}
+
+kill_remote() {
+    # 输出仍存活的 "ALIVE pid"，以及 kill 后的 "LISTEN 0|1"
+    ssh_remote "$PORT" "$@" <<'EOF'
+port=$1; shift
+kill "$@"
+sleep 2
+for pid in "$@"; do kill -0 "$pid" 2>/dev/null && echo "ALIVE $pid"; done
+if netstat -tln 2>/dev/null | grep -q "127.0.0.1:$port "; then echo "LISTEN 1"; else echo "LISTEN 0"; fi
+EOF
+}
+
+# 从候选里挑要 kill 的 PID，取消时输出为空；只接受候选列表里的 PID，防止手滑 kill 掉无关进程
+get_kill_pids() {
+    local -a lpid=("$@")
+    local answer pid
+    if (( ${#lpid[@]} == 1 )); then
+        read -r -p "▶️  kill PID ${lpid[0]}? [Y/n] " answer
+        [[ "$answer" =~ ^[Nn] ]] && return 0
+        echo "${lpid[0]}"
+        return 0
+    fi
+    warn "有多个交互式会话，其中可能有你正在用的 ssh zcm6 窗口；残留的通常 start 最早、idle 最久"
+    read -r -p "▶️  输入要 kill 的 PID（空格分隔，回车取消）: " answer
+    [[ -z "$answer" ]] && return 0
+    for pid in $answer; do
+        [[ " ${lpid[*]} " == *" $pid "* ]] || fail "PID $pid 不在候选列表里"
+    done
+    echo "$answer"
+}
+
+main() {
+    ### check: 本地 zcm6-proxy 还在跑，端口就是被它正常占用的，不能清
+    echo "================ 📍 检查本地 $PROXY_HOST 客户端"
+    local local_proxy
+    local_proxy=$(get_local_proxy)
+    if [[ -n "$local_proxy" ]]; then
+        echo "$local_proxy"
+        fail "本地 $PROXY_HOST 还在运行（上面第一列是 PID），端口归它用。确实卡死就先关掉那个窗口，或者 kill 掉它再重跑本脚本"
+    fi
+    echo "✅ 本地没有 $PROXY_HOST 客户端"
+    ### to here
+
+    ### prepare: 查 ln2 的端口和候选会话
+    echo "================ 📍 检查 $HOST 上的端口 $PORT"
+    local state listen
+    local -a lcand lpid
+    state=$(get_remote_state) || fail "ssh $HOST 失败（网络或认证问题，跟残留进程无关）"
+    listen=$(grep '^LISTEN' <<<"$state" | cut -d' ' -f2)
+    if [[ "$listen" == 0 ]]; then
+        echo "✅ 端口 $PORT 空闲，无需清理，直接 ssh $PROXY_HOST"
+        exit 0
+    fi
+    mapfile -t lcand < <(grep '^CAND' <<<"$state" | cut -d' ' -f2-)
+    (( ${#lcand[@]} > 0 )) || fail "端口 $PORT 被占用，但不是你的交互式 sshd（可能是别的用户），本脚本不处理"
+    echo "⚠️  端口 $PORT 被占用，候选会话（PID TTY 空闲 启动时间）："
+    printf '    %s\n' "${lcand[@]}"
+    mapfile -t lpid < <(printf '%s\n' "${lcand[@]}" | cut -d' ' -f1)
+    ### to here
+
+    ### main: kill 并核验端口释放
+    local lkill result
+    lkill=$(get_kill_pids "${lpid[@]}") || exit 1
+    [[ -n "$lkill" ]] || { echo "已取消"; exit 0; }
+    echo "================ ▶️  kill $lkill"
+    # shellcheck disable=SC2086  # PID 列表需要按空格拆成多个参数
+    result=$(kill_remote $lkill) || fail "ssh $HOST 失败，kill 结果未知，重跑本脚本确认"
+    grep '^ALIVE' <<<"$result" | while read -r _ pid; do warn "PID $pid 没被 SIGTERM 杀掉，可登录后 kill -9 $pid"; done
+    if grep -q '^LISTEN 0' <<<"$result"; then
+        echo "🎉 端口 $PORT 已释放，现在可以 ssh $PROXY_HOST"
+    else
+        fail "端口 $PORT 仍被占用，重跑本脚本看看还剩哪个会话"
+    fi
+    ### to here
+}
+
+# source 时不执行，便于单独调试各函数
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main; fi
