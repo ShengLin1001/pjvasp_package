@@ -93,5 +93,19 @@ class TestN2p2WorkflowUniformSelection(unittest.TestCase):
             PeiN2p2._select_n_uniform_dirs([], select_n_uniform_point=0)
 
 
+class TestN2p2WorkflowEpochScale(unittest.TestCase):
+
+    def test_default_draws_relative_then_absolute(self):
+        self.assertEqual(PeiN2p2._get_lscale_suffix(), [("", True), ("_abs", False)])
+
+    def test_single_scale(self):
+        self.assertEqual(PeiN2p2._get_lscale_suffix(["abs"]), [("_abs", False)])
+
+    def test_rejects_empty_or_unknown_scale(self):
+        for lscale in ([], ["log"]):
+            with self.assertRaises(ValueError):
+                PeiN2p2._get_lscale_suffix(lscale)
+
+
 if __name__ == "__main__":
     unittest.main()

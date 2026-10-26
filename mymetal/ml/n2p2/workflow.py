@@ -154,6 +154,13 @@ _ABSENCE_STATUS = {
 # 显式传 lepoch 时该值不生效，完全以调用方点名的 epoch 为准。
 _EPOCH_WARMUP = 50
 
+# epoch 扫描图的纵轴口径（PJ 2026-10-25：默认两种都画）：键 = lscale 取值，
+# 值 = (pdf 文件名后缀, 传给绘图入口的 if_relative2dft)。相对 DFT 偏差沿用原文件名，
+# 旧目录与交付文档里的引用不变；绝对值加 _abs。相对图固定 ±10% 纵轴，偏差大的量
+# （如 HCP basal I2 约 -145%）整条被裁在轴外，只有绝对值图看得到。
+_DICT_EPOCH_SCALE = {'rel': ('', True), 'abs': ('_abs', False)}
+_LSCALE_DEFAULT = ['rel', 'abs']
+
 
 class PeiN2p2:
     """n2p2 势函数训练与物性测试的高层调度器。
@@ -2124,6 +2131,26 @@ class PeiN2p2:
         return lout
 
     @staticmethod
+    def _get_lscale_suffix(lscale: list = None) -> list:
+        """epoch 扫描图要出的纵轴口径 -> ``[(文件名后缀, if_relative2dft), ...]``。
+
+        Args:
+            lscale: :data:`_DICT_EPOCH_SCALE` 的键组成的列表；None 取 ``['rel', 'abs']``。
+
+        Returns:
+            list: 每种口径的 ``(suffix, if_relative2dft)``，顺序同 ``lscale``。
+
+        Raises:
+            ValueError: lscale 为空或含未知取值。
+        """
+        lscale = list(_LSCALE_DEFAULT if lscale is None else lscale)
+        lbad = [scale for scale in lscale if scale not in _DICT_EPOCH_SCALE]
+        if not lscale or lbad:
+            raise ValueError(f"❌ lscale must be a non-empty subset of {list(_DICT_EPOCH_SCALE)}, "
+                             f"got {lscale}.")
+        return [_DICT_EPOCH_SCALE[scale] for scale in lscale]
+
+    @staticmethod
     def _echo_dict_dft(dict_dft: dict = None) -> dict:
         """校验并回显调用方传入的 DFT 参考值。
 
@@ -2358,7 +2385,7 @@ class PeiN2p2:
                         dict_dft: dict = None, lepoch: list = None,
                         epoch_warmup: int = _EPOCH_WARMUP,
                         if_planar: bool = False,
-                        if_relative2dft: bool = True) -> Path:
+                        lscale: list = None) -> Path:
         """汇总跨 epoch 的 LAMMPS 物性扫描结果。
 
         把 ``properties/y_epoch_scan/y_dir/<epoch>/`` 各 epoch 的物性结果汇总到与 y_dir
@@ -2373,6 +2400,9 @@ class PeiN2p2:
         - ``p_post_epoch_surface.txt/pdf``：每 epoch 各面的未弛豫 / 弛豫表面能。
         - ``p_post_epoch_seqsf.txt/pdf``：每 epoch 的层序型层错能（Basal I1/I3、FCC ESF/TB），
           另附 ``p_post_epoch_seqsf_state.txt``。
+
+        每张图默认出两份（见 ``lscale``）：``p_post_epoch_<kind>.pdf`` 画相对 DFT 偏差，
+        ``p_post_epoch_<kind>_abs.pdf`` 画绝对值。
 
         物理量全部经 mymetal 的逐 epoch post 读取器取得（单一数据来源，避免重复解析逻辑）：
         ``my_read_stretch`` 读 p_post_stretch.txt 的 Extr infos(E)/rvector(a,c)，
@@ -2400,10 +2430,10 @@ class PeiN2p2:
                 传 None 表示不过滤（全取）。
             if_planar: 是否汇总平面缺陷三段（ssf/surface/seqsf）。必须与 :meth:`post_properties`
                 传的值一致 —— 那边没跑过，这边开着只会得到一堆 "incomplete" 提示和空表。
-            if_relative2dft: 默认 True，逐 run 的 epoch 扫描图纵轴改画
-                ``(value - DFT) / DFT`` 百分比（固定 ±10%，DFT 线落在 0）；没有 DFT
-                参考或参考值为 0 的量自动退回绝对值。口径与
-                :meth:`post_epoch_scan_summary` 的同名开关一致。
+            lscale: 要出的纵轴口径，:data:`_DICT_EPOCH_SCALE` 的键；None 取 ``['rel', 'abs']``。
+                ``'rel'`` 画 ``(value - DFT) / DFT`` 百分比（固定 ±10%，DFT 线落在 0；没有 DFT
+                参考或参考值为 0 的量自动退回绝对值），文件名不加后缀；``'abs'`` 画绝对值 +
+                DFT 虚线，文件名加 ``_abs``。口径与 :meth:`post_epoch_scan_summary` 的同名参数一致。
 
         Returns:
             epoch 扫描汇总目录。
@@ -2421,6 +2451,7 @@ class PeiN2p2:
         from mymetal.post.planar import read_ssf, read_surface
 
         os.chdir(self.dir_root)
+        lscale_suffix = self._get_lscale_suffix(lscale)
         dir_run = Path(dir_run)
         dir_props = dir_run.parent.parent / 'y_post' / dir_run.name / 'properties'
         dir_scan = dir_props / 'y_epoch_scan'      # 汇总表/图与 y_dir 同级（不放进 y_dir 内部）
@@ -2560,9 +2591,10 @@ class PeiN2p2:
                             ['# LAMMPS (pair_style hdnnp) equilibrium stretch properties vs training epoch',
                             '# FCC/BCC a/c are conventional cubic lengths; HCP a/c are hexagonal; E (eV/atom), dE (meV/atom)'],
                             df_stretch, float_format='14.6f')
-            my_plot_epoch_stretch(df_stretch, dir_scan / 'p_post_epoch_stretch.pdf',
-                                  dft=dft['stretch'] if dft else None,
-                                  if_relative2dft=if_relative2dft)
+            for suffix, if_rel in lscale_suffix:
+                my_plot_epoch_stretch(df_stretch, dir_scan / f'p_post_epoch_stretch{suffix}.pdf',
+                                      dft=dft['stretch'] if dft else None,
+                                      if_relative2dft=if_rel)
             nstretch = len(df_stretch)
         else:
             print('No complete stretch epochs; skip stretch.txt/pdf.')
@@ -2573,9 +2605,10 @@ class PeiN2p2:
                               ['# LAMMPS (pair_style hdnnp) elastic constants Cij vs training epoch',
                                '# Cij (GPa); cubic phases use C11=C33, C12=C13'],
                               df_cij, float_format='12.4f')
-            my_plot_epoch_cij(df_cij, dir_scan / 'p_post_epoch_cij.pdf',
-                              dft=dft['cij'] if dft else None,
-                              if_relative2dft=if_relative2dft)
+            for suffix, if_rel in lscale_suffix:
+                my_plot_epoch_cij(df_cij, dir_scan / f'p_post_epoch_cij{suffix}.pdf',
+                                  dft=dft['cij'] if dft else None,
+                                  if_relative2dft=if_rel)
             n_cij = len(df_cij)
         else:
             print('No complete cij epochs; skip cij.txt/pdf.')
@@ -2586,9 +2619,10 @@ class PeiN2p2:
                               ['# LAMMPS (pair_style hdnnp) stacking-fault energies vs training epoch',
                                '# usf = max(gamma), sf = last gamma value; units mJ/m^2'],
                               df_gsfe, float_format='12.4f')
-            my_plot_epoch_gsfe(df_gsfe, dir_scan / 'p_post_epoch_gsfe.pdf', types=all_types,
-                               dft=dft['gsfe'] if dft else None,
-                               if_relative2dft=if_relative2dft)
+            for suffix, if_rel in lscale_suffix:
+                my_plot_epoch_gsfe(df_gsfe, dir_scan / f'p_post_epoch_gsfe{suffix}.pdf', types=all_types,
+                                   dft=dft['gsfe'] if dft else None,
+                                   if_relative2dft=if_rel)
             n_gsfe = len(df_gsfe)
         else:
             print('No gsfe epochs; skip gsfe.txt/pdf.')
@@ -2623,10 +2657,11 @@ class PeiN2p2:
                                    '# ' + ', '.join(f'{code} = {name}' for code, name in _SSF_STATE.items())
                                    + '; only state 1 keeps its gamma, the others are nan there'],
                                   df_state, float_format='12.0f')
-            my_plot_epoch_planar(df_planar, dir_scan / f'p_post_epoch_{kind}.pdf',
-                                 types=ltype, prefixes=prefixes,
-                                 dft=dft[kind] if dft else None,
-                                 if_relative2dft=if_relative2dft)
+            for suffix, if_rel in lscale_suffix:
+                my_plot_epoch_planar(df_planar, dir_scan / f'p_post_epoch_{kind}{suffix}.pdf',
+                                     types=ltype, prefixes=prefixes,
+                                     dft=dft[kind] if dft else None,
+                                     if_relative2dft=if_rel)
             dict_nplanar[kind] = len(df_planar)
 
         str_planar = (f", ssf={dict_nplanar['ssf']}, surface={dict_nplanar['surface']}, "
@@ -3129,7 +3164,7 @@ class PeiN2p2:
 
     def post_epoch_scan_summary(self, ldir_run: list = None, dict_dft: dict = None,
                                 dir_summary: Path = None, band: str = 'minmax',
-                                if_relative2dft: bool = True) -> Path:
+                                lscale: list = None) -> Path:
         """把多个 run 的 epoch 扫描曲线汇总成 ensemble 均值 + 上下限图（chap_4 图 1.3/1.5 风格）。
 
         :meth:`post_epoch_scan` 已为每个 run 在 ``y_post/<run-id>/properties/y_epoch_scan/``
@@ -3141,6 +3176,8 @@ class PeiN2p2:
         - ``p_post_epoch_<kind>_summary.pdf``：跨 run 均值线 + 上下限色带
         - ``p_post_epoch_<kind>_summary2.pdf``：同一版式，但画逐 run 曲线
           （run 依次 C0/C1/...，共用一个图例），用来看清是哪个 run 把包络撑开的
+        - 两张图默认各再出一份绝对值版 ``_summary_abs.pdf`` / ``_summary2_abs.pdf``
+          （见 ``lscale``）；不带后缀的是相对 DFT 偏差
         - ``p_post_absence.txt``：缺失清单，逐 (run, kind, epoch, item) 记录本次汇总里
           被当成 NaN 的点 —— 缺整张表、缺某个 epoch 的行、或某一列是 NaN。无缺失时也写，
           只有注释头。
@@ -3162,10 +3199,11 @@ class PeiN2p2:
             dir_summary: 汇总输出目录；默认就是 ``y_post/`` 本身。
             band: 色带取法，``'minmax'``（默认，逐 epoch 跨 run 上下限）或 ``'std'``
                 （mean ± 样本标准差，对应 chap_4 图 1.3 的透明背景读法）。
-            if_relative2dft: 默认 True，纵轴改画 ``(value - DFT) / DFT`` 百分比，
-                固定 ±10%（刻度 -10/-5/0/5/10），DFT 参考线落在 0；均值图与逐 run 图
-                同时生效。没有 DFT 参考、或参考值恰为 0 的量（FCC{100} 稳定层错能）
-                自动退回绝对值 + 自适应纵轴，y label 会写明是哪一种。
+            lscale: 要出的纵轴口径，:data:`_DICT_EPOCH_SCALE` 的键；None 取 ``['rel', 'abs']``，
+                均值图与逐 run 图各出每种口径一份。``'rel'`` 画 ``(value - DFT) / DFT`` 百分比，
+                固定 ±10%（刻度 -10/-5/0/5/10），DFT 参考线落在 0，文件名不加后缀；没有 DFT 参考、
+                或参考值恰为 0 的量（FCC{100} 稳定层错能）自动退回绝对值 + 自适应纵轴，y label
+                会写明是哪一种。``'abs'`` 画绝对值 + DFT 虚线，文件名加 ``_abs``。
 
         Returns:
             汇总输出目录。缺表的 run 只跳过并告警；六类全缺时只写 ``p_post_absence.txt``。
@@ -3175,6 +3213,7 @@ class PeiN2p2:
         """
         # 先校验入参再回显 DFT / 落盘：参数写错时不产生任何文件
         ldir_run, dir_post_root = self._summary_root(ldir_run, band)
+        lscale_suffix = self._get_lscale_suffix(lscale)
         dir_summary = Path(dir_summary) if dir_summary else dir_post_root
 
         # DFT 参考基线：与逐 run 图同一键名，故可直接叠成灰色水平虚线
@@ -3229,18 +3268,22 @@ class PeiN2p2:
                                '(std is the sample std, ddof=1, over runs)'] + lheader_state,
                               df_out, float_format=float_format)
 
-            kwargs = dict(dict_plot_kwargs.get(kind, {}),
-                          dft=dft[kind] if dft else None,
-                          if_relative2dft=if_relative2dft)
-            # _summary：跨 run 均值 + 上下限色带；_summary2：同一版式，改画逐 run 曲线
-            lplot[kind](df_mean, dir_summary / f'p_post_epoch_{kind}_summary.pdf',
-                        df_lo=df_lo, df_hi=df_hi, band_label=band_label.format(n=len(ldf)),
-                        **kwargs)
-            lplot[kind](df_mean, dir_summary / f'p_post_epoch_{kind}_summary2.pdf',
-                        druns=dtable[kind], **kwargs)
+            # _summary：跨 run 均值 + 上下限色带；_summary2：同一版式，改画逐 run 曲线；
+            # 每种纵轴口径各一份（相对值不加后缀、绝对值加 _abs）
+            lpdf = []
+            for suffix, if_rel in lscale_suffix:
+                kwargs = dict(dict_plot_kwargs.get(kind, {}),
+                              dft=dft[kind] if dft else None,
+                              if_relative2dft=if_rel)
+                lplot[kind](df_mean, dir_summary / f'p_post_epoch_{kind}_summary{suffix}.pdf',
+                            df_lo=df_lo, df_hi=df_hi, band_label=band_label.format(n=len(ldf)),
+                            **kwargs)
+                lplot[kind](df_mean, dir_summary / f'p_post_epoch_{kind}_summary2{suffix}.pdf',
+                            druns=dtable[kind], **kwargs)
+                lpdf += [f'_summary{suffix}.pdf', f'_summary2{suffix}.pdf']
             nwritten += 1
             print(f'  {kind}: {len(ldf)} run(s), {len(df_out)} epoch(s) -> '
-                  f'p_post_epoch_{kind}_summary.txt + _summary.pdf + _summary2.pdf')
+                  f'p_post_epoch_{kind}_summary.txt + ' + ' + '.join(lpdf))
 
         # 缺失清单：六类产物看完再写，才能用跨 kind 的 epoch 并集判定缺行
         df_absence = self._scan_epoch_absence(ldir_run, dtable, dstate)
