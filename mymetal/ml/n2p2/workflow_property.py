@@ -551,7 +551,7 @@ class PeiN2p2Property(PeiN2p2):
         return dict_count
 
     def append_prop_to_train(self, liround: list = None, path_data_ini_src: Path = None,
-                             sha256_ini_src: str = None) -> Path:
+                             sha256_ini_src: str = None, dict_path_extra: dict = None) -> Path:
         """用「只读起始快照 + 各轮属性 DFT 标签」重建 ``data/train/input.data``。
 
         与 :meth:`PeiN2p2MD.append_to_train` 同一约定：``input.data.ini`` 一经快照永不改动，
@@ -560,18 +560,22 @@ class PeiN2p2Property(PeiN2p2):
         按字节拷贝（保留每个结构的 ``set=train/test``）并把来源与 SHA256 记进
         ``input.data.ini.source.json``；已有快照时来源若给出则必须逐字节一致。
         每轮的 input.data.dft 必须收齐（条数 = manifest 条数 = 清单减排除表）才并入。
+        不属于属性轮次、但已标定好的 n2p2 数据（如 A5x 平面缺陷 DFT 帧）经 ``dict_path_extra``
+        接在各轮之后，顺序即 dict 顺序；旧训练集仍是新训练集的逐字节前缀。
 
         Args:
             liround: 要并入的属性轮次（如 ``[0]``）；None 或空则只还原起始集。
             path_data_ini_src: 起始集来源（如 ``stage2/0/data/train/input.data``）。
             sha256_ini_src: 来源文件应有的 SHA256；给出时先核对，防止上游数据被改过。
+            dict_path_extra: ``{额外 input.data 路径: 应有的 SHA256 或 None}``，原样追加在各轮
+                属性数据之后；给出 SHA256 时先核对。None 或空则不追加。
 
         Returns:
             ``data/train/input.data``。
 
         Raises:
-            FileNotFoundError: 缺起始快照且没给来源，或某轮 input.data.dft 缺失。
-            ValueError: 来源 SHA 不符、已有快照与来源不一致，或某轮没收齐。
+            FileNotFoundError: 缺起始快照且没给来源，某轮 input.data.dft 缺失，或额外数据缺失。
+            ValueError: 来源 SHA 不符、已有快照与来源不一致、某轮没收齐，或额外数据 SHA 不符。
         """
         ### check ###
         os.chdir(self.dir_root)
@@ -608,6 +612,15 @@ class PeiN2p2Property(PeiN2p2):
                                  f"manifest line(s), {len(litem)} expected. Finish the DFT dirs and "
                                  f"rerun collect_prop_dft({iround}).")
             dict_path_dft[iround] = path_dft
+        lpath_extra = []
+        for path_extra, sha256_extra in (dict_path_extra or {}).items():
+            path_extra = Path(path_extra).resolve()
+            if not self._is_file_nonempty(path_extra):
+                raise FileNotFoundError(f"❌ Missing/empty extra dataset {path_extra}.")
+            sha_extra = get_file_hash(path_extra)
+            if sha256_extra is not None and sha_extra != sha256_extra:
+                raise ValueError(f"❌ {path_extra} sha256 {sha_extra} != expected {sha256_extra}.")
+            lpath_extra.append(path_extra)
         # to here
 
         ### prepare ###
@@ -635,12 +648,20 @@ class PeiN2p2Property(PeiN2p2):
             dict_n_round[iround] = PeiN2p2MD._count_structures(path_dft)
             print(f"  ✅ property round {iround}: appended {dict_n_round[iround]} DFT-labelled "
                   f"structure(s) from {path_dft}")
+        n_extra = 0
+        for path_extra in lpath_extra:
+            with open(path_train, 'a', encoding='utf-8') as fd:
+                fd.write(path_extra.read_text(encoding='utf-8'))
+            n_one = PeiN2p2MD._count_structures(path_extra)
+            n_extra += n_one
+            print(f"  ✅ extra dataset: appended {n_one} structure(s) "
+                  f"{self._count_sample_types(path_extra)} from {path_extra}")
         n_total = PeiN2p2MD._count_structures(path_train)
-        if n_total != n_ini + sum(dict_n_round.values()):
+        if n_total != n_ini + sum(dict_n_round.values()) + n_extra:
             raise ValueError(f"❌ {path_train} holds {n_total} structure(s), expected "
-                             f"{n_ini} + {sum(dict_n_round.values())}.")
+                             f"{n_ini} + {sum(dict_n_round.values())} + {n_extra}.")
         print(f"================ 📊 append_prop_to_train: {n_ini} start + {sum(dict_n_round.values())} "
-              f"property = {n_total} structure(s) {self._count_sample_types(path_train)} -> {path_train} "
-              f"(sha256 {get_file_hash(path_train)[:16]}…)")
+              f"property + {n_extra} extra = {n_total} structure(s) {self._count_sample_types(path_train)} "
+              f"-> {path_train} (sha256 {get_file_hash(path_train)[:16]}…)")
         return path_train
         # to here

@@ -193,6 +193,16 @@ class TestPropertyCollect(unittest.TestCase):
             sha_train = get_file_hash(path_train)
             pei.append_prop_to_train(liround=[0])
             self.assertEqual(get_file_hash(path_train), sha_train)
+            # 额外数据接在各轮之后：旧训练集是新训练集的前缀；SHA 不符就拒绝、不动训练集。
+            path_extra = path_root / 'A5x_input.data'
+            path_extra.write_text('begin set=train\ncomment | tag=A51-2\nend\n', encoding='utf-8')
+            text_old = path_train.read_text()
+            with self.assertRaises(ValueError):
+                pei.append_prop_to_train(liround=[0], dict_path_extra={path_extra: '0' * 64})
+            self.assertEqual(get_file_hash(path_train), sha_train)
+            pei.append_prop_to_train(liround=[0], dict_path_extra={path_extra: get_file_hash(path_extra)})
+            self.assertEqual(path_train.read_text(), text_old + path_extra.read_text())
+            self.assertEqual(pei._count_sample_types(path_train), {'train': 4, 'test': 1, 'unset': 0})
             # 快照一经建立，来源变了就拒绝。
             path_src.write_text('begin set=train\nend\n', encoding='utf-8')
             with self.assertRaises(ValueError):
