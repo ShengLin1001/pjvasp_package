@@ -11,7 +11,7 @@
 .. code-block:: bash
 
    python slurm_utils/slurm_universal/pei_slurm_univ_submit.py -h
-   bash vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
+   python vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
 
 Slurm
 -----

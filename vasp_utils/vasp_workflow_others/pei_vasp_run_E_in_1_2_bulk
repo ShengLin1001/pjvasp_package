@@ -1,231 +1,84 @@
-#!/bin/bash
+#!/usr/bin/env python3
 # B. Yin, 2022-03-09
 # Revised by J. Pei, 2024-12-20
-# echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
-# example: pei_vasp_run_E_in_1_2_bulk -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1
+# Rewritten in Python by J. Pei, 2026-11-01 (same CLI and output; adds -calc / -pair /
+#   -perturb / -outdir; the logic lives in mymetal.build.workflow.E_in_1_2_bulk)
+# pei_vasp_run_E_in_1_2_bulk
+#  >>> Uniaxial / biaxial in-plane stretch of a bulk cell. Run it at the level of
+#      y_full_relax: a0 is the CONTCAR scale factor, x is stretched to a1, y to a2 (absolute
+#      lengths in Angstrom), c is rescaled by 1/(strainx*strainy) so the volume is conserved.
+#      Every a1 x a2 pair becomes y_E_in_1_2_bulk/y_dir/a1-<a1>-a2-<a2> (-pair: a1[i], a2[i]).
+#
+#  The cell constraint is a calc-file matter, not a workflow one: put it in y_full_relax
+#  (VASP: ISIF=3 + Y_CONSTR_LATT modeid 3 relaxes sigma_33 only; LAMMPS: lmp.in rendered by
+#  mymetal.build.workflow.lammps_input.generate_lmp_relax_input with box_relax='z').
+#
+#  It ONLY prepares input directories -- no Slurm script, no sbatch.
 
-# 这个脚本根据 CONTCAR 的 a0 为该 cell 的基准，分别在x和y方向施加 a1/a0 和 a2/a0 的stretch
+import argparse
+import sys
+from pathlib import Path
 
-# ---------- Colors ----------
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+from mymetal.build.workflow.E_in_1_2_bulk import DICT_CALC_FILES, generate_E_in_1_2_bulk_dirs
 
-# ---------- Help ----------
-# -a1/-a2 are TARGET in-plane lattice lengths in Angstrom, not strains: the script divides
-# each by the CONTCAR scale factor a0 to get strainx/strainy. Every a1 x a2 combination is
-# generated, so two 3-value lists give 9 dirs.
-print_help(){
-    echo -e "${GREEN}pei_vasp_run_E_in_1_2_bulk${NC} - Uniaxial / biaxial in-plane stretch of a bulk cell"
-    echo ""
-    echo -e "${YELLOW}Usage:${NC}"
-    echo -e "  $(basename "$0") ${GREEN}-a1 <list>${NC} ${GREEN}-a2 <list>${NC}"
-    echo ""
-    echo -e "${YELLOW}Options:${NC}"
-    echo -e "  ${GREEN}-a1 <v1> <v2> ...${NC}   Target ${BLUE}x${NC} lattice lengths, in Angstrom"
-    echo -e "  ${GREEN}-a2 <v1> <v2> ...${NC}   Target ${BLUE}y${NC} lattice lengths, in Angstrom"
-    echo ""
-    echo -e "${YELLOW}Notes:${NC}"
-    echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}; values are ${YELLOW}absolute lengths${NC} (a0-based), not strains."
-    echo -e "  - Every ${GREEN}a1 x a2${NC} pair is built -> y_E_in_1_2_bulk/y_dir/a1-<v1>-a2-<v2>."
-    echo -e "    Two 3-value lists = 9 dirs; keep the lists short."
-    echo -e "  - c is rescaled by 1/(strainx*strainy), so the ${GREEN}volume is conserved${NC}."
-    echo -e "  - It does ${YELLOW}NOT${NC} sbatch; submit y_dir/* yourself, then ${GREEN}pei_vasp_plot_all -E_in_1_2_bulk${NC}."
-    echo ""
-    echo -e "${YELLOW}Example:${NC}    (a0 ~ 2.95 Ang here; use your own relaxed value)"
-    echo -e "  ${BLUE}# equal biaxial: same list on both axes${NC}"
-    echo -e "  $(basename "$0") -a1 2.90 2.95 3.00 -a2 2.90 2.95 3.00"
-    echo -e "  ${BLUE}# uniaxial along x: vary a1, pin a2 at the relaxed value${NC}"
-    echo -e "  $(basename "$0") -a1 2.90 2.95 3.00 -a2 2.95"
-    echo ""
-}
+EPILOG = """\
+most common:
+  pei_vasp_run_E_in_1_2_bulk -a1 2.90 2.95 3.00 -a2 2.90 2.95 3.00
+                                                   # 3 x 3 grid (a0 ~ 2.95 here)
+  pei_vasp_run_E_in_1_2_bulk -a1 2.90 2.95 3.00 -a2 2.95
+                                                   # uniaxial along x, a2 pinned
+  pei_vasp_run_E_in_1_2_bulk -a1 $(seq 2.70 0.01 2.90) -a2 $(seq 2.70 0.01 2.90) -pair
+                                                   # equal biaxial only: a1 = a2, 21 dirs
+  pei_vasp_run_E_in_1_2_bulk -calc lammps -a1 2.60 2.70 -a2 2.60 2.70
+                                                   # LAMMPS: copies lmp.in, writes data.lmp
+  pei_vasp_run_E_in_1_2_bulk -a1 2.60 2.70 -a2 2.60 2.70 -perturb 0.01 \\
+                             -outdir y_E_in_1_2_bulk_perturb
+                                                   # same grid, +-0.01 A random displacement
 
-main(){
-    srcdir0=y_full_relax
+then:
+  submit <outdir>/y_dir/* with your usual flow
+  (VASP: pei_vasp_univ_sbatch; LAMMPS: pei_lmp_univ_sbatch), then
+  cd <outdir> && pei_vasp_plot_E_in_1_2_bulk.py [-calc lammps]
 
-    if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-        print_help
-        exit 0
-    fi
+notes:
+  run at the level of y_full_relax; -a1 / -a2 are absolute lengths (a0-based), not strains.
+  the full grid of two n-value lists is n*n dirs; -pair keeps n.
+  -calc vasp copies INCAR KPOINTS POTCAR (+ sub.* Y_* CHGCAR); -calc lammps copies lmp.in
+  (+ sub.*). POSCAR is written either way.
+  -perturb draws a fresh seed and records it in <outdir>/y_perturb_seed.txt.
+"""
 
-    if [ -z "$1" ]; then      # empty is true
-        echo -e "==>  Please give -a1 / -a2 lists. Abort!  (see ${GREEN}$(basename "$0") --help${NC})"
-        exit 1
-    fi
+parser = argparse.ArgumentParser(
+    description="Generate uniaxial / biaxial in-plane stretch directories from y_full_relax.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument("-a1", type=float, nargs="+", required=True,
+                    help="Target x lattice lengths, Angstrom.")
+parser.add_argument("-a2", type=float, nargs="+", required=True,
+                    help="Target y lattice lengths, Angstrom.")
+parser.add_argument("-pair", action="store_true",
+                    help="Pair a1[i] with a2[i] instead of building every combination.")
+parser.add_argument("-calc", default="vasp", choices=sorted(DICT_CALC_FILES),
+                    help="Calc files to copy into each case (default vasp).")
+parser.add_argument("-perturb", type=float, default=0.0,
+                    help="Uniform random displacement amplitude per coordinate, Angstrom "
+                         "(default 0, off).")
+parser.add_argument("-srcdir", default="y_full_relax", help="Reference directory.")
+parser.add_argument("-outdir", default="y_E_in_1_2_bulk", help="Output directory.")
+parser.add_argument("-force", action="store_true",
+                    help="Delete an existing output directory without prompting.")
+args = parser.parse_args()
+sys.stdout.reconfigure(line_buffering=True)
 
-    if [ -d "$srcdir0" ]
-    then
-        sub_run_E_in_1_2_slab $@
-    else
-        echo "==> no $srcdir0 found! Abort!"
-        exit
-    fi
-}
+print("a1         :", " ".join("%.8f" % a for a in args.a1))
+print("a2         :", " ".join("%.8f" % a for a in args.a2))
+print("Pairing    :", "a1[i] with a2[i]" if args.pair else "every a1 x a2")
+print("Calc files :", args.calc)
+print("Perturb    :", ("±%g A" % args.perturb) if args.perturb > 0 else "off")
+print("Source dir :", args.srcdir)
+print("Output dir :", args.outdir)
 
-
-sub_run_E_in_1_2_slab(){
-srcdir=`pwd`/y_full_relax_temp
-rm -rf $srcdir
-
-cp -r $srcdir0  $srcdir 
-cd $srcdir
-
-echo "==> uniaxial / biaxial stretch for bulk hexagonal system"
-echo "    Change a1, a2 to two lists, $ a0 is aref"
-echo "example: pei_vasp_run_E_in_1_2_bulk -a1 10 20 30 1 0.1 0.2 -a2  0.1 0.2 10 20 30 1"
-
-# read -a1 -a2 list, units in Angs
-a1=()
-a2=()
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    -a1)
-      shift
-      while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
-        a1+=("$1") 
-        shift
-      done
-      ;;
-    -a2)
-      shift
-      while [[ $# -gt 0 && ! $1 =~ ^- ]]; do
-        a2+=("$1")  
-        shift
-      done
-      ;;
-    *)
-      echo -e "Unknown option: $1  (see ${GREEN}$(basename "$0") --help${NC})"
-      exit 1
-      ;;
-  esac
-done
-
-echo "a1 = ${a1[@]}"
-echo "a2 = ${a2[@]}"
-
-# for val in "${a2[@]}"; do
-#     echo "$val"
-# done
-
-
-myfile=./CONTCAR 
-if [ -f "$myfile" ]; then
-    echo "$myfile exists."
-else 
-    echo "$myfile does not exist. cp POSCAR CONTCAR "
-    cp POSCAR CONTCAR
-fi
-
-# 参数脚本的变化不应该在这个工作流文件中体现！！！！！！！！！
-# yin_vasp_univ_find_and_change  -isif  3
-# echo -e  "3\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
-
-# # sometime, we dont't want to relax the cell shape during the ionic relaxation
-# yin_vasp_univ_find_and_change  -isif  2
-# echo -e  "0\n0.0  0.0  0.0  0.0  0.0  0.0" > Y_CONSTR_LATT
-
-cd ..
-
-
-#=====================
-
-dirCij=y_E_in_1_2_bulk
-
-rm -rI  $dirCij
-mkdir   $dirCij
-cd      $dirCij
-
-mkdir y_dir
-cd    y_dir
-
-#=====================
-for val1 in "${a1[@]}"; do
-    for val2 in "${a2[@]}"; do
-        val1=`printf "%.8f" "$val1"`
-        val2=`printf "%.8f" "$val2"`
-        
-        dirn=`printf "a1-$val1-a2-$val2"`
-        #echo $dirn
-
-        echo ================ $dirn
-        printf "a1:%12.8f   a2:%12.8f\n" "$val1" "$val2"
-        mkdir $dirn
-        cd $dirn
-
-        cp $srcdir/{INCAR,KPOINTS,CONTCAR,POTCAR,sub.*,Y_*,CHGCAR} ./
-        mv CONTCAR POSCAR
-        a0=$(sed -n '2p' "POSCAR")
-
-        python -c "
-from ase.io.vasp import read_vasp 
-from mymetal.io.vasp import my_write_vasp
-import numpy as np
-
-atoms = read_vasp('./POSCAR')
-atoms_cell = np.array(atoms.get_cell().copy())
-volume = atoms.get_volume()
-#print(f'{volume}')
-a1 = atoms_cell[0]
-a2 = atoms_cell[1]
-a3 = atoms_cell[2]
-
-# a1 和 a2 此时必须对应的是 a0 的cell, 可以不是六方胞，可以是正交胞
-# initial ratio for a1 != a2
-
-strainx = $val1/$a0
-strainy = $val2/$a0
-#print('strainx:',strainx)
-#print('strainy:',strainy)
-
-
-atoms_cell[:, 0] *= strainx
-atoms_cell[:, 1] *= strainy
-################### Sometimes, you don't want to change c basis vector
-atoms_cell[:, 2] /= (strainx*strainy)
-
-atoms.set_cell(atoms_cell, scale_atoms=True)
-atoms_cell2 = np.array(atoms.get_cell().copy())
-volume2 = atoms.get_volume()
-
-a1_new = atoms_cell2[0]
-a2_new = atoms_cell2[1]
-a3_new = atoms_cell2[2]
-
-my_write_vasp('POSCAR', atoms, lattice_scale_factor=$a0, label = f'strainx:{strainx} strainy:{strainy} val1:$val1  val2:$val2')
-
-# Uniform bixial strain check
-# if abs($val1 - $val2) < 1e-6:
-#     if abs(np.linalg.norm(a1_new)-$val1) > 1e-6 or abs(np.linalg.norm(a2_new)-$val2) > 1e-6:
-#         print('Error in setting lattice vectors!')
-#         print('a1_new:',np.linalg.norm(a1_new))
-#         print('a2_new:',np.linalg.norm(a2_new))
-#         # raise Exception('Error in setting lattice vectors!')
-
-if abs(volume2 - volume) > 1e-6:
-    print('Error in volume conservation!')
-    print('volume old:',volume)
-    print('volume new:',volume2)
-    # raise Exception('Error in volume conservation!')
-
-
-"
-
-        echo 'submit dir:' `pwd`
-        #sbatch sub.*
-
-        cd ..
-    done
-done
-
-rm -rf $srcdir
-}
-
-
-
-main "$@"; exit
-
-
-
-
+path_root = Path.cwd().resolve()
+print("🟢 ===== pei_vasp_run_E_in_1_2_bulk in %s" % path_root)
+generate_E_in_1_2_bulk_dirs(path_root=path_root, la1=args.a1, la2=args.a2,
+                            if_pair=args.pair, calc=args.calc, perturb=args.perturb,
+                            srcdir=args.srcdir, outdir=args.outdir, force=args.force)

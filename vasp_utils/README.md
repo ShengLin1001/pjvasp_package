@@ -11,7 +11,7 @@ Sphinx 文档：
 
 ```bash
 bash -n vasp_utils/vasp_universal/pei_vasp_univ_sbatch
-bash -n vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb
+python vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
 python slurm_utils/slurm_universal/pei_slurm_univ_submit.py -h
 ```
 

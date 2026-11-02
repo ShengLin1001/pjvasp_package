@@ -40,7 +40,7 @@ repository 提供，而不是本仓库中的 ``myvasp/`` 脚本目录：
 .. code-block:: bash
 
    python slurm_utils/slurm_universal/pei_slurm_univ_submit.py -h
-   bash vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
+   python vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
 
    export PATH="$PWD/slurm_utils/slurm_universal:$PWD/vasp_utils/vasp_universal:$PATH"
    command -v pei_slurm_univ_submit.py

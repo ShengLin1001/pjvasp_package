@@ -9,31 +9,38 @@ from myvasp import vasp_func as vf
 from mymetal.post.general import my_read_y_dir_contcar
 from mymetal.post.E_in_1_2_bulk import post_E_in_1_2_bulk
 
-# Takes no options. It is run from INSIDE y_E_in_1_2_bulk (that is how pei_vasp_plot_all
-# calls it) and chdir's one level up to find y_full_relax/CONTCAR as the reference cell.
+# It is run from INSIDE the tree (that is how pei_vasp_plot_all calls it) and chdir's one
+# level up to find y_full_relax/CONTCAR (POSCAR if absent) as the reference cell. The tree is
+# whatever directory it is run in, so -outdir trees (e.g. y_E_in_1_2_bulk_perturb) work too.
 # Parse first, so --help answers without moving the caller's cwd or running univ_post.
+DICT_UNIV_POST = {"vasp": "pei_vasp_univ_post", "lammps": "pei_lmp_univ_post"}
+
 EPILOG = """\
 most common:
   pei_vasp_plot_all -E_in_1_2_bulk               # usual entry point: every tree found
   cd y_E_in_1_2_bulk && pei_vasp_plot_E_in_1_2_bulk.py
                                                  # plot a single tree by hand
+  cd y_E_in_1_2_bulk && pei_vasp_plot_E_in_1_2_bulk.py -calc lammps
+                                                 # LAMMPS cases (pei_lmp_univ_post)
 
-writes into y_E_in_1_2_bulk/:
+writes into the tree:
   p_post_E_in_1_2_bulk.pdf / p_post_E_in_1_2_bulk2.pdf   energy vs strain
   p_post_E_in_1_2_bulk.txt                               the fitted table
   movie.xyz                                              all CONTCARs, for viewing
 
 notes:
-  takes no options. run it from INSIDE y_E_in_1_2_bulk: it chdir's one level up and uses
-  y_full_relax/CONTCAR as the reference cell, so that dir must still be there.
-  it re-runs pei_vasp_univ_post itself; run it only once the jobs have finished.
+  run it from INSIDE the tree: it chdir's one level up and uses y_full_relax/CONTCAR
+  (POSCAR if there is no CONTCAR) as the reference cell, so that dir must still be there.
+  it re-runs the univ post (-calc picks which) itself; run it once the jobs have finished.
 """
 
 parser = argparse.ArgumentParser(
     description="Plot energy vs uniaxial/biaxial in-plane stretch from a finished "
                 "y_E_in_1_2_bulk tree.",
     epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.parse_args()
+parser.add_argument("-calc", default="vasp", choices=sorted(DICT_UNIV_POST),
+                    help="Which univ post builds y_post_data.txt + CONTCAR (default vasp).")
+args = parser.parse_args()
 
 # Pre-pare data
 
@@ -41,12 +48,14 @@ parser.parse_args()
 
 # e. g. "****/20231215_strain_energy_fcc_hcp/more_strain_uniaxial_biaxial_bulk_fcc_hcp/fcc"
 # Already cd the workflow root
+workflow_root = os.getcwd()
 os.chdir("..")
 myroot = os.getcwd()
-workflow_root = os.path.join(myroot, "y_E_in_1_2_bulk")
 post_data_path = os.path.join(workflow_root, "y_post_data.txt")
 y_dir_path = os.path.join(workflow_root, "y_dir")
 refcontcar_path = os.path.join(myroot, "y_full_relax/CONTCAR")
+if not os.path.isfile(refcontcar_path):
+    refcontcar_path = os.path.join(myroot, "y_full_relax/POSCAR")
 latoms_path = os.path.join(workflow_root, "movie.xyz")
 save_fig_path = os.path.join(workflow_root, "p_post_E_in_1_2_bulk.pdf")
 save_fig_path2 = os.path.join(workflow_root, "p_post_E_in_1_2_bulk2.pdf")
@@ -54,7 +63,7 @@ save_txt_path = os.path.join(workflow_root, "p_post_E_in_1_2_bulk.txt")
 ################### To here
 
 os.chdir(workflow_root)
-os.system("pei_vasp_univ_post")
+os.system(DICT_UNIV_POST[args.calc])
 
 jobn, Etot, Eent, pres = vf.vasp_read_post_data(post_data_path)
 latoms = my_read_y_dir_contcar(dir = y_dir_path, post_data_file = post_data_path)

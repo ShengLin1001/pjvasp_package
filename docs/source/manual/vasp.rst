@@ -143,7 +143,7 @@ VASP workflow 覆盖以下材料性质计算场景，每个场景对应一个 ``
 
    python slurm_utils/slurm_universal/pei_slurm_univ_submit.py -h
    bash -n vasp_utils/vasp_universal/pei_vasp_univ_sbatch
-   bash -n vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb
+   python vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
 
 清理、续算和 resubmit 脚本可能删除输出或改写 POSCAR/INCAR。帮助文本不能替代
 源码审查；先复制一个小型非生产目录验证。POTCAR 的来源、授权和元素顺序由用户

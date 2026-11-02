@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+# J. Pei, 2026-11-01
+# pei_lmp_univ_post
+#  >>> LAMMPS counterpart of pei_vasp_univ_post. Run it where pei_vasp_univ_post would run
+#      (the directory holding y_dir/): every finished case gets a CONTCAR from its final
+#      dump, and ./y_post_data.txt gets one line per finished case in the VASP column layout,
+#      so pei_vasp_plot_* scripts read LAMMPS results unchanged.
+#      -neb: run in y_neb/y_dir instead; writes p_neb_py.dat (the nebbarrier table) and the
+#      image CONTCARs. Logic: mymetal.post.lmp_univ.
+
+import argparse
+import sys
+from pathlib import Path
+
+from mymetal.post.lmp_univ import post_lmp_cases, post_lmp_neb
+from mymetal.universal.print.print import fail
+
+EPILOG = """\
+most common:
+  cd y_E_in_1_2_bulk && pei_lmp_univ_post        # y_dir/* -> y_post_data.txt + CONTCAR
+  cd y_full_relax_neb && pei_lmp_univ_post -dir_list ini fin
+                                                  # explicit cases, no y_dir
+  cd y_neb/y_dir && pei_lmp_univ_post -neb        # NEB -> p_neb_py.dat + image CONTCAR
+
+notes:
+  unfinished cases (no y_lmp_done.txt) are listed and left out of y_post_data.txt.
+  force_b in p_neb_py.dat is nan: LAMMPS does not print the tangential force per replica.
+"""
+
+parser = argparse.ArgumentParser(
+    description="Collect finished LAMMPS cases into VASP-format post files.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument("-dir_list", nargs="+", default=None,
+                    help="Case directories (default: every subdirectory of ./y_dir).")
+parser.add_argument("-neb", action="store_true",
+                    help="Post-process a NEB in the current directory (y_neb/y_dir).")
+args = parser.parse_args()
+sys.stdout.reconfigure(line_buffering=True)
+
+path_work = Path.cwd().resolve()
+print("🟢 ===== pei_lmp_univ_post in %s" % path_work)
+
+if args.neb:
+    dict_neb = post_lmp_neb(path_work)
+    nrep = len(dict_neb["lpe"])
+    print("================ 📊 NEB summary")
+    print("replicas          : %d" % nrep)
+    print("last step         : %d" % dict_neb["step"])
+    print("max replica force : %.6f eV/A (ftol %s)" % (dict_neb["max_replica_force"],
+                                                       dict_neb["ftol"]))
+    print("barrier           : %.6f eV" % dict_neb["barrier_eV"])
+    print("%s converged" % ("✅" if dict_neb["converged"] else "❌ NOT"))
+    print("📄 %s" % (path_work / "p_neb_py.dat"))
+    sys.exit(0 if dict_neb["converged"] else 1)
+
+if args.dir_list is None:
+    path_ydir = path_work / "y_dir"
+    if not path_ydir.is_dir():
+        fail("no y_dir in %s (give -dir_list for explicit cases)" % path_work)
+    lpath_case = sorted(p for p in path_ydir.iterdir() if p.is_dir())
+else:
+    lpath_case = [(path_work / d).resolve() for d in args.dir_list]
+    lmissing = [str(p) for p in lpath_case if not p.is_dir()]
+    if lmissing:
+        fail("case dirs not found: %s" % ", ".join(lmissing))
+
+print("📁 %d case dirs" % len(lpath_case))
+ldone, lunfinished = post_lmp_cases(path_work, lpath_case)
+
+print("================ 📊 summary")
+print("✅ finished   : %d" % len(ldone))
+print("❌ unfinished : %d" % len(lunfinished))
+for name in lunfinished:
+    print("   ❌ %s" % name)
+print("📄 %s" % (path_work / "y_post_data.txt"))
+sys.exit(0 if not lunfinished else 1)

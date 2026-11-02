@@ -79,7 +79,7 @@ python docs/examples/getting_started_au111.py --output docs/_build/example-au111
 
 ```shell
 python slurm_utils/slurm_universal/pei_slurm_univ_submit.py -h
-bash vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
+python vasp_utils/vasp_workflow_bulk/pei_vasp_run_neb -h
 ```
 
 在 CentOS HPC 上也可以把经过审核的脚本目录加入 PATH。缺少 VASP、LAMMPS、

@@ -1,0 +1,29 @@
+# ---------------------------------------------------------------------------------------
+# neb_case_template.in -- climbing-image NEB at fixed cell, run in y_neb/y_dir
+# Rendered by mymetal.build.workflow.lammps_input.generate_lmp_neb_input; launch with
+#   lmp -partition <N_IMAGE+2>x1 -in lmp.in     (one partition per replica, 00 .. N_IMAGE+1)
+# Replica 0 reads data.lmp (image 00); replica i >= 1 reads coords.<i> (image i), written by
+# pei_vasp_run_neb -calc lammps from the same nebmake.pl images a VASP NEB would start from.
+# The end replicas are held fixed by LAMMPS, so relax ini / fin beforehand (y_full_relax_neb).
+#   neb_spring_template  parallel spring, eV/A^2 with 'parallel neigh' (VASP SPRING=-5 -> 5.0)
+#   neb_ftol_template    force tolerance, eV/A; LAMMPS checks the 3N two-norm per replica,
+#                        stricter than VASP's per-atom EDIFFG at the same number
+#   neb_n1/n2_template   max iterations of the plain stage / the climbing stage (LCLIMB)
+# Outputs: log.lammps (universe log, per-replica RD / PE every nevery steps),
+#   y_final.<i>.lammpstrj per replica, y_lmp_done.txt from replica 0.
+# ---------------------------------------------------------------------------------------
+general_init_template
+
+atom_modify     map array sort 0 0.0
+read_data       data.lmp
+
+general_potential_template
+
+variable        i equal part
+timestep        neb_timestep_template
+fix             fneb all neb neb_spring_template parallel neigh
+min_style       fire
+neb             0.0 neb_ftol_template neb_n1_template neb_n2_template neb_nevery_template each coords.${i}
+
+write_dump      all custom y_final.${i}.lammpstrj id type x y z modify sort id format float %20.15g
+if "${i} == 0" then "print 'pei_lmp_done' file y_lmp_done.txt screen no"

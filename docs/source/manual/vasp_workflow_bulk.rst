@@ -181,8 +181,8 @@ Stretch workflow
 NEB workflow
 ------------
 
-``pei_vasp_run_neb``（bash）从 ``y_full_relax_neb/{ini,fin}/CONTCAR`` 生成
-``N`` 个 NEB image 目录。
+``pei_vasp_run_neb``（Python，逻辑在 ``mymetal.build.workflow.neb``）从
+``y_full_relax_neb/{ini,fin}/CONTCAR`` 生成 ``N`` 个 NEB image 目录。
 
 .. code-block:: bash
 
@@ -193,9 +193,21 @@ NEB workflow
    # 推荐 N_IMAGE = DISTANCE / 0.8
    pei_vasp_run_neb 6
 
-源目录必须是 ``y_full_relax_neb``，且包含 ``ini/CONTCAR`` 与 ``fin/CONTCAR``。
-脚本只准备 image 目录，不 sbatch。完成后用 ``pei_vasp_plot_all -neb`` 绘制
+源目录默认是 ``y_full_relax_neb``（``-srcdir`` 可改），且包含 ``ini/CONTCAR`` 与
+``fin/CONTCAR``。脚本只准备 image 目录，不 sbatch；提交交给
+``pei_slurm_univ_submit.py`` 等提交入口。完成后用 ``pei_vasp_plot_all -neb`` 绘制
 迁移能垒。
+
+``-calc lammps`` 走同一套插像（``nebmake.pl`` + ``nebavoid.pl``），只是计算文件
+不同：``ini/`` 放 ``lmp.in.neb``（``mymetal.build.workflow.lammps_input.generate_lmp_neb_input``
+生成），``y_dir`` 里写 ``data.lmp``（image 00）与 ``coords.1 .. coords.N+1``，用
+``lmp -partition <N+2>x1 -in lmp.in`` 运行，``cd y_neb/y_dir && pei_lmp_univ_post -neb``
+写 ``p_neb_py.dat`` 与各 image 的 CONTCAR。
+
+.. code-block:: bash
+
+   pei_vasp_run_neb 5 -calc lammps
+   cd y_neb/y_dir && pei_lmp_univ_sbatch . lmp -partition 7x1
 
 .. seealso::
 

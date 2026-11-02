@@ -1,0 +1,34 @@
+# ---------------------------------------------------------------------------------------
+# relax_case_template.in -- one structure, one relaxation (one lmp.in per y_dir/<case>)
+# Rendered by mymetal.build.workflow.lammps_input.generate_lmp_relax_input:
+#   general_init_template      <- general_init.mod verbatim (units / etol / ftol / maxiter ...)
+#   general_potential_template <- general_potential.mod, pair and mass lines filled in
+#   box_relax_template         <- cell constraint: empty = fixed cell (VASP ISIF=2);
+#                                 "fix br all box/relax z 0.0 fixedpoint 0 0 0" = relax
+#                                 sigma_zz only
+# Outputs, the LAMMPS counterparts of a VASP case:
+#   y_lmp_energy.txt   "<E> 0.0000 in kB <pxx pyy pzz pxy pyz pxz>", OUTCAR 'in kB' column order
+#   y_final.lammpstrj  final structure; pei_lmp_univ_post turns it into CONTCAR
+#   y_lmp_done.txt     completion marker; pei_lmp_univ_sbatch skips a case that has it
+# ---------------------------------------------------------------------------------------
+general_init_template
+
+read_data       data.lmp
+
+general_potential_template
+
+box_relax_template
+min_style       cg
+minimize        ${etol} ${ftol} ${maxiter} ${maxeval}
+
+# bar -> kB. VASP's 'in kB' line and LAMMPS pxx share the sign (compression positive).
+variable        pe_final equal pe
+variable        pxx_kb   equal pxx/1000
+variable        pyy_kb   equal pyy/1000
+variable        pzz_kb   equal pzz/1000
+variable        pxy_kb   equal pxy/1000
+variable        pyz_kb   equal pyz/1000
+variable        pxz_kb   equal pxz/1000
+print           "$(v_pe_final:%.12e) 0.0000 in kB $(v_pxx_kb:%.12e) $(v_pyy_kb:%.12e) $(v_pzz_kb:%.12e) $(v_pxy_kb:%.12e) $(v_pyz_kb:%.12e) $(v_pxz_kb:%.12e)" file y_lmp_energy.txt screen no
+write_dump      all custom y_final.lammpstrj id type x y z modify sort id format float %20.15g
+print           "pei_lmp_done" file y_lmp_done.txt screen no
