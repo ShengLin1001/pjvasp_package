@@ -215,7 +215,7 @@ CONTCAR，force_b 由 dump 里的受力投影到改进切线得到），再走�
 
    pei_vasp_run_neb 12 -calc lammps -init_images <dft>/y_neb/y_dir
    cd y_neb/y_dir && pei_lmp_univ_sbatch . lmp -partition 14x1
-   cd .. && pei_vasp_plot_neb.py -calc lammps
+   cd ../.. && pei_vasp_plot_all -neb -calc lammps    # 或 cd y_neb && pei_vasp_plot_neb.py -calc lammps
 
 .. seealso::
 
@@ -437,10 +437,16 @@ plot 脚本（plot 脚本会先调 ``pei_vasp_univ_post`` 刮 OUTCAR）。
    pei_vasp_plot_all -convergence      # ENCUT/KPOINTS 收敛曲线
    pei_vasp_plot_all -stretch          # 平衡晶格常数
    pei_vasp_plot_all -hoec_energy      # 解高阶弹性常数
+   pei_vasp_plot_all -neb -calc lammps # LAMMPS 跑的 NEB
+
+``-calc vasp|lammps``（默认 ``vasp``）原样透传给 plot 脚本，只有 ``-neb`` 与
+``-E_in_1_2_bulk`` 支持 ``lammps``：此时读 ``pei_lmp_univ_post`` 的输出而不是 OUTCAR，
+也不汇总 ``y_post_time.txt`` / ``y_post_warning.txt``。其他选项配 ``-calc lammps`` 直接报错退出。
+``find`` 只匹配原名 ``y_neb`` / ``y_E_in_1_2_bulk``，``-outdir`` 改过名的树要进目录单独跑 plot 脚本。
 
 .. note::
 
-   只在作业**完成后**运行 ``pei_vasp_plot_all``：它读 OUTCAR，不提交。
+   只在作业**完成后**运行 ``pei_vasp_plot_all``：它读 OUTCAR（或 LAMMPS 输出），不提交。
 
 pei_vasp_plot_convergence.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

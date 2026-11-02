@@ -17,7 +17,7 @@ print_help(){
     echo -e "${GREEN}pei_vasp_plot_all${NC} - Find every y_* workflow dir under . and post-process it"
     echo ""
     echo -e "${YELLOW}Usage:${NC}"
-    echo -e "  $(basename "$0") ${GREEN}<workflow>${NC}"
+    echo -e "  $(basename "$0") ${GREEN}<workflow>${NC} [${GREEN}-calc${NC} vasp|lammps]"
     echo ""
     echo -e "${YELLOW}Workflows:${NC}"
     echo -e "  ${GREEN}-convergence${NC}      y_convergence     ENCUT / KPOINTS / k-length / EDIFF / KPAR-NCORE"
@@ -34,12 +34,38 @@ print_help(){
     echo -e "    It recurses with find, so a single call plots every match under the tree."
     echo -e "  - Each plot script is run ${BLUE}inside${NC} its workflow dir and re-runs pei_vasp_univ_post."
     echo -e "  - Only run it once the jobs have ${GREEN}finished${NC}; it reads OUTCARs, it does not submit."
+    echo -e "  - ${GREEN}-calc lammps${NC} is passed to the plot script (${GREEN}-neb${NC}, ${GREEN}-E_in_1_2_bulk${NC} only):"
+    echo -e "    it reads the pei_lmp_univ_post files instead of OUTCARs. Default ${GREEN}-calc vasp${NC}."
     echo ""
     echo -e "${YELLOW}Example:${NC}"
     echo -e "  $(basename "$0") -convergence      # after the ENCUT/KPOINTS tests finish"
     echo -e "  $(basename "$0") -stretch          # equilibrium lattice constant"
     echo -e "  $(basename "$0") -hoec_energy      # solve HOEC in every y_hoec_energy found"
+    echo -e "  $(basename "$0") -neb -calc lammps # LAMMPS NEB trees"
     echo ""
+}
+
+# -calc <vasp|lammps> may sit anywhere; strip it so $1 stays the workflow option
+calc=vasp
+largs=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -calc) calc="$2"; shift 2 || shift ;;   # bare trailing -calc: calc="" -> rejected below
+        *)     largs+=("$1"); shift ;;
+    esac
+done
+set -- "${largs[@]}"
+if [[ "$calc" != "vasp" && "$calc" != "lammps" ]]; then
+    echo -e "==>  -calc must be vasp or lammps, got '$calc'. Abort!"
+    exit 1
+fi
+
+# workflows whose plot script has no -calc: refuse instead of plotting LAMMPS trees as VASP
+require_vasp(){
+    if [ "$calc" != "vasp" ]; then
+        echo -e "==>  $1 is VASP only; -calc $calc is not supported. Abort!"
+        exit 1
+    fi
 }
 
 if [[ "$1" == "--help" || "$1" == "-h" ]]; then
@@ -77,8 +103,11 @@ sub_plot_all(){
 
 
     echo -e "\n==> ${FUNCNAME[0]} summary: "
-    
-    
+    if [ "$calc" != "vasp" ]; then
+        echo -e "==> -calc $calc: no y_post_time.txt / y_post_warning.txt to summarise"
+        return
+    fi
+
     for dirn in $mylist ; do
         cd $dirn
         temproot=`pwd`
@@ -107,6 +136,7 @@ case "$1" in
 
 
     -convergence)
+        require_vasp "$1"
         workdir=y_convergence
         mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_convergence.py
         sub_plot_all  $workdir  $mycmd 
@@ -115,12 +145,13 @@ case "$1" in
 
     -neb)
         workdir=y_neb
-        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_neb.py
-        sub_plot_all  $workdir  $mycmd 
+        mycmd="$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_neb.py -calc $calc"
+        sub_plot_all  $workdir  "$mycmd" 
         ;;
 
 
     -stretch)
+        require_vasp "$1"
         workdir=y_stretch
         mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_stretch.py
         sub_plot_all  $workdir  $mycmd
@@ -130,6 +161,7 @@ case "$1" in
     # higher-order elastic constants; the script itself runs pei_vasp_univ_post
     # over the whole tree, so no separate post step is needed here
     -hoec_energy)
+        require_vasp "$1"
         workdir=y_hoec_energy
         mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_hoec_energy.py
         sub_plot_all  $workdir  $mycmd
@@ -138,6 +170,7 @@ case "$1" in
     # KPAR/NCORE elapsed-time benchmark. Keep -kpar_nocre as the requested public
     # spelling; -kpar_ncore is accepted as a convenience alias.
     -kpar_nocre|-kpar_ncore)
+        require_vasp "$1"
         workdir=y_kpar_ncore
         mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_kpar_ncore
         sub_plot_all  $workdir  $mycmd
@@ -145,8 +178,8 @@ case "$1" in
 
     -E_in_1_2_bulk)
         workdir=y_E_in_1_2_bulk
-        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_others/pei_vasp_plot_E_in_1_2_bulk.py
-        sub_plot_all  $workdir  $mycmd 
+        mycmd="$PJ_MYMETAL/vasp_utils/vasp_workflow_others/pei_vasp_plot_E_in_1_2_bulk.py -calc $calc"
+        sub_plot_all  $workdir  "$mycmd" 
         ;;
 
     *)
