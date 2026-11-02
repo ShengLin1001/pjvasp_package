@@ -10,7 +10,8 @@
 #                        stricter than VASP's per-atom EDIFFG at the same number
 #   neb_n1/n2_template   max iterations of the plain stage / the climbing stage (LCLIMB)
 # Outputs: log.lammps (universe log, per-replica RD / PE every nevery steps),
-#   y_final.<i>.lammpstrj per replica, y_lmp_done.txt from replica 0.
+#   y_final.<i>.lammpstrj per replica (positions + real forces -> force_b along the band),
+#   y_lmp_done.txt from replica 0.
 # ---------------------------------------------------------------------------------------
 general_init_template
 
@@ -25,5 +26,5 @@ fix             fneb all neb neb_spring_template parallel neigh
 min_style       fire
 neb             0.0 neb_ftol_template neb_n1_template neb_n2_template neb_nevery_template each coords.${i}
 
-write_dump      all custom y_final.${i}.lammpstrj id type x y z modify sort id format float %20.15g
+write_dump      all custom y_final.${i}.lammpstrj id type x y z fx fy fz modify sort id format float %20.15g
 if "${i} == 0" then "print 'pei_lmp_done' file y_lmp_done.txt screen no"

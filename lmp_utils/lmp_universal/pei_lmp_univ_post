@@ -5,8 +5,9 @@
 #      (the directory holding y_dir/): every finished case gets a CONTCAR from its final
 #      dump, and ./y_post_data.txt gets one line per finished case in the VASP column layout,
 #      so pei_vasp_plot_* scripts read LAMMPS results unchanged.
-#      -neb: run in y_neb/y_dir instead; writes p_neb_py.dat (the nebbarrier table) and the
-#      image CONTCARs. Logic: mymetal.post.lmp_univ.
+#      -neb: run in y_neb/y_dir instead; writes the VTST neb.dat / nebef.dat and the image
+#      CONTCARs (cd y_neb && pei_vasp_plot_neb.py -calc lammps plots them). Logic:
+#      mymetal.post.lmp_univ.
 
 import argparse
 import sys
@@ -20,11 +21,12 @@ most common:
   cd y_E_in_1_2_bulk && pei_lmp_univ_post        # y_dir/* -> y_post_data.txt + CONTCAR
   cd y_full_relax_neb && pei_lmp_univ_post -dir_list ini fin
                                                   # explicit cases, no y_dir
-  cd y_neb/y_dir && pei_lmp_univ_post -neb        # NEB -> p_neb_py.dat + image CONTCAR
+  cd y_neb/y_dir && pei_lmp_univ_post -neb        # NEB -> neb.dat nebef.dat + image CONTCAR
 
 notes:
   unfinished cases (no y_lmp_done.txt) are listed and left out of y_post_data.txt.
-  force_b in p_neb_py.dat is nan: LAMMPS does not print the tangential force per replica.
+  force_b (neb.dat) comes from the fx fy fz in y_final.<i>.lammpstrj; dumps without forces
+  (inputs rendered before 2026-11-02) give nan there.
 """
 
 parser = argparse.ArgumentParser(
@@ -50,7 +52,7 @@ if args.neb:
                                                        dict_neb["ftol"]))
     print("barrier           : %.6f eV" % dict_neb["barrier_eV"])
     print("%s converged" % ("✅" if dict_neb["converged"] else "❌ NOT"))
-    print("📄 %s" % (path_work / "p_neb_py.dat"))
+    print("📄 %s, %s" % (path_work / "neb.dat", path_work / "nebef.dat"))
     sys.exit(0 if dict_neb["converged"] else 1)
 
 if args.dir_list is None:

@@ -15,6 +15,7 @@ Functions:
     - write_lmp_data: Write ``data.lmp`` (atomic style) for an Atoms object.
     - write_lmp_neb_coords: Write one replica coordinate file for ``neb ... each``.
     - read_lmp_dump_atoms: Rebuild an Atoms object from a final LAMMPS dump.
+    - read_lmp_dump_forces: Forces of the last frame of a dump, if it has fx fy fz.
 """
 
 from pathlib import Path
@@ -82,3 +83,18 @@ def read_lmp_dump_atoms(path_dump: Path = None, atoms_ref: Atoms = None) -> Atom
     atoms = Atoms(symbols=atoms_ref.get_chemical_symbols(), positions=lpos,
                   cell=atoms_dump.get_cell(), pbc=True)
     return atoms
+
+
+def read_lmp_dump_forces(path_dump: Path = None) -> np.ndarray:
+    """Forces (eV/A, sorted by atom id) of the last dump frame, or None without fx fy fz.
+
+    Args:
+        path_dump: Dump path, e.g. ``y_neb/y_dir/y_final.3.lammpstrj``.
+
+    Returns:
+        np.ndarray | None: (natom, 3) forces.
+    """
+    atoms_dump = read(Path(path_dump), format='lammps-dump-text', index=-1)
+    if atoms_dump.calc is None:
+        return None
+    return atoms_dump.get_forces()

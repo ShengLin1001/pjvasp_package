@@ -213,6 +213,49 @@ class TestLammpsIoPost(unittest.TestCase):
             self.assertEqual(dict_neb['rdt'], 2.0)
 
 
+class TestLammpsNebPost(unittest.TestCase):
+    def test_force_b_and_vtst_files(self):
+        from mymetal.post.lmp_univ import post_lmp_neb
+        with tempfile.TemporaryDirectory() as tmp:
+            path_ydir = Path(tmp)
+            atoms = create_stacking_model('AB', a=2.9, c=4.7, lat='hcp')
+            cell = atoms.get_cell()
+            lshift = [0.0, 0.5, 1.0]                 # atom 2 slides along x
+            lpe = [-7.0, -6.5, -6.9]
+            lforce = [[0, 0, 0], [0.3, 0.2, 0], [0, 0, 0]]
+            for i, (shift, force) in enumerate(zip(lshift, lforce)):
+                path_image = path_ydir / ('%02d' % i)
+                path_image.mkdir()
+                my_write_vasp(str(path_image / 'POSCAR'), atoms, lattice_scale_factor=2.9)
+                lpos = atoms.get_positions().copy()
+                lpos[1, 0] += shift
+                llines = ['ITEM: TIMESTEP', '0', 'ITEM: NUMBER OF ATOMS', '2',
+                          'ITEM: BOX BOUNDS xy xz yz pp pp pp',
+                          '%.10f %.10f %.10f' % (cell[1][0], cell[0][0], cell[1][0]),
+                          '0 %.10f 0' % cell[1][1], '0 %.10f 0' % cell[2][2],
+                          'ITEM: ATOMS id type x y z fx fy fz',
+                          '1 1 %.10f %.10f %.10f 0 0 0' % tuple(lpos[0]),
+                          '2 1 %.10f %.10f %.10f %g %g %g' % (tuple(lpos[1]) + tuple(force))]
+                (path_ydir / ('y_final.%d.lammpstrj' % i)).write_text('\n'.join(llines) + '\n')
+            header = ('    Step     MaxReplicaForce MaxAtomForce GradV0 GradV1 GradVc EBF EBR '
+                      'RDT RD1 PE1 RD2 PE2 RD3 PE3')
+            row = '10 0.005 0.002 0 0 0 0 0 1.0 0 %g 0.5 %g 1 %g' % tuple(lpe)
+            (path_ydir / 'log.lammps').write_text(header + '\n' + row + '\n')
+            (path_ydir / 'lmp.in').write_text('neb 0.0 0.01 100 100 10 each coords.${i}\n')
+            (path_ydir / 'y_lmp_done.txt').write_text('pei_lmp_done\n')
+            dict_neb = post_lmp_neb(path_ydir)
+            self.assertTrue(dict_neb['converged'])
+            self.assertAlmostEqual(dict_neb['barrier_eV'], 0.5)
+            np.testing.assert_allclose(dict_neb['ldist'], [0, 0.5, 1.0], atol=1e-8)
+            # image 1 is the maximum: tangent mixes to +x, so force_b = +0.3
+            self.assertAlmostEqual(dict_neb['lforce_b'][1], 0.3, places=8)
+            dat = np.loadtxt(path_ydir / 'neb.dat')
+            np.testing.assert_allclose(dat[:, 2], [0, 0.5, 0.1], atol=1e-8)
+            dat = np.loadtxt(path_ydir / 'nebef.dat')
+            np.testing.assert_allclose(dat[1, 1], 0.2, atol=1e-8)    # perpendicular part
+            np.testing.assert_allclose(dat[:, 2], lpe, atol=1e-8)
+
+
 class TestLammpsRunner(unittest.TestCase):
     def run_runner(self, path_case, body):
         path_bin = path_case.parent / 'bin'
@@ -237,16 +280,47 @@ class TestLammpsRunner(unittest.TestCase):
 @unittest.skipUnless(shutil.which('nebmake.pl') and shutil.which('pei_vasp_univ_neb_nebmovie'),
                      'VTST nebmake.pl / nebmovie not on PATH')
 class TestNebLammps(unittest.TestCase):
+    def make_endpoints(self, path_root, c=2.9 * 1.63):
+        for name, seq in [('ini', 'ABCABC'), ('fin', 'ABABAB')]:
+            (path_root / 'y_full_relax_neb' / name).mkdir(parents=True, exist_ok=True)
+            atoms = create_stacking_model(seq, a=2.9, c=c, lat='hcp')
+            my_write_vasp(str(path_root / 'y_full_relax_neb' / name / 'CONTCAR'), atoms,
+                          lattice_scale_factor=2.9, label=seq)
+        generate_lmp_neb_input(path_root / 'y_full_relax_neb/ini/lmp.in.neb', **DICT_POT)
+
+    def test_init_images_reinterpolated(self):
+        from mymetal.build.workflow.neb import generate_neb_dirs
+        with tempfile.TemporaryDirectory() as tmp:
+            path_root = Path(tmp)
+            self.make_endpoints(path_root)
+            path_src = generate_neb_dirs(path_root, 3, calc='lammps', outdir='y_src', force=True)
+            for name in ['01', '02', '03']:   # a bent source chain, as a relaxed NEB would be
+                atoms, a0 = my_read_vasp(str(path_src / name / 'POSCAR'))
+                atoms.positions[:, 0] += 0.1 * int(name)
+                my_write_vasp(str(path_src / name / 'CONTCAR'), atoms, lattice_scale_factor=a0)
+            # carried onto a longer c and refined from 3 to 7 images: t = k * 4 / 8
+            path_long = path_root / 'long'
+            self.make_endpoints(path_long, c=2.9 * 1.70)
+            path_new = generate_neb_dirs(path_long, 7, calc='lammps', outdir='y_init',
+                                         path_init_images=path_src, force=True)
+            atoms_new = {k: my_read_vasp(str(path_new / ('%02d' % k) / 'POSCAR'))[0]
+                         for k in range(9)}
+            self.assertAlmostEqual(atoms_new[4].get_cell()[2][2], 6 * 2.9 * 1.70 / 2, places=6)
+            for k, name in [(2, '01'), (4, '02'), (6, '03')]:   # integer t: source image itself
+                atoms_src, _ = my_read_vasp(str(path_src / name / 'CONTCAR'))
+                frac = atoms_new[k].get_scaled_positions() - atoms_src.get_scaled_positions()
+                np.testing.assert_allclose(frac - np.round(frac), 0.0, atol=1e-8)
+            frac_mid = 0.5 * (atoms_new[2].get_scaled_positions()
+                              + atoms_new[4].get_scaled_positions())
+            frac = atoms_new[3].get_scaled_positions() - frac_mid
+            np.testing.assert_allclose(frac - np.round(frac), 0.0, atol=1e-8)
+            self.assertEqual(len(list(path_new.glob('coords.*'))), 8)
+
     def test_lammps_images(self):
         from mymetal.build.workflow.neb import generate_neb_dirs
         with tempfile.TemporaryDirectory() as tmp:
             path_root = Path(tmp)
-            for name, seq in [('ini', 'ABCABC'), ('fin', 'ABABAB')]:
-                (path_root / 'y_full_relax_neb' / name).mkdir(parents=True)
-                atoms = create_stacking_model(seq, a=2.9, c=2.9 * 1.63, lat='hcp')
-                my_write_vasp(str(path_root / 'y_full_relax_neb' / name / 'CONTCAR'), atoms,
-                              lattice_scale_factor=2.9, label=seq)
-            generate_lmp_neb_input(path_root / 'y_full_relax_neb/ini/lmp.in.neb', **DICT_POT)
+            self.make_endpoints(path_root)
             path_ydir = generate_neb_dirs(path_root, 3, calc='lammps', force=True)
             self.assertTrue((path_ydir / 'lmp.in').is_file())
             self.assertTrue((path_ydir / 'data.lmp').is_file())

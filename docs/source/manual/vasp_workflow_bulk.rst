@@ -201,13 +201,21 @@ NEB workflow
 ``-calc lammps`` 走同一套插像（``nebmake.pl`` + ``nebavoid.pl``），只是计算文件
 不同：``ini/`` 放 ``lmp.in.neb``（``mymetal.build.workflow.lammps_input.generate_lmp_neb_input``
 生成），``y_dir`` 里写 ``data.lmp``（image 00）与 ``coords.1 .. coords.N+1``，用
-``lmp -partition <N+2>x1 -in lmp.in`` 运行，``cd y_neb/y_dir && pei_lmp_univ_post -neb``
-写 ``p_neb_py.dat`` 与各 image 的 CONTCAR。
+``lmp -partition <N+2>x1 -in lmp.in`` 运行。``cd y_neb && pei_vasp_plot_neb.py -calc lammps``
+先调 ``pei_lmp_univ_post -neb``（写 VTST 格式的 ``neb.dat`` / ``nebef.dat`` 与各 image 的
+CONTCAR，force_b 由 dump 里的受力投影到改进切线得到），再走与 VASP 相同的 ``nebspline.pl``
+与画图；没有 OUTCAR 轨迹，所以不画 ``p_neb_full``。
+
+``-init_images <y_dir>`` 用已有 NEB（如 DFT 的弛豫路径）作起始链：新 ini、旧 image 01..M、
+新 fin 按分数坐标分段线性重插成 ``N_IMAGE`` 个 image，晶胞取 ini 的（``N_IMAGE == M`` 时与
+旧 image 完全一致）。层错类端点之间线性插值是对称的，NEB 力保持这种对称，会收敛到比 DFT 机理
+更高的对称鞍点，这时用 DFT 路径起步才能同机理比较。
 
 .. code-block:: bash
 
-   pei_vasp_run_neb 5 -calc lammps
-   cd y_neb/y_dir && pei_lmp_univ_sbatch . lmp -partition 7x1
+   pei_vasp_run_neb 12 -calc lammps -init_images <dft>/y_neb/y_dir
+   cd y_neb/y_dir && pei_lmp_univ_sbatch . lmp -partition 14x1
+   cd .. && pei_vasp_plot_neb.py -calc lammps
 
 .. seealso::
 

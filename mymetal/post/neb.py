@@ -48,13 +48,16 @@ from scipy.spatial import cKDTree
 from scipy.sparse.csgraph import connected_components
 from scipy.sparse import csr_matrix
 
-def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CONTCAR', repost: bool = True):
+def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CONTCAR', repost: bool = True,
+             calc: str = 'vasp'):
     """Processes NEB calculation results and generates analysis files.
 
     Args:
         dirsurf: Directory containing NEB results. Defaults to 'y_neb'.
         refcontcar: Path to reference CONTCAR file. Defaults to ini/CONTCAR.
         repost: If True, reprocesses all results. Defaults to True.
+        calc: 'vasp' (VTST scripts on the OUTCARs) or 'lammps' (pei_lmp_univ_post -neb writes
+            the same neb.dat / nebef.dat; no OUTCAR trajectory, so no p_neb_full plot).
 
     Returns:
         None: Generates output files and plots in the working directory.
@@ -86,10 +89,14 @@ def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CON
         # general post
         # you need to module load gunplot
         os.chdir(workdir)
-        os.system("(module load gnuplot/5.2.8 && pei_vasp_univ_neb_nebresults.pl && pei_vasp_univ_neb_nebmovie 0 && pei_vasp_univ_neb_nebmovie 1)")
-        os.system("pei_vasp_univ_neb_nebbarrier_full.py")
+        if calc == 'lammps':
+            os.system("pei_lmp_univ_post -neb && (module load gnuplot/5.2.8 && nebspline.pl) && pei_vasp_univ_neb_nebmovie 0 && pei_vasp_univ_neb_nebmovie 1")
+        else:
+            os.system("(module load gnuplot/5.2.8 && pei_vasp_univ_neb_nebresults.pl && pei_vasp_univ_neb_nebmovie 0 && pei_vasp_univ_neb_nebmovie 1)")
+            os.system("pei_vasp_univ_neb_nebbarrier_full.py")
         os.system("rm -rf ../vaspgr/* && mv ./*.dat ./*.eps ./vaspgr ./movie* ../")
         os.chdir(dirsurf)
+        os.makedirs('vaspgr', exist_ok=True)    # LAMMPS has no vaspout*.eps; keep the dir contract
 
     my_copy_neb_files()
 
@@ -97,13 +104,14 @@ def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CON
 
     nebdf, nebefdf, spline_df, extsdf = my_read_neb()
 
-    neb_full_df = general_read('./p_neb_full.dat')
+    neb_full_df = general_read('./p_neb_full.dat') if calc == 'vasp' else None
 
     mysplinedf = my_spline_neb(nebdf, nebefdf)
 
     my_plot_neb(nebdf, nebefdf, spline_df, extsdf, mysplinedf, natoms, if_save=True)
 
-    my_plot_neb_full(neb_full_df)
+    if neb_full_df is not None:
+        my_plot_neb_full(neb_full_df)
 
     my_write_neb(mysplinedf)
 

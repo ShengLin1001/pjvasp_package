@@ -24,6 +24,9 @@ most common:
   dist.pl y_full_relax_neb/ini/CONTCAR y_full_relax_neb/fin/CONTCAR
   pei_vasp_run_neb 6                       # 6 images, VASP templates from ini/*.neb
   pei_vasp_run_neb 5 -calc lammps          # LAMMPS: ini/lmp.in.neb, data.lmp + coords.<i>
+  pei_vasp_run_neb 24 -calc lammps -init_images ../dft/y_neb/y_dir
+                                           # start from an earlier NEB's chain (e.g. DFT,
+                                           # 5 images), re-interpolated to 24 images
 
 then:
   VASP:   cd y_neb/y_dir && sbatch sub.*   (copied from ini/sub.*.neb)
@@ -63,6 +66,9 @@ parser.add_argument("-srcdir", default="y_full_relax_neb", help="Endpoint direct
 parser.add_argument("-outdir", default="y_neb", help="Output directory.")
 parser.add_argument("-force", action="store_true",
                     help="Delete an existing output directory without prompting.")
+parser.add_argument("-init_images", type=Path, default=None,
+                    help="y_dir of an earlier NEB; its chain, re-interpolated to N_IMAGE, "
+                         "replaces the linear start.")
 args = parser.parse_args()
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -76,9 +82,11 @@ print("Images     :", args.n_image)
 print("Calc files :", args.calc)
 print("Source dir :", args.srcdir)
 print("Output dir :", args.outdir)
+print("Init images:", args.init_images)
 
 path_ydir = generate_neb_dirs(path_root=path_root, n_image=args.n_image, calc=args.calc,
-                              srcdir=args.srcdir, outdir=args.outdir, force=args.force)
+                              srcdir=args.srcdir, outdir=args.outdir, force=args.force,
+                              path_init_images=args.init_images)
 
 print("📄 Moving log file to: %s" % (path_ydir.parent / path_log.name))
 sys.stdout.flush()

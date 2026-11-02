@@ -13,10 +13,17 @@ Per relaxation case (inputs from :mod:`mymetal.build.workflow.lammps_input`)::
 
 Per NEB (``y_neb/y_dir`` from ``pei_vasp_run_neb -calc lammps``)::
 
-    y_final.<i>.lammpstrj -> <ii>/CONTCAR
-    log.lammps            -> p_neb_py.dat (id dist_cum energy_rel force_b image), the
-                             nebbarrier table; force_b is nan (LAMMPS does not report the
-                             tangential force per replica)
+    y_final.<i>.lammpstrj -> <ii>/CONTCAR, and the real forces of each replica
+    log.lammps            -> final energies, convergence
+    both                  -> neb.dat   (image dist_cum energy_rel force_b image) and
+                             nebef.dat (image force_max energy energy_rel), the VTST
+                             nebbarrier.pl / nebef.pl files, so nebspline.pl and
+                             mymetal.post.neb.post_neb run on them unchanged
+
+force_b is the real force projected on the improved tangent (Henkelman & Jonsson 2000, the
+tangent LAMMPS fix neb uses), positive towards higher image index, as VTST prints it;
+force_max is the largest per-atom real force perpendicular to that tangent (the end images:
+the full real force).
 
 Functions:
     - read_lmp_case_energy: The energy / stress line of one case.
@@ -24,16 +31,19 @@ Functions:
     - post_lmp_cases: y_post_data.txt + CONTCAR for a list of cases.
     - read_lmp_neb_log: Last line of the universe NEB log.
     - get_lmp_neb_ftol: The force tolerance of the ``neb`` command in lmp.in.
-    - post_lmp_neb: p_neb_py.dat + image CONTCARs of one NEB.
+    - get_minimum_image: Cartesian difference vectors under the minimum-image convention.
+    - get_neb_tangents: Improved tangent of every image.
+    - post_lmp_neb: neb.dat + nebef.dat + image CONTCARs of one NEB.
 """
 
 import math
 import re
 from pathlib import Path
 
+import numpy as np
 from ase import Atoms
 
-from mymetal.io.lammps import read_lmp_dump_atoms
+from mymetal.io.lammps import read_lmp_dump_atoms, read_lmp_dump_forces
 from mymetal.io.vasp import my_read_vasp, my_write_vasp
 from mymetal.universal.print.print import fail, warn
 
@@ -169,33 +179,102 @@ def get_lmp_neb_ftol(path_in: Path = None) -> float:
     return None
 
 
+def get_minimum_image(delta: np.ndarray = None, cell: np.ndarray = None) -> np.ndarray:
+    """Cartesian difference vectors reduced to the minimum image of ``cell``.
+
+    Args:
+        delta: (natom, 3) Cartesian differences.
+        cell: (3, 3) cell, rows are lattice vectors.
+
+    Returns:
+        np.ndarray: Reduced differences.
+    """
+    frac = np.linalg.solve(cell.T, delta.T).T
+    return (frac - np.round(frac)) @ cell
+
+
+def get_neb_tangents(lpos: list = None, lpe: list = None, cell: np.ndarray = None) -> list:
+    """Unit improved tangent of every image (one-sided at the two ends).
+
+    Args:
+        lpos: (natom, 3) positions per image, in order.
+        lpe: Energy per image.
+        cell: Common cell.
+
+    Returns:
+        list: (natom, 3) unit tangents.
+    """
+    nrep = len(lpos)
+    ltau = []
+    for i in range(nrep):
+        dplus = get_minimum_image(lpos[i + 1] - lpos[i], cell) if i < nrep - 1 else None
+        dminus = get_minimum_image(lpos[i] - lpos[i - 1], cell) if i > 0 else None
+        if dminus is None or dplus is None:
+            tau = dplus if dminus is None else dminus
+        elif lpe[i + 1] > lpe[i] > lpe[i - 1]:
+            tau = dplus
+        elif lpe[i + 1] < lpe[i] < lpe[i - 1]:
+            tau = dminus
+        else:   # at an extremum: energy-weighted mix, so the tangent turns smoothly
+            dvmax = max(abs(lpe[i + 1] - lpe[i]), abs(lpe[i - 1] - lpe[i]))
+            dvmin = min(abs(lpe[i + 1] - lpe[i]), abs(lpe[i - 1] - lpe[i]))
+            if lpe[i + 1] > lpe[i - 1]:
+                tau = dplus * dvmax + dminus * dvmin
+            else:
+                tau = dplus * dvmin + dminus * dvmax
+        ltau.append(tau / np.linalg.norm(tau))
+    return ltau
+
+
 def post_lmp_neb(path_neb: Path = None) -> dict:
-    """Write ``p_neb_py.dat`` and the image CONTCARs of a finished LAMMPS NEB.
+    """Write ``neb.dat``, ``nebef.dat`` and the image CONTCARs of a finished LAMMPS NEB.
 
     Args:
         path_neb: ``y_neb/y_dir`` (image dirs 00 .. N+1, log.lammps, y_final.<i>.lammpstrj).
 
     Returns:
-        dict: The parsed log plus ``converged``, ``ftol``, ``barrier_eV`` (max PE - PE_0).
+        dict: The parsed log plus ``converged``, ``ftol``, ``barrier_eV`` (max PE - PE_0),
+        ``ldist`` and ``lforce_b`` (nan when the dumps carry no forces).
     """
     path_neb = Path(path_neb)
     if not (path_neb / DONE_MARKER).is_file():
         fail('NEB not finished (no %s) in %s' % (DONE_MARKER, path_neb))
     dict_neb = read_lmp_neb_log(path_neb / 'log.lammps')
-    nrep = len(dict_neb['lpe'])
-    for i in range(nrep):
-        write_lmp_case_contcar(path_neb / ('%02d' % i), name_dump='../y_final.%d.lammpstrj' % i)
-    pe0 = dict_neb['lpe'][0]
-    llines = ['%3s %16s %16s %16s %8s' % ('id', 'dist_cum(Å)', 'energy_rel(eV)',
-                                          'force_b(eV/Å)', 'image')]
-    for i, (rd, pe) in enumerate(zip(dict_neb['lrd'], dict_neb['lpe'])):
-        llines.append('%3d %16.8f %16.8f %16s %8d'
-                      % (i, rd * dict_neb['rdt'], pe - pe0, 'nan', i))
-    (path_neb / 'p_neb_py.dat').write_text('\n'.join(llines) + '\n')
+    lpe = dict_neb['lpe']
+    nrep = len(lpe)
+    latoms = [write_lmp_case_contcar(path_neb / ('%02d' % i),
+                                     name_dump='../y_final.%d.lammpstrj' % i)
+              for i in range(nrep)]
+    lforce = [read_lmp_dump_forces(path_neb / ('y_final.%d.lammpstrj' % i)) for i in range(nrep)]
+    cell = np.array(latoms[0].get_cell())
+    lpos = [atoms.get_positions() for atoms in latoms]
+    ldist = [0.0]
+    for i in range(1, nrep):
+        ldist.append(ldist[-1] + np.linalg.norm(get_minimum_image(lpos[i] - lpos[i - 1], cell)))
+    if any(force is None for force in lforce):
+        warn('no fx fy fz in the y_final dumps of %s: force_b / force_max are nan' % path_neb)
+        lforce_b = [math.nan] * nrep
+        lforce_max = [math.nan] * nrep
+    else:
+        ltau = get_neb_tangents(lpos, lpe, cell)
+        lforce_b = [float(np.sum(force * tau)) for force, tau in zip(lforce, ltau)]
+        lforce_max = []
+        for i, (force, tau) in enumerate(zip(lforce, ltau)):
+            force_perp = force if i in (0, nrep - 1) else force - np.sum(force * tau) * tau
+            lforce_max.append(float(np.linalg.norm(force_perp, axis=1).max()))
+    pe0 = lpe[0]
+    (path_neb / 'neb.dat').write_text(''.join(
+        '%3d %16.8f %16.8f %16.8f %3d\n' % (i, ldist[i], lpe[i] - pe0, lforce_b[i], i)
+        for i in range(nrep)))
+    (path_neb / 'nebef.dat').write_text(''.join(
+        '%4d %16.8f %16.8f %16.8f \n' % (i, lforce_max[i], lpe[i], lpe[i] - pe0)
+        for i in range(nrep)))
     ftol = get_lmp_neb_ftol(path_neb / 'lmp.in')
     dict_neb['ftol'] = ftol
     dict_neb['converged'] = (ftol is not None and dict_neb['max_replica_force'] <= ftol)
-    dict_neb['barrier_eV'] = max(dict_neb['lpe']) - pe0
+    dict_neb['barrier_eV'] = max(lpe) - pe0
+    dict_neb['ldist'] = ldist
+    dict_neb['lforce_b'] = lforce_b
     if not math.isfinite(dict_neb['barrier_eV']):
         warn('non-finite NEB barrier in %s' % path_neb)
     return dict_neb

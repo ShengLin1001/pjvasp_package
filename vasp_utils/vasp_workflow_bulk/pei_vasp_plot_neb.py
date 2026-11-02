@@ -7,24 +7,30 @@ import os
 
 from mymetal.post.neb import post_neb
 
-# Takes no options. It is run from INSIDE y_neb (that is how pei_vasp_plot_all calls it)
-# and chdir's one level up, which is where post_neb expects to start. Parse first, so
-# --help answers without moving the caller's cwd.
+# It is run from INSIDE y_neb (that is how pei_vasp_plot_all calls it) and chdir's one
+# level up, which is where post_neb expects to start. Parse first, so --help answers
+# without moving the caller's cwd.
 EPILOG = """\
 most common:
   pei_vasp_plot_all -neb                 # usual entry point: every y_neb found
   cd y_neb && pei_vasp_plot_neb.py       # plot a single tree by hand
+  cd y_neb && pei_vasp_plot_neb.py -calc lammps
+                                         # LAMMPS NEB (pei_lmp_univ_post -neb, no OUTCAR)
 
 notes:
-  takes no options. run it from INSIDE y_neb: it chdir's one level up, to the level of
-  y_full_relax, and reads the image dirs from there.
+  run it from INSIDE y_neb: it chdir's one level up, to the level of y_full_relax, and
+  reads the image dirs from there. -calc lammps skips the OUTCAR-trajectory plot (p_neb_full).
   run it only once the NEB images have finished.
 """
 
 parser = argparse.ArgumentParser(
     description="Plot the NEB migration barrier from a finished y_neb tree.",
     epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
-parser.parse_args()
+parser.add_argument("-calc", default="vasp", choices=["lammps", "vasp"],
+                    help="Engine that ran the NEB (default vasp).")
+args = parser.parse_args()
 
+# the tree is named after the cwd (y_neb, or any -outdir name)
+dirsurf = os.path.basename(os.getcwd())
 os.chdir('..')
-post_neb()
+post_neb(dirsurf=dirsurf, calc=args.calc)
