@@ -115,6 +115,16 @@ def generate_unperturbed(path_root: Path):
     return atoms
 
 
+class TestProfileIndex(unittest.TestCase):
+    def test_sparse_grid_keeps_every_line_dense_grid_keeps_the_minimum(self):
+        from mymetal.universal.plot.workflow import get_profile_index
+        self.assertEqual(get_profile_index(8, 3), list(range(8)))
+        lidx = get_profile_index(53, 27)
+        self.assertIn(27, lidx)
+        self.assertEqual((lidx[0], lidx[-1]), (0, 52))
+        self.assertLessEqual(len(lidx), 10)
+
+
 class TestLammpsInput(unittest.TestCase):
     def test_relax_render(self):
         with tempfile.TemporaryDirectory() as tmp:

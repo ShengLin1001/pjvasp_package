@@ -21,6 +21,7 @@ Functions:
     - my_plot_neb_xy: Plot atomic trajectories in 2D with customizable visualization options.
     - my_plot_stretch: Fit quadratic energy-stretch curve, extract equilibrium values, and plot energy and c/a ratio.
     - my_plot_E_in_1_2_bulk: Generate 2D contour and profile plots for E_in_1_2 bulk analysis.
+    - get_profile_index: Grid lines that get a profile subplot in my_plot_E_in_1_2_bulk.
 """
 
 import os
@@ -1235,6 +1236,26 @@ def my_plot_stretch(
 
 
 # for workflow E_in_1_2_bulk
+def get_profile_index(n: int = None, i_eq: int = None, nmax: int = 12, nsub: int = 9) -> list:
+    """Grid lines that get a profile subplot: all of them up to ``nmax``, else ``nsub`` evenly
+    spaced ones plus the equilibrium line.
+
+    A 53 x 53 grid would need 107 subplot rows, beyond the 2^16-pixel canvas limit.
+
+    Args:
+        n: Number of grid lines.
+        i_eq: Index of the line through the equilibrium point.
+        nmax: Largest grid that is profiled line by line.
+        nsub: Lines kept on a denser grid.
+
+    Returns:
+        list: Sorted line indices.
+    """
+    if n <= nmax:
+        return list(range(n))
+    return sorted(set(np.linspace(0, n - 1, nsub).round().astype(int).tolist()) | {i_eq})
+
+
 def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
                           lenergy: list = None,
                           lca: list = None,
@@ -1332,7 +1353,9 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     plt.savefig(save_fig_path)
 
     # Second figure
-    fig, axes = my_plot(fig_subp = [energy_grid.shape[0] + energy_grid.shape[1] + 1, 2], fig_sharex=False)
+    lrow = get_profile_index(energy_grid.shape[0], int(np.argmin(np.abs(a2_range - eq_a2))))
+    lcol = get_profile_index(energy_grid.shape[1], int(np.argmin(np.abs(a1_range - eq_a1))))
+    fig, axes = my_plot(fig_subp = [len(lrow) + len(lcol) + 1, 2], fig_sharex=False)
     lax = axes.flatten()
 
     min_energy = np.min(energy_grid)
@@ -1346,7 +1369,7 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     id_fig = 0
 
     # Plot a2 fixed, a1 varied: every profile along the every row
-    for i in range(energy_grid.shape[0]):
+    for i in lrow:
         ax = lax[id_fig]
         ax.plot(a1_range, energy_grid[i, :], '-o', color='C0', label=f'$a_2$={a2_range[i]:.2f} Å')
         ax.set_xlabel(r"$a_1$ (Å)")
@@ -1362,7 +1385,7 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
         id_fig += 2
     
     # Plot a1 fixed, a2 varied: every profile along the every column
-    for j in range(energy_grid.shape[1]):
+    for j in lcol:
         ax = lax[id_fig]
         ax.plot(a2_range, energy_grid[:, j], '-o', color='C1', label=f'$a_1$={a1_range[j]:.2f} Å')
         ax.set_xlabel(r"$a_2$ (Å)")
