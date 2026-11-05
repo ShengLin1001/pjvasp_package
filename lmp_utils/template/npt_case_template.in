@@ -1,0 +1,100 @@
+# ---------------------------------------------------------------------------------------
+# npt_case_template.in -- one temperature of the thermal-expansion workflow
+# Rendered by mymetal.build.workflow.lammps_input.generate_lmp_npt_input into
+# y_full_relax/lmp.in.npt; pei_vasp_run_thermal_expansion copies that into every
+# y_thermal_expansion/y_dir/T-<T>/lmp.in and writes "variable temp / seed" lines on top.
+#   general_init_template      <- general_init.mod verbatim (units / etol / ftol / maxiter ...)
+#   general_potential_template <- general_potential.mod, pair and mass lines filled in
+#   npt_*_template             <- time step, stage lengths, sampling, damping
+# Stages:
+#   1. 0 K cell relaxation, x = y coupled, z free. Cells are orthogonal (FCC cubic, HCP
+#      orthorhombic a x sqrt(3)a x c), so coupling x and y keeps a hexagonal lattice
+#      hexagonal and leaves c/a free; a cubic cell stays cubic by symmetry. One constraint
+#      serves both phases.
+#   2. NPT equilibration at ${temp}, zero stress, same coupling   -> y_lmp_md_equil.txt
+#   3. NPT production                                             -> y_lmp_md_prod.txt
+# Outputs:
+#   y_lmp_relax0.txt   0 K: lx ly lz xy xz yz vol pe   (Angstrom, Angstrom^3, eV)
+#   y_lmp_md_*.txt     fix ave/time block averages, one row per npt_n_freq steps:
+#                      step T(K) P(bar) lx ly lz xy xz yz vol pe(eV) msd(A^2) f_fcc f_hcp
+#   y_lmp_energy.txt / y_final.lammpstrj / y_lmp_done.txt   same contract as
+#                      relax_case_template.in, for the last snapshot (pei_lmp_univ_post)
+# ---------------------------------------------------------------------------------------
+general_init_template
+
+read_data       data.lmp
+
+general_potential_template
+
+thermo          npt_n_freq_template
+
+# ===== 1. 0 K cell: the MD starts from this potential's own lattice, not the POSCAR guess
+fix             br all box/relax x 0.0 y 0.0 z 0.0 couple xy fixedpoint 0 0 0
+min_style       cg
+minimize        ${etol} ${ftol} ${maxiter} ${maxeval}
+unfix           br
+
+variable        r0_lx  equal lx
+variable        r0_ly  equal ly
+variable        r0_lz  equal lz
+variable        r0_xy  equal xy
+variable        r0_xz  equal xz
+variable        r0_yz  equal yz
+variable        r0_vol equal vol
+variable        r0_pe  equal pe
+print           "$(v_r0_lx:%.12e) $(v_r0_ly:%.12e) $(v_r0_lz:%.12e) $(v_r0_xy:%.12e) $(v_r0_xz:%.12e) $(v_r0_yz:%.12e) $(v_r0_vol:%.12e) $(v_r0_pe:%.12e)" file y_lmp_relax0.txt screen no
+
+# ===== diagnostics sampled with the box: melting (MSD) and phase (CNA fractions)
+# CNA cutoff halfway between the 1st (d) and 2nd (sqrt(2) d) shells of a close-packed lattice
+# at the 0 K volume, d = (sqrt(2) V/N)^(1/3); thermal expansion (< 3 % up to melting) keeps it
+# between the shells. MSD is measured from the 0 K sites; a solid saturates below 1 A^2.
+variable        cna_rc equal 1.2071068*(sqrt(2.0)*vol/atoms)^(1.0/3.0)
+compute         cna all cna/atom ${cna_rc}
+variable        is_fcc atom c_cna==1
+variable        is_hcp atom c_cna==2
+compute         nfcc all reduce sum v_is_fcc
+compute         nhcp all reduce sum v_is_hcp
+compute         msd all msd com yes
+
+variable        md_t    equal temp
+variable        md_p    equal press
+variable        md_lx   equal lx
+variable        md_ly   equal ly
+variable        md_lz   equal lz
+variable        md_xy   equal xy
+variable        md_xz   equal xz
+variable        md_yz   equal yz
+variable        md_vol  equal vol
+variable        md_pe   equal pe
+variable        md_msd  equal c_msd[4]
+variable        md_ffcc equal c_nfcc/atoms
+variable        md_fhcp equal c_nhcp/atoms
+# expanded into separate words when substituted, so both ave/time fixes share one column list
+variable        md_cols string "v_md_t v_md_p v_md_lx v_md_ly v_md_lz v_md_xy v_md_xz v_md_yz v_md_vol v_md_pe v_md_msd v_md_ffcc v_md_fhcp"
+
+# ===== 2. NPT equilibration
+reset_timestep  0
+timestep        npt_timestep_template
+velocity        all create ${temp} ${seed} mom yes rot yes dist gaussian
+fix             md all npt temp ${temp} ${temp} npt_t_damp_template x 0.0 0.0 npt_p_damp_template y 0.0 0.0 npt_p_damp_template z 0.0 0.0 npt_p_damp_template couple xy
+
+fix             avg all ave/time npt_n_every_template npt_n_repeat_template npt_n_freq_template ${md_cols} file y_lmp_md_equil.txt
+run             npt_n_equil_template
+unfix           avg
+
+# ===== 3. NPT production (pei_vasp_plot_thermal_expansion averages this file only)
+fix             avg all ave/time npt_n_every_template npt_n_repeat_template npt_n_freq_template ${md_cols} file y_lmp_md_prod.txt
+run             npt_n_prod_template
+unfix           avg
+
+# ===== last snapshot in the relax_case_template.in contract; bar -> kB as there
+variable        pe_final equal pe
+variable        pxx_kb   equal pxx/1000
+variable        pyy_kb   equal pyy/1000
+variable        pzz_kb   equal pzz/1000
+variable        pxy_kb   equal pxy/1000
+variable        pyz_kb   equal pyz/1000
+variable        pxz_kb   equal pxz/1000
+print           "$(v_pe_final:%.12e) 0.0000 in kB $(v_pxx_kb:%.12e) $(v_pyy_kb:%.12e) $(v_pzz_kb:%.12e) $(v_pxy_kb:%.12e) $(v_pyz_kb:%.12e) $(v_pxz_kb:%.12e)" file y_lmp_energy.txt screen no
+write_dump      all custom y_final.lammpstrj id type x y z modify sort id format float %20.15g
+print           "pei_lmp_done" file y_lmp_done.txt screen no

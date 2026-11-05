@@ -22,6 +22,7 @@ Functions:
     - my_plot_stretch: Fit quadratic energy-stretch curve, extract equilibrium values, and plot energy and c/a ratio.
     - my_plot_E_in_1_2_bulk: Generate 2D contour and profile plots for E_in_1_2 bulk analysis.
     - get_profile_index: Grid lines that get a profile subplot in my_plot_E_in_1_2_bulk.
+    - my_plot_thermal_expansion: Lattice lengths, c/a, volume, energy, MSD and CNA vs T.
 """
 
 import os
@@ -1425,3 +1426,67 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     plt.savefig(save_fig_path2)
 
     return (eq_a1, eq_a2, eq_energy)
+
+
+# for workflow thermal_expansion
+def my_plot_thermal_expansion(df: pd.DataFrame = None, if_save: bool = False,
+                              savefile: str = 'p_post_thermal_expansion.pdf',
+                              dpi: int = 300) -> tuple:
+    """Six panels vs temperature from the table of ``mymetal.post.thermal_expansion``.
+
+    (a) |a1| and |a3|, (b) |a3|/|a1| (c/a for HCP, 1 for cubic), (c) volume and (d) potential
+    energy per atom, (e) MSD at the end of production (log scale: a melted case jumps by
+    orders of magnitude), (f) CNA FCC / HCP fractions. Error bars are the block SEMs; the 0 K
+    row (T_set = 0) is drawn in (a)-(d) only.
+
+    Args:
+        df: Columns T_set, a1, a3, a3_a1, V_atom, E_atom (each with *_sem), msd_end, f_fcc,
+            f_hcp.
+        if_save: Save the figure.
+        savefile: Output path.
+        dpi: DPI of the saved figure.
+
+    Returns:
+        tuple: ``(fig, axes)``.
+    """
+    fig, axes = my_plot(fig_subp=[2, 3], fig_sharex=False)
+    axes = np.array(axes).flatten()
+    df_md = df[df['T_set'] > 0]
+
+    ax = axes[0]
+    ax.errorbar(df['T_set'], df['a1'], yerr=df['a1_sem'], marker='o', label=r'$|a_1|$')
+    ax.errorbar(df['T_set'], df['a3'], yerr=df['a3_sem'], marker='s', label=r'$|a_3|$')
+    ax.set_ylabel(r'Lattice length ($\mathrm{\AA}$)')
+    general_modify_legend(ax.legend(loc='best'))
+
+    ax = axes[1]
+    ax.errorbar(df['T_set'], df['a3_a1'], yerr=df['a3_a1_sem'], marker='o')
+    ax.set_ylabel(r'$|a_3|/|a_1|$')
+
+    ax = axes[2]
+    ax.errorbar(df['T_set'], df['V_atom'], yerr=df['V_atom_sem'], marker='o')
+    ax.set_ylabel(r'$V$ ($\mathrm{\AA^3}$/atom)')
+
+    ax = axes[3]
+    ax.errorbar(df['T_set'], df['E_atom'], yerr=df['E_atom_sem'], marker='o')
+    ax.set_ylabel(r'$E_\mathrm{pot}$ (eV/atom)')
+
+    ax = axes[4]
+    ax.plot(df_md['T_set'], df_md['msd_end'], marker='o')
+    if (df_md['msd_end'] > 0).all():
+        ax.set_yscale('log')
+    ax.set_ylabel(r'MSD ($\mathrm{\AA^2}$)')
+
+    ax = axes[5]
+    ax.plot(df_md['T_set'], df_md['f_fcc'], marker='o', label='FCC')
+    ax.plot(df_md['T_set'], df_md['f_hcp'], marker='s', label='HCP')
+    ax.set_ylabel('CNA fraction')
+    general_modify_legend(ax.legend(loc='best'))
+
+    for ax in axes:
+        ax.set_xlabel(r'$T$ (K)')
+
+    if if_save:
+        fig.savefig(savefile, dpi=dpi, bbox_inches='tight')
+
+    return fig, axes

@@ -16,6 +16,7 @@ Functions:
     - render_lmp_template: Fill block (whole-line) and inline placeholders of a template.
     - generate_lmp_relax_input: Write a single-structure relaxation ``lmp.in``.
     - generate_lmp_neb_input: Write a climbing-image NEB ``lmp.in``.
+    - generate_lmp_npt_input: Write the NPT input of one thermal-expansion temperature.
 """
 
 from pathlib import Path
@@ -173,6 +174,61 @@ def generate_lmp_neb_input(path_out: Path = None, pair_style: str = None,
         'neb_n2_template': '%d' % n2,
         'neb_nevery_template': '%d' % nevery,
         'neb_timestep_template': '%g' % timestep,
+    }
+    path_out = Path(path_out)
+    path_out.write_text(render_lmp_template(text, dict_block=dict_block, dict_inline=dict_inline))
+    return path_out
+
+
+def generate_lmp_npt_input(path_out: Path = None, pair_style: str = None,
+                           pair_coeff: str = None, lmass: list = None,
+                           timestep: float = 0.001, n_equil: int = 20000,
+                           n_prod: int = 100000, n_every: int = 100, n_repeat: int = 10,
+                           t_damp: float = 0.1, p_damp: float = 1.0) -> Path:
+    """Write the thermal-expansion NPT input: 0 K cell relax, NPT equilibration, NPT production.
+
+    The temperature and the velocity seed are not in this file: they are ``${temp}`` /
+    ``${seed}``, which ``pei_vasp_run_thermal_expansion`` defines on top of each case copy.
+
+    Args:
+        path_out: Output file, usually ``y_full_relax/lmp.in.npt``.
+        pair_style: See :func:`get_lmp_potential_block`.
+        pair_coeff: See :func:`get_lmp_potential_block`.
+        lmass: See :func:`get_lmp_potential_block`.
+        timestep: MD time step, ps.
+        n_equil: Equilibration steps (not averaged).
+        n_prod: Production steps (averaged).
+        n_every: Sampling interval of ``fix ave/time``, steps.
+        n_repeat: Samples per output row; one row covers ``n_every * n_repeat`` steps.
+        t_damp: Thermostat damping time, ps.
+        p_damp: Barostat damping time, ps.
+
+    Returns:
+        Path: ``path_out``.
+    """
+    n_freq = n_every * n_repeat
+    for name, value in [('n_equil', n_equil), ('n_prod', n_prod), ('n_every', n_every),
+                        ('n_repeat', n_repeat)]:
+        if int(value) != value or value <= 0:
+            fail('%s must be a positive integer, got %r' % (name, value))
+    # whole rows only: a partial last block would be averaged over fewer samples
+    if n_equil % n_freq or n_prod % n_freq:
+        fail('n_equil (%d) and n_prod (%d) must be multiples of n_every*n_repeat (%d)'
+             % (n_equil, n_prod, n_freq))
+    text = get_lmp_template_path('npt_case_template.in').read_text()
+    dict_block = {
+        'general_init_template': get_lmp_template_path('general_init.mod').read_text().rstrip(),
+        'general_potential_template': get_lmp_potential_block(pair_style, pair_coeff, lmass),
+    }
+    dict_inline = {
+        'npt_timestep_template': '%g' % timestep,
+        'npt_n_equil_template': '%d' % n_equil,
+        'npt_n_prod_template': '%d' % n_prod,
+        'npt_n_every_template': '%d' % n_every,
+        'npt_n_repeat_template': '%d' % n_repeat,
+        'npt_n_freq_template': '%d' % n_freq,
+        'npt_t_damp_template': '%g' % t_damp,
+        'npt_p_damp_template': '%g' % p_damp,
     }
     path_out = Path(path_out)
     path_out.write_text(render_lmp_template(text, dict_block=dict_block, dict_inline=dict_inline))

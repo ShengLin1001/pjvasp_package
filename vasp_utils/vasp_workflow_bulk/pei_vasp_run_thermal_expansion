@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+# J. Pei, 2026-11-04
+# pei_vasp_run_thermal_expansion
+#  >>> Lattice parameters vs temperature by NPT MD (LAMMPS only). Run it at the level of
+#      y_full_relax: the unit cell (CONTCAR, else POSCAR; orthogonal: FCC cubic, HCP
+#      orthorhombic) is repeated -size times, and every temperature becomes
+#      y_thermal_expansion/y_dir/T-<T> (POSCAR + data.lmp + lmp.in).
+#
+#  The potential and the MD settings are a calc-file matter, not a workflow one: put
+#  y_full_relax/lmp.in.npt there, rendered by
+#  mymetal.build.workflow.lammps_input.generate_lmp_npt_input. Each case lmp.in is that file
+#  with "variable temp" and a freshly drawn "variable seed" on top. Logic:
+#  mymetal.build.workflow.thermal_expansion.
+#
+#  It ONLY prepares input directories -- no Slurm script, no sbatch.
+
+import argparse
+import sys
+from pathlib import Path
+
+from mymetal.build.workflow.thermal_expansion import generate_thermal_expansion_dirs
+
+EPILOG = """\
+most common:
+  pei_vasp_run_thermal_expansion -temp $(seq 100 100 1500) -size 6 6 6
+                                                   # FCC conventional cell -> 864 atoms
+  pei_vasp_run_thermal_expansion -temp $(seq 100 100 1500) -size 8 5 5
+                                                   # HCP orthorhombic cell -> 800 atoms
+
+then:
+  submit y_thermal_expansion/y_dir/* with pei_lmp_univ_sbatch (via pei_slurm_univ_submit.py),
+  then cd y_thermal_expansion && pei_vasp_plot_thermal_expansion.py
+  (or pei_vasp_plot_all -thermal_expansion from above)
+
+notes:
+  every temperature is an independent run: 0 K cell relaxation, NPT equilibration, NPT
+  production (lengths and time step are in lmp.in.npt).
+  the seed of each case is in its lmp.in and on its POSCAR comment line.
+"""
+
+parser = argparse.ArgumentParser(
+    description="Generate NPT thermal-expansion directories (one per temperature) from "
+                "y_full_relax.",
+    epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser.add_argument("-temp", type=int, nargs="+", required=True,
+                    help="Temperatures, whole K > 0.")
+parser.add_argument("-size", type=int, nargs=3, required=True,
+                    help="Supercell multipliers nx ny nz of the unit cell.")
+parser.add_argument("-srcdir", default="y_full_relax", help="Reference directory.")
+parser.add_argument("-outdir", default="y_thermal_expansion", help="Output directory.")
+parser.add_argument("-force", action="store_true",
+                    help="Delete an existing output directory without prompting.")
+args = parser.parse_args()
+sys.stdout.reconfigure(line_buffering=True)
+
+print("Temperatures :", " ".join(str(t) for t in args.temp), "K")
+print("Supercell    :", " x ".join(str(n) for n in args.size))
+print("Source dir   :", args.srcdir)
+print("Output dir   :", args.outdir)
+
+path_root = Path.cwd().resolve()
+print("🟢 ===== pei_vasp_run_thermal_expansion in %s" % path_root)
+generate_thermal_expansion_dirs(path_root=path_root, ltemp=args.temp, lsize=args.size,
+                                srcdir=args.srcdir, outdir=args.outdir, force=args.force)

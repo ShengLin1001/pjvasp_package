@@ -28,6 +28,7 @@ print_help(){
     echo -e "                                      (alias ${GREEN}-kpar_ncore${NC}; new scans live under"
     echo -e "                                       y_convergence and come with ${GREEN}-convergence${NC})"
     echo -e "  ${GREEN}-E_in_1_2_bulk${NC}    y_E_in_1_2_bulk   uniaxial / biaxial bulk energy"
+    echo -e "  ${GREEN}-thermal_expansion${NC} y_thermal_expansion  lattice vs T, NPT MD (LAMMPS only, -calc ignored)"
     echo ""
     echo -e "${YELLOW}Notes:${NC}"
     echo -e "  - Run it at the level of ${BLUE}y_full_relax${NC}, i.e. one level ${BLUE}above${NC} the y_* dirs."
@@ -180,6 +181,14 @@ case "$1" in
         workdir=y_E_in_1_2_bulk
         mycmd="$PJ_MYMETAL/vasp_utils/vasp_workflow_others/pei_vasp_plot_E_in_1_2_bulk.py -calc $calc"
         sub_plot_all  $workdir  "$mycmd" 
+        ;;
+
+    -thermal_expansion)
+        # LAMMPS-only workflow: no -calc to pass; calc=lammps skips the VASP y_post_time summary
+        calc=lammps
+        workdir=y_thermal_expansion
+        mycmd=$PJ_MYMETAL/vasp_utils/vasp_workflow_bulk/pei_vasp_plot_thermal_expansion.py
+        sub_plot_all  $workdir  $mycmd
         ;;
 
     *)

@@ -342,5 +342,105 @@ class TestNebLammps(unittest.TestCase):
             np.testing.assert_allclose(lpos % 1e3, atoms_fin.get_positions() % 1e3, atol=1e-6)
 
 
+
+class TestThermalExpansion(unittest.TestCase):
+    """pei_vasp_run_thermal_expansion generation + mymetal.post.thermal_expansion on fake output."""
+
+    @staticmethod
+    def make_reference(path_root: Path, cubic: bool = True) -> Path:
+        from ase.build import bulk
+        from mymetal.build.workflow.lammps_input import generate_lmp_npt_input
+        path_src = path_root / 'y_full_relax'
+        path_src.mkdir(parents=True)
+        atoms = bulk('Au', 'fcc', a=4.08, cubic=cubic)
+        my_write_vasp(str(path_src / 'POSCAR'), atoms, lattice_scale_factor=1.0, label='ref')
+        generate_lmp_npt_input(path_src / 'lmp.in.npt', n_equil=2000, n_prod=10000,
+                               **DICT_POT)
+        return path_src
+
+    def test_npt_input(self):
+        from mymetal.build.workflow.lammps_input import generate_lmp_npt_input
+        with tempfile.TemporaryDirectory() as tmp:
+            path_in = generate_lmp_npt_input(Path(tmp) / 'lmp.in.npt', **DICT_POT)
+            llive = [line for line in path_in.read_text().splitlines()
+                     if not line.lstrip().startswith('#')]
+            self.assertFalse(any('_template' in line for line in llive))
+            text = '\n'.join(llive)
+            self.assertIn('run             20000', text)
+            self.assertIn('run             100000', text)
+            self.assertIn('ave/time 100 10 1000', text)
+            self.assertIn('couple xy', text)
+            with self.assertRaises(SystemExit):     # partial last block
+                generate_lmp_npt_input(Path(tmp) / 'bad', n_prod=1500, **DICT_POT)
+
+    def test_dirs(self):
+        from mymetal.build.workflow.thermal_expansion import generate_thermal_expansion_dirs
+        from mymetal.post.thermal_expansion import read_case_meta
+        with tempfile.TemporaryDirectory() as tmp:
+            path_root = Path(tmp)
+            self.make_reference(path_root)
+            lcase = generate_thermal_expansion_dirs(path_root, [300, 100], [2, 2, 3],
+                                                    force=True)
+            self.assertEqual([p.name for p in lcase], ['T-0100', 'T-0300'])
+            llines = (lcase[1] / 'lmp.in').read_text().splitlines()
+            self.assertEqual(llines[1].split(), ['variable', 'temp', 'equal', '300'])
+            self.assertEqual(llines[2].split()[:3], ['variable', 'seed', 'equal'])
+            self.assertTrue((lcase[1] / 'data.lmp').is_file())
+            dict_meta = read_case_meta(lcase[1])
+            self.assertEqual(dict_meta, {'T': 300, 'size': [2, 2, 3], 'natoms': 48})
+            for bad in ([0], [150.5]):
+                with self.assertRaises(SystemExit):
+                    generate_thermal_expansion_dirs(path_root, bad, [2, 2, 2], force=True)
+
+    def test_tilted_cell_refused(self):
+        from mymetal.build.workflow.thermal_expansion import generate_thermal_expansion_dirs
+        with tempfile.TemporaryDirectory() as tmp:
+            path_root = Path(tmp)
+            self.make_reference(path_root, cubic=False)       # fcc primitive: tilted
+            with self.assertRaises(SystemExit):
+                generate_thermal_expansion_dirs(path_root, [300], [2, 2, 2], force=True)
+
+    def test_post(self):
+        from mymetal.build.workflow.thermal_expansion import generate_thermal_expansion_dirs
+        from mymetal.post.thermal_expansion import post_thermal_expansion
+        with tempfile.TemporaryDirectory() as tmp:
+            path_root = Path(tmp)
+            self.make_reference(path_root)
+            lcase = generate_thermal_expansion_dirs(path_root, [300, 600], [2, 2, 3],
+                                                    force=True)
+            path_case = lcase[0]
+            # 20 production rows: lx alternates 8.2 +- 0.01 (a1 = lx / 2), lz = 3 * 4.1
+            lrow = []
+            for i in range(20):
+                lx = 8.2 + (0.01 if i % 2 else -0.01)
+                lrow.append('%d 300 0 %g %g 12.3 0 0 0 %g -147.0 0.05 0.95 0.01'
+                            % (1000 * (i + 3), lx, lx, lx * lx * 12.3))
+            (path_case / 'y_lmp_md_prod.txt').write_text(
+                '# Time-averaged data\n# TimeStep v_md_t ...\n' + '\n'.join(lrow) + '\n')
+            (path_case / 'y_lmp_relax0.txt').write_text('8.16 8.16 12.24 0 0 0 815.0 -150.0\n')
+            (path_case / 'log.lammps').write_text(
+                '### NNP EW SUMMARY ### TS:        100 EW          7 EWPERSTEP 7.0e-02\n'
+                'run             2000\n'
+                '### NNP EW SUMMARY ### TS:       2000 EW          5 EWPERSTEP 5.0e-02\n'
+                'run             20000\n'
+                '### NNP EW SUMMARY ### TS:       3000 EW          2 EWPERSTEP 2.0e-02\n'
+                '### NNP EW SUMMARY ### TS:       4000 EW          1 EWPERSTEP 1.0e-02\n')
+            (path_case / 'y_lmp_done.txt').write_text('pei_lmp_done\n')
+            path_work = path_root / 'y_thermal_expansion'
+            df, lunfinished = post_thermal_expansion(path_work, if_plot=False)
+            self.assertEqual(lunfinished, ['T-0600'])
+            self.assertEqual(df['T_set'].tolist(), [0, 300])
+            row0, row = df.iloc[0], df.iloc[1]
+            self.assertAlmostEqual(row0['a1'], 4.08)
+            self.assertAlmostEqual(row0['a3'], 4.08)
+            self.assertAlmostEqual(row0['E_atom'], -150.0 / 48)
+            self.assertAlmostEqual(row['a1'], 4.1)
+            self.assertAlmostEqual(row['a3'], 4.1)
+            self.assertAlmostEqual(row['a1_sem'], 0.0)          # each block = one +- pair
+            self.assertAlmostEqual(row['E_atom'], -147.0 / 48)
+            self.assertEqual(row['ew_prod'], 3)                  # after the last run only
+            self.assertTrue((path_work / 'p_post_thermal_expansion.txt').is_file())
+
+
 if __name__ == '__main__':
     unittest.main()
