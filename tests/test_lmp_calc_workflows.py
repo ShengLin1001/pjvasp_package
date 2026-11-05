@@ -442,5 +442,72 @@ class TestThermalExpansion(unittest.TestCase):
             self.assertTrue((path_work / 'p_post_thermal_expansion.txt').is_file())
 
 
+
+class TestRefOverlay(unittest.TestCase):
+    """-ref of pei_vasp_plot_E_in_1_2_bulk.py / pei_vasp_plot_neb.py on synthetic trees."""
+
+    def test_E_in_ref(self):
+        import pandas as pd
+        from mymetal.post.E_in_1_2_bulk import (get_E_in_1_2_bulk_ref, my_write_E_in_1_2_bulk,
+                                                write_E_in_1_2_bulk_ref)
+        from mymetal.universal.plot.workflow import (my_plot_E_in_1_2_bulk,
+                                                     my_plot_E_in_1_2_bulk_ref)
+        def get_df(la, offset):
+            lrow = [('a1-%.8f-a2-%.8f' % (a1, a2), '%.8f' % a1, '%.8f' % a2,
+                     offset + (a1 - 2.9) ** 2 + 2 * (a2 - 2.9) ** 2, 1.6 + a1 - a2)
+                    for a1 in la for a2 in la]
+            return pd.DataFrame(lrow, columns=['jobn', 'a1', 'a2', 'Etot_eV_per_atom', 'lca'])
+        df = get_df([2.8, 2.9, 3.0], -3.0)
+        df.loc[0, 'Etot_eV_per_atom'] += 0.001        # (2.8, 2.8) off by 1 meV/atom
+        df_ref = get_df([2.8, 2.9], -4.0)             # coarser grid, other absolute zero
+        with tempfile.TemporaryDirectory() as tmp:
+            ref_txt = str(Path(tmp) / 'ref.txt')
+            my_write_E_in_1_2_bulk(df_ref.assign(Etot_eV=df_ref['Etot_eV_per_atom']), 1,
+                                   (2.9, 2.9, -4.0), filename=ref_txt)
+            df_cmp, lenergy_ref, lca_ref = get_E_in_1_2_bulk_ref(df, ref_txt)
+            self.assertEqual(len(df_cmp), 4)
+            np.testing.assert_allclose(df_cmp['dde'], [1.0, 0, 0, 0], atol=1e-6)
+            self.assertEqual(int(np.isnan(lenergy_ref).sum()), 5)
+            i = df.index[(df.a1 == '2.90000000') & (df.a2 == '2.90000000')][0]
+            self.assertAlmostEqual(lenergy_ref[i], -3.0)   # anchored on this tree's scale
+            path_txt = Path(tmp) / 'cmp.txt'
+            write_E_in_1_2_bulk_ref(df_cmp, ref_txt, str(path_txt))
+            self.assertEqual(len(pd.read_csv(path_txt, sep=r'\s+', comment='#')), 4)
+            my_plot_E_in_1_2_bulk_ref(df_cmp, if_save=True, savefile=str(Path(tmp) / 'p.pdf'))
+            my_plot_E_in_1_2_bulk(df.a1.astype(float).tolist(), df.a2.astype(float).tolist(),
+                                  df.Etot_eV_per_atom.tolist(), df.lca.tolist(),
+                                  str(Path(tmp) / 'c.pdf'), str(Path(tmp) / 'f.pdf'),
+                                  lenergy_ref=lenergy_ref, lca_ref=lca_ref)
+            self.assertTrue((Path(tmp) / 'f.pdf').is_file())
+
+    def test_neb_ref(self):
+        import pandas as pd
+        from mymetal.post.neb import get_neb_ref, my_spline_neb
+        from mymetal.universal.plot.workflow import my_plot_neb
+        with tempfile.TemporaryDirectory() as tmp:
+            path_ref = Path(tmp)
+            (path_ref / 'y_dir/00').mkdir(parents=True)
+            atoms = create_stacking_model('ABABAB', a=A0, c=A0 * 1.63, lat='hcp')
+            my_write_vasp(str(path_ref / 'y_dir/00/POSCAR'), atoms, label='ref')
+            (path_ref / 'p_neb.dat').write_text(
+                'id dist_cum(Å) energy_rel(eV) force_b(eV/Å) image\n'
+                '0 0.0 0.0 0.0 0\n1 1.0 0.6 0.0 1\n2 2.0 0.0 0.0 2\n', encoding='utf-8')
+            (path_ref / 'p_nebef.dat').write_text(
+                'id force_max(eV/Å) energy(eV) energy_rel(eV)\n'
+                '0 0.0 -10.0 0.0\n1 0.0 -9.4 0.6\n2 0.0 -10.0 0.0\n', encoding='utf-8')
+            dict_ref = get_neb_ref(str(path_ref))
+            self.assertEqual(dict_ref['natoms'], len(atoms))
+            nebdf = dict_ref['nebdf']
+            nebefdf = dict_ref['nebefdf']
+            spline_df = pd.DataFrame({'dist_cum(Å)': [0.0, 2.0], 'energy_rel(eV)': [0.0, 0.0],
+                                      'force_b(eV/Å)': [0.0, 0.0]})
+            extsdf = pd.DataFrame({'image': [1.0], 'energy_rel(eV)': [0.6]})
+            fig, axes = my_plot_neb(nebdf, nebefdf, spline_df, extsdf,
+                                    my_spline_neb(nebdf, nebefdf), len(atoms), dict_ref=dict_ref)
+            llabel = [t.get_text() for t in axes[0, 0].get_legend().get_texts()]
+            self.assertEqual(llabel, ['this, $E_b$ = %.2f' % (600 / len(atoms)),
+                                      'ref, $E_b$ = %.2f' % (600 / len(atoms))])
+
+
 if __name__ == '__main__':
     unittest.main()

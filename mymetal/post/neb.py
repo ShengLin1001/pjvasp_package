@@ -11,6 +11,7 @@ Functions:
     - my_add_head: Add formatted headers to NEB data files.
     - my_read_neb: Read NEB data from result files.
     - my_spline_neb: Generate cubic spline interpolation of NEB path.
+    - get_neb_ref: Read a post-processed reference NEB tree for the overlay in my_plot_neb.
     - analyze_neb_trajectory: Analyze NEB trajectory data and visualize results.
     - remove_translation: Remove translational motion from atomic trajectories (NOT USE !!!).
     - get_delta_dist_list: Calculate displacements and distances for NEB trajectory.
@@ -49,7 +50,7 @@ from scipy.sparse.csgraph import connected_components
 from scipy.sparse import csr_matrix
 
 def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CONTCAR', repost: bool = True,
-             calc: str = 'vasp'):
+             calc: str = 'vasp', path_ref: str = None):
     """Processes NEB calculation results and generates analysis files.
 
     Args:
@@ -58,6 +59,8 @@ def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CON
         repost: If True, reprocesses all results. Defaults to True.
         calc: 'vasp' (VTST scripts on the OUTCARs) or 'lammps' (pei_lmp_univ_post -neb writes
             the same neb.dat / nebef.dat; no OUTCAR trajectory, so no p_neb_full plot).
+        path_ref: Absolute path of a post-processed reference NEB tree (e.g. the DFT y_neb);
+            its energy profile is overlaid on p_post_neb.pdf. None: no overlay.
 
     Returns:
         None: Generates output files and plots in the working directory.
@@ -108,7 +111,10 @@ def post_neb(dirsurf: str = 'y_neb', refcontcar: str='./y_full_relax_neb/ini/CON
 
     mysplinedf = my_spline_neb(nebdf, nebefdf)
 
-    my_plot_neb(nebdf, nebefdf, spline_df, extsdf, mysplinedf, natoms, if_save=True)
+    dict_ref = get_neb_ref(path_ref) if path_ref is not None else None
+
+    my_plot_neb(nebdf, nebefdf, spline_df, extsdf, mysplinedf, natoms, if_save=True,
+                dict_ref=dict_ref)
 
     if neb_full_df is not None:
         my_plot_neb_full(neb_full_df)
@@ -229,6 +235,22 @@ def my_spline_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,) ->
         'force_b(eV/Å)': my_spline_force
     })
     return my_spline_df
+
+def get_neb_ref(path_ref: str = None) -> dict:
+    """Reads a post-processed reference NEB tree for the overlay in my_plot_neb.
+
+    Args:
+        path_ref: Absolute path of the tree: p_neb.dat, p_nebef.dat (post_neb output) and
+            y_dir/00/POSCAR (atom count, for meV/atom).
+
+    Returns:
+        dict: nebdf, nebefdf, mysplinedf (my_spline_neb of the two), natoms.
+    """
+    nebdf = general_read(os.path.join(path_ref, 'p_neb.dat'), has_header=True)
+    nebefdf = general_read(os.path.join(path_ref, 'p_nebef.dat'), has_header=True)
+    natoms = len(read_vasp(os.path.join(path_ref, 'y_dir', '00', 'POSCAR')))
+    return {'nebdf': nebdf, 'nebefdf': nebefdf, 'mysplinedf': my_spline_neb(nebdf, nebefdf),
+            'natoms': natoms}
 
 # For detailed analysis, you can use the following function to plot the NEB results.
 def analyze_neb_trajectory(file: str = None, if_save: bool = True, save_dir: str = './', cellxypoints_special_direct: list = None,

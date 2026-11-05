@@ -17,11 +17,14 @@ Functions:
     - my_plot_hoec_energy: Plot HOEC energy-strain fits by deformation mode.
     - my_plot_hoec_convergence: Plot HOEC constants against the fit window.
     - my_plot_neb: Plot NEB (Nudged Elastic Band) energy and force profiles.
+    - plot_neb_ref: Reference NEB energies on the energy panels of my_plot_neb.
     - my_plot_neb_full: Plot NEB full energy profiles with optional frame slicing.
     - my_plot_neb_xy: Plot atomic trajectories in 2D with customizable visualization options.
     - my_plot_stretch: Fit quadratic energy-stretch curve, extract equilibrium values, and plot energy and c/a ratio.
     - my_plot_E_in_1_2_bulk: Generate 2D contour and profile plots for E_in_1_2 bulk analysis.
     - get_profile_index: Grid lines that get a profile subplot in my_plot_E_in_1_2_bulk.
+    - plot_profile_ref: Reference points on one profile subplot of my_plot_E_in_1_2_bulk.
+    - my_plot_E_in_1_2_bulk_ref: Parity of E and c/a against a reference tree (e.g. DFT).
     - my_plot_thermal_expansion: Lattice lengths, c/a, volume, energy, MSD and CNA vs T.
 """
 
@@ -816,7 +819,8 @@ def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,
                 natoms: int = 1,
                 if_save: bool=False,
                 savefile: str='p_post_neb.pdf',
-                dpi: int=300,) -> tuple:
+                dpi: int=300,
+                dict_ref: dict = None) -> tuple:
     """Plot NEB (Nudged Elastic Band) energy and force profiles.
 
     This function visualizes energy and force data from NEB calculations,
@@ -832,6 +836,9 @@ def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,
         if_save (bool): Whether to save the figure as a file.
         savefile (str): Filename to save the plot.
         dpi (int): Resolution of the saved plot.
+        dict_ref (dict): Reference NEB (e.g. DFT) from ``mymetal.post.neb.get_neb_ref``: keys
+            nebdf, nebefdf, mysplinedf, natoms. Its energies are drawn in black on the three
+            energy panels. None: no overlay.
 
     Returns:
         tuple: (fig, axes) of the generated matplotlib figure and axes array.
@@ -896,11 +903,34 @@ def my_plot_neb(nebdf: pd.DataFrame = None, nebefdf: pd.DataFrame =  None,
     ax.set_xlabel('Scaled coordinate (-)')
     ax.set_ylabel('Force (eV/Å)')
 
+    if dict_ref is not None:
+        plot_neb_ref(axes, dict_ref, energy_rel.max())
+
     if if_save:
         plt.savefig(savefile, dpi=dpi)
 
     return fig, axes
 
+
+
+def plot_neb_ref(axes, dict_ref: dict = None, eb: float = None) -> None:
+    """Reference NEB energies (points + spline, meV/atom) on the energy panels of my_plot_neb."""
+    natoms = dict_ref['natoms']
+    coord = dict_ref['nebdf']['dist_cum(Å)']
+    energy = dict_ref['nebefdf']['energy(eV)']
+    energy_rel = (energy - energy[0]) * 1e3 / natoms
+    spline_coord = dict_ref['mysplinedf']['dist_cum(Å)']
+    spline_energy = dict_ref['mysplinedf']['energy(eV)']
+    spline_energy_rel = (spline_energy - spline_energy[0]) * 1e3 / natoms
+    for ax, if_scale in [(axes[0, 0], True), (axes[0, 1], False), (axes[1, 1], True)]:
+        x = coord / coord.iloc[-1] if if_scale else coord
+        xs = spline_coord / spline_coord.iloc[-1] if if_scale else spline_coord
+        ax.plot(x, energy_rel, 's', color='k', markerfacecolor='k', markersize=10,
+                label='ref, $E_b$ = %.2f' % energy_rel.max())
+        ax.plot(xs, spline_energy_rel, '--', color='k')
+        # this tree's points are the first line of each energy panel
+        ax.get_lines()[0].set_label('this, $E_b$ = %.2f' % eb)
+        general_modify_legend(ax.legend(loc='best', fontsize=18))
 
 
 def my_plot_neb_full(neb_full_df: pd.DataFrame = None, 
@@ -1261,7 +1291,8 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
                           lenergy: list = None,
                           lca: list = None,
                           save_fig_path: str = 'p_post_E_in_1_2_bulk.pdf',
-                          save_fig_path2: str = 'p_post_E_in_1_2_bulk2.pdf'):
+                          save_fig_path2: str = 'p_post_E_in_1_2_bulk2.pdf',
+                          lenergy_ref: list = None, lca_ref: list = None):
     """Generate 2D contour and profile plots for E_in_1_2 bulk analysis.
     
     Args:
@@ -1271,6 +1302,10 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
         lca: List of c/a ratios
         save_fig_path: Path for contour plot
         save_fig_path2: Path for profile plots
+        lenergy_ref: Reference energies per atom, one per case of ``la1`` and already on this
+            tree's energy scale (NaN where the reference has no such case); drawn as black
+            squares on the profiles. None: no overlay.
+        lca_ref: Reference c/a, same layout as ``lenergy_ref``.
         
     Returns:
         tuple: Equilibrium (a1, a2, energy) values
@@ -1287,6 +1322,8 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     # (E - E0) * 1e3, meV per atom
     energy_grid = np.zeros(a1_grid.shape)  
     ca_grid = np.zeros(a1_grid.shape)    
+    energy_grid_ref = np.full(a1_grid.shape, np.nan)
+    ca_grid_ref = np.full(a1_grid.shape, np.nan)
 
     eq_energy = min(lenergy)
     leq_a1 = []
@@ -1315,6 +1352,9 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
             elif len(lid) == 1:
                 energy_grid[i, j] = (lenergy[lid[0]] - eq_energy) * 1e3  # meV per atom
                 ca_grid[i, j] = lca[lid[0]]
+                if lenergy_ref is not None:
+                    energy_grid_ref[i, j] = (lenergy_ref[lid[0]] - eq_energy) * 1e3
+                    ca_grid_ref[i, j] = lca_ref[lid[0]]
 
             if abs(energy_grid[i, j]) < 1e-10:
                 leq_a1.append(a1)
@@ -1359,12 +1399,12 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     fig, axes = my_plot(fig_subp = [len(lrow) + len(lcol) + 1, 2], fig_sharex=False)
     lax = axes.flatten()
 
-    min_energy = np.min(energy_grid)
-    max_energy = np.max(energy_grid)
+    min_energy = np.nanmin(np.concatenate([energy_grid.ravel(), energy_grid_ref.ravel()]))
+    max_energy = np.nanmax(np.concatenate([energy_grid.ravel(), energy_grid_ref.ravel()]))
     range_energy = max_energy - min_energy
     ylim_energy = (min_energy - 0.05 * range_energy, max_energy + 0.05 * range_energy)
-    min_c_a = np.min(ca_grid)
-    max_c_a = np.max(ca_grid)
+    min_c_a = np.nanmin(np.concatenate([ca_grid.ravel(), ca_grid_ref.ravel()]))
+    max_c_a = np.nanmax(np.concatenate([ca_grid.ravel(), ca_grid_ref.ravel()]))
     range_c_a = max_c_a - min_c_a
     ylim_c_a = (min_c_a - 0.05 * range_c_a, max_c_a + 0.05 * range_c_a)
     id_fig = 0
@@ -1373,12 +1413,14 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     for i in lrow:
         ax = lax[id_fig]
         ax.plot(a1_range, energy_grid[i, :], '-o', color='C0', label=f'$a_2$={a2_range[i]:.2f} Å')
+        plot_profile_ref(ax, a1_range, energy_grid_ref[i, :])
         ax.set_xlabel(r"$a_1$ (Å)")
         ax.set_ylabel(r'$E-E_0$ (meV per atom)')
         ax.set_ylim(ylim_energy)
         general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
         ax = lax[id_fig+1]
         ax.plot(a1_range, ca_grid[i, :], '-o', color='C0', label=f'$a_2$={a2_range[i]:.2f} Å')
+        plot_profile_ref(ax, a1_range, ca_grid_ref[i, :])
         ax.set_xlabel(r"$a_1$ (Å)")
         ax.set_ylabel(r'$c/a$')
         ax.set_ylim(ylim_c_a)
@@ -1389,12 +1431,14 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     for j in lcol:
         ax = lax[id_fig]
         ax.plot(a2_range, energy_grid[:, j], '-o', color='C1', label=f'$a_1$={a1_range[j]:.2f} Å')
+        plot_profile_ref(ax, a2_range, energy_grid_ref[:, j])
         ax.set_xlabel(r"$a_2$ (Å)")
         ax.set_ylabel(r'$E-E_0$ (meV per atom)')
         ax.set_ylim(ylim_energy)
         general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
         ax = lax[id_fig+1]
         ax.plot(a2_range, ca_grid[:, j], '-o', color='C1', label=f'$a_1$={a1_range[j]:.2f} Å')
+        plot_profile_ref(ax, a2_range, ca_grid_ref[:, j])
         ax.set_xlabel(r"$a_2$ (Å)")
         ax.set_ylabel(r'$c/a$')
         ax.set_ylim(ylim_c_a)
@@ -1405,20 +1449,26 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     lx = []
     temp_lenergy = []
     temp_lca = []
+    temp_lenergy_ref = []
+    temp_lca_ref = []
     for i in range(energy_grid.shape[0]):
         for j in range(energy_grid.shape[1]):
             if a1_grid[i, j] == a2_grid[i, j]:
                 lx.append(a1_grid[i, j])
                 temp_lenergy.append(energy_grid[i, j])
                 temp_lca.append(ca_grid[i, j])
+                temp_lenergy_ref.append(energy_grid_ref[i, j])
+                temp_lca_ref.append(ca_grid_ref[i, j])
     ax = lax[id_fig]
     ax.plot(lx, temp_lenergy, '-o', color='C2', label=f'$a_1=a_2$')
+    plot_profile_ref(ax, lx, temp_lenergy_ref)
     ax.set_xlabel(r"$a$ (Å)")
     ax.set_ylabel(r'$E-E_0$ (meV per atom)')
     ax.set_ylim(ylim_energy)
     general_modify_legend(ax.legend(loc = "upper right", bbox_to_anchor = (0.95, 0.95)))
     ax = lax[id_fig+1]
     ax.plot(lx, temp_lca, '-o', color='C2', label=f'$a_1=a_2$')
+    plot_profile_ref(ax, lx, temp_lca_ref)
     ax.set_xlabel(r"$a$ (Å)")
     ax.set_ylabel(r'$c/a$')
     ax.set_ylim(ylim_c_a)
@@ -1426,6 +1476,48 @@ def my_plot_E_in_1_2_bulk(la1: list = None, la2: list = None,
     plt.savefig(save_fig_path2)
 
     return (eq_a1, eq_a2, eq_energy)
+
+
+def plot_profile_ref(ax, lx: list = None, ly: list = None) -> None:
+    """Reference points on one profile subplot; nothing when that line has no reference case."""
+    if np.any(np.isfinite(np.asarray(ly, dtype=float))):
+        ax.plot(lx, ly, 's', color='k', markerfacecolor='k', markersize=10, label='ref')
+
+
+def my_plot_E_in_1_2_bulk_ref(df: pd.DataFrame = None, if_save: bool = False,
+                              savefile: str = 'p_post_E_in_1_2_bulk_ref.pdf',
+                              dpi: int = 300) -> tuple:
+    """Parity of this tree against a reference tree, case by case (same a1, a2).
+
+    Args:
+        df: Common cases from ``mymetal.post.E_in_1_2_bulk.get_E_in_1_2_bulk_ref``: columns
+            de, de_ref (meV/atom, both zeroed at the same anchor case), ca, ca_ref.
+        if_save: Save the figure.
+        savefile: Output path.
+        dpi: DPI of the saved figure.
+
+    Returns:
+        tuple: ``(fig, axes)``.
+    """
+    fig, axes = my_plot(fig_subp=[1, 2], fig_sharex=False)
+    axes = np.array(axes).flatten()
+    for ax, (key, label) in zip(axes, [('de', r'$E-E_\mathrm{anchor}$ (meV/atom)'),
+                                       ('ca', r'$c/a$')]):
+        x = df[key + '_ref'].to_numpy(dtype=float)
+        y = df[key].to_numpy(dtype=float)
+        ax.plot(x, y, 'o', label='MAE %.3g' % np.mean(np.abs(y - x)))
+        lim = [min(x.min(), y.min()), max(x.max(), y.max())]
+        pad = 0.05 * (lim[1] - lim[0]) or 0.01      # a single common case has zero range
+        lim = [lim[0] - pad, lim[1] + pad]
+        ax.plot(lim, lim, 'k--', linewidth=2)
+        ax.set_xlim(lim)
+        ax.set_ylim(lim)
+        ax.set_xlabel('ref ' + label)
+        ax.set_ylabel('this ' + label)
+        general_modify_legend(ax.legend(loc='upper left'))
+    if if_save:
+        fig.savefig(savefile, dpi=dpi, bbox_inches='tight')
+    return fig, axes
 
 
 # for workflow thermal_expansion
