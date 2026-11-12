@@ -1308,6 +1308,8 @@ class PeiN2p2MD(PeiN2p2):
                              n_select_total: int = None, tag_prefix: str = 'MD',
                              if_phase_match: bool = False, msd_max: float = None,
                              select_mode: str = 'random', seed: int = None,
+                             t_range: list = None, e_md_min: float = None,
+                             n_collapse_onset: int = 0,
                              if_skip_if_done: bool = True) -> Path:
         """从 MD 帧集里挑出构型，写成待 DFT 标记的清单。
 
@@ -1349,6 +1351,14 @@ class PeiN2p2MD(PeiN2p2):
             select_mode: ``'random'``（LT 口径）或 ``'divergence'``（committee 判据）。
             seed: ``'random'`` 模式的随机种子。**务必显式给**：入选清单只落盘一次，
                 没有种子就无法复现「这一轮为什么是这 180 帧」。
+            t_range: ``[T_lo, T_hi]``（K，闭区间），只在这些温度档里挑；None 不过滤。
+                降温阶梯（先高温熔化再逐档降温）的熔化档只是为了造液相，不送 DFT。
+            e_md_min: 塌缩判据（eV/atom）：生成势给的 ``E_md_eV / natoms`` 低于它的帧
+                视为塌进伪深谷，移出分组名额池；None 不过滤。伪深谷塌缩时外推警告恒为 0、
+                相判据与 MSD 也和熔化分不开，只有能量掉到 0 K 基态以下才看得出来。
+            n_collapse_onset: 每条轨迹（run, epoch, phase）另取塌缩最早的 n 帧，
+                tag 加 ``-collapse`` 后缀，不占分组名额、不受 ``n_select_total`` 截断。
+                这些帧正是生成势错得最离谱的地方。仅在给了 ``e_md_min`` 时生效。
             if_skip_if_done: 完成阀门。
 
         Returns:
@@ -1421,6 +1431,27 @@ class PeiN2p2MD(PeiN2p2):
                                  f"Run collect_compare, or set std_min=None.")
             df = df[df['E_std_meV/at'] >= float(std_min)]
             print(f"  std_min {std_min} meV/at: {len(df)}/{n_all} frame(s) kept")
+        if t_range is not None:
+            df = df[df['T_set_K'].between(float(t_range[0]), float(t_range[1]))]
+            print(f"  t_range {list(t_range)} K: {len(df)}/{n_all} frame(s) kept")
+        df_collapse = df.iloc[0:0]
+        if e_md_min is not None:
+            # 判据与轨迹归属都从帧表取：committee 表没有 E_md_eV / run / epoch 列
+            df_frame = pd.read_csv(path_index, sep=r'\s+', comment='#', dtype={'run': str},
+                                   usecols=['index', 'run', 'epoch', 'E_md_eV'])
+            sr_frame = df_frame.set_index('index')
+            sr_e_at = df['index'].map(sr_frame['E_md_eV']) / df['natoms']
+            lcollapse = sr_e_at < float(e_md_min)
+            sr_traj = (df['index'].map(sr_frame['run']) + '_'
+                       + df['index'].map(sr_frame['epoch']).astype(str) + '_' + df['phase'])
+            # 帧表按 (势, 相, step) 顺序写出，index 升序即轨迹内时间顺序
+            df_collapse = (df[lcollapse].assign(traj=sr_traj[lcollapse]).sort_values('index')
+                           .groupby('traj', sort=False).head(int(n_collapse_onset))
+                           .drop(columns='traj'))
+            print(f"  e_md_min {e_md_min} eV/at: {int(lcollapse.sum())} collapsed frame(s) in "
+                  f"{sr_traj[lcollapse].nunique()} trajectory(ies) removed from the pool; "
+                  f"{len(df_collapse)} onset frame(s) kept (n_collapse_onset={n_collapse_onset})")
+            df = df[~lcollapse]
 
         # 两种模式都是「先把整表排成想要的顺序，再逐组 head」：groupby.head 保持原行序，
         # 所以排序一次就同时定下了组内名额和后面全局截断的取舍。
@@ -1441,6 +1472,8 @@ class PeiN2p2MD(PeiN2p2):
             print(f"  ⚠️  {len(df)} selected exceed n_select_total={n_select_total}; keeping the "
                   f"{'most divergent' if select_mode == 'divergence' else 'first shuffled'} ones")
             df = df.head(int(n_select_total))
+        set_collapse = set(df_collapse['index'].astype(int))
+        df = pd.concat([df, df_collapse])
         if df.empty:
             raise ValueError(f"❌ No structure selected from {path_compare} "
                              f"(select_mode={select_mode}, std_min={std_min}, "
@@ -1462,7 +1495,7 @@ class PeiN2p2MD(PeiN2p2):
         lrow = []
         for rank, (_, row) in enumerate(df.iterrows(), start=1):
             idx = int(row['index'])
-            tag = f"{tag_prefix}{iround}-{row['phase']}"
+            tag = f"{tag_prefix}{iround}-{row['phase']}" + ('-collapse' if idx in set_collapse else '')
             writer.write_from_ase(str(path_md), data.latoms[idx],
                                   struct_num=rank, full_struct_num=len(df),
                                   file_name=f'md_round{iround}_frame{idx}',
@@ -1484,6 +1517,8 @@ class PeiN2p2MD(PeiN2p2):
                            f'std_min {std_min}   n_select_total {n_select_total}   '
                            f'phase_match {if_phase_match}   msd_max {msd_max}   '
                            f'seed {seed}',
+                           f'# t_range {t_range}   e_md_min {e_md_min}   '
+                           f'n_collapse_onset {n_collapse_onset} (tag suffix -collapse)',
                            f'# frames scanned    {n_all}   selected {len(df_out)}',
                            '# rank              1..N in frame order (= data_dft subdir number); '
                            'index = frame index in input.data.frames',
