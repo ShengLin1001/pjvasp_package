@@ -16,7 +16,7 @@
 #   MD_SEED                固定随机种子（默认**不固定**：每次运行现取一个）
 #   LMP_MAX_TRY / LMP_RETRY_SLEEP   srun step 暂态失败的重试次数 / 间隔
 #
-# 退出码：0 = 两个相都跑完；1 = 有步骤失败（逐项列在 📊 Summary 里）。
+# 退出码：0 = md_params.mod 里的所有相都跑完；1 = 有步骤失败（逐项列在 📊 Summary 里）。
 
 launcher="${MY_LAUNCHER:-srun}"
 myroot=$(pwd)
@@ -127,7 +127,10 @@ cd "${myroot}" || exit 1
 ############ 5. 产物核对 ############
 echo ""
 echo "================ 📊 Summary — ${myroot}"
-for phase in fcc hcp; do
+# 相名从 md_params.mod 的 index 变量读，不写死 fcc hcp：液态支线只有一个相（如 liq）
+lphase=$(awk '$1=="variable" && $2=="phase" && $3=="index" {for (i = 4; i <= NF; i++) printf "%s ", $i}' "${myroot}/md_params.mod")
+[[ -n "${lphase// /}" ]] || record_fail "md_params.mod 里没有 variable phase index 行" 1
+for phase in ${lphase}; do
     traj="${myroot}/y_md_${phase}.lammpstrj"
     tempf="${myroot}/y_md_${phase}_temp.txt"
     if [[ -s "${traj}" && -s "${tempf}" ]]; then
