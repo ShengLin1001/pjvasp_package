@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# 常驻维护 zcm6 → PC 的反向 ssh 通道：确保本机便携 sshd（127.0.0.1:22022）在跑，再保持 ln2 127.0.0.1:38022 → 本机 22022 的反向转发。
+# zcm6 上用 `ssh pc` 连回本机（~/.ssh/config 的 Host pc）。和浮屿「SSH 代理隧道」（37897）互不相干，端口不冲突。
+# 断线后先按标记清掉 ln2 上本脚本留下的残留会话再重连，逻辑复用 pei_ssh_univ_keep_zcm6_proxy。
+# 用法（git bash）：pei_ssh_univ_keep_pc_reverse；开机自启：shell:startup\zcm6-pc-reverse.vbs 隐藏运行本脚本，日志写 ~/.ssh/pc_sshd/keep.log
+
+# 复用 fail / warn / filter_ssh_noise / ssh_remote / wait_retry / clean_remote（clean_remote 读全局 PORT 和 MARKER）
+source "$(dirname "${BASH_SOURCE[0]}")/pei_ssh_univ_keep_zcm6_proxy" || exit 1
+
+PORT=38022
+LOCAL_PORT=22022
+SSHD=/d/software/OpenSSH/10.4.0.0p1/sshd.exe
+SSHD_CONFIG="$HOME/.ssh/pc_sshd/sshd_config"
+PID_FILE=/tmp/pei_ssh_univ_keep_pc_reverse.pid
+MARKER=PEI_PC_REVERSE_TUNNEL=1
+TUNNEL_CMD="$MARKER; "'echo "✅ 反向通道已登录 $(hostname)，会话 sshd PID $PPID"; while kill -0 $PPID 2>/dev/null; do sleep 30; done'
+
+check_single_instance() {
+    local pid
+    pid=$(cat "$PID_FILE" 2>/dev/null)
+    if [[ -n "$pid" ]] && grep -qa pei_ssh_univ_keep_pc_reverse "/proc/$pid/cmdline" 2>/dev/null; then
+        fail "已有一个本脚本在运行（MSYS PID $pid）"
+    fi
+    echo $$ > "$PID_FILE"
+}
+
+check_sshd_listening() { netstat -ano | grep -qE "127\.0\.0\.1:$LOCAL_PORT +.*LISTENING"; }
+
+# sshd 必须在桌面会话里以用户身份运行，从 ssh 拉起的进程才能开 GUI / Edge；装成系统服务会落在 session 0
+start_sshd() {
+    check_sshd_listening && { echo "✅ sshd 已在 127.0.0.1:$LOCAL_PORT 监听"; return 0; }
+    echo "▶️  启动 sshd：$SSHD -D -f $SSHD_CONFIG"
+    "$SSHD" -D -f "$(cygpath -w "$SSHD_CONFIG")" &
+    sleep 2
+    check_sshd_listening || warn "sshd 启动后 127.0.0.1:$LOCAL_PORT 仍未监听，下一轮再试"
+}
+
+main() {
+    ### check
+    check_single_instance
+    ### to here
+
+    ### main: 起 sshd → 清理残留 → 建反向转发 → 断开后等待，循环
+    trap 'echo; echo "🛑 已停止，反向通道已关闭"; exit 0' INT TERM
+    local n=0 state rc
+    while true; do
+        n=$((n + 1))
+        echo "================ 📍 [$(date '+%F %T')] 第 $n 次连接"
+        start_sshd
+        if ! state=$(clean_remote); then
+            wait_retry "ssh $HOST 失败（网络未恢复？）"
+            continue
+        fi
+        sed -n 's/^KILL /🧹 已 kill 残留反向通道 sshd PID: /p' <<<"$state"
+        if grep -q '^LISTEN 1' <<<"$state"; then
+            wait_retry "ln2 端口 $PORT 被非本脚本的会话占着"
+            continue
+        fi
+        echo "================ ▶️  ssh -R 127.0.0.1:$PORT:127.0.0.1:$LOCAL_PORT $HOST"
+        ssh -T -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+            -R "127.0.0.1:$PORT:127.0.0.1:$LOCAL_PORT" "$HOST" "$TUNNEL_CMD" 2> >(filter_ssh_noise)
+        rc=$?
+        wait_retry "[$(date '+%F %T')] 反向通道断开（ssh 退出码 $rc）"
+    done
+    ### to here
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main; fi

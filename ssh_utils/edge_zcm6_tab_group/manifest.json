@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "zcm6 tab group",
+  "version": "1.0",
+  "description": "Put tabs opened from zcm6 (pcopen) into a 'zcm6' tab group so they stay apart from your own tabs.",
+  "permissions": ["tabs", "tabGroups"],
+  "background": { "service_worker": "background.js" }
+}

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# 在本机（Windows PC）的 OVITO 里直接打开 zcm6 上的结构/轨迹，不下载：经 `ssh pc` 调 ovito-zcm6.cmd，OVITO 走 sftp://zcm6-ovito/<绝对路径> 读文件。
+# 在 zcm6 上用（PATH 指向本目录）。用法：pcovito <文件> [文件...]   多个同格式文件会被 OVITO 拼成一条轨迹。需要 PC 开机且反向通道（pei_ssh_univ_keep_pc_reverse）在线。
+set -uo pipefail
+DETACH='F:\BaiduSyncdisk\version20240608\main_code_space\pjvasp_package\ssh_utils\pei_ssh_univ_pc_detach.ps1'
+fail() { echo "❌ ERROR: $1" >&2; exit 1; }
+
+(( $# > 0 )) || fail "用法：pcovito <文件> [文件...]"
+lurl=()
+for file in "$@"; do
+    [[ -f "$file" ]] || fail "文件不存在：$file"
+    # OVITO 的 sftp 不认 ~ 和相对路径，必须绝对路径
+    lurl+=("sftp://zcm6-ovito$(realpath "$file")")
+done
+echo "▶️  本机 OVITO 打开：${lurl[*]}"
+# sshd 会话断开时会杀掉子进程，所以经 detach 脚本脱离 job 启动
+ssh pc "powershell -NoProfile -File $DETACH D:\software\Ovito\ovito-zcm6.cmd ${lurl[*]}"

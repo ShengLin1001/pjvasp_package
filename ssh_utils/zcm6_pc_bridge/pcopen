@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# 在本机（Windows PC）的 Edge（平时的配置）打开网址，标签自动进 "zcm6" 分组，不和用户自己的标签混。需要 PC 开机且反向通道在线。
+# 分组靠本机 Edge 扩展 edge_zcm6_tab_group（pjvasp_package/ssh_utils/）：这里打开标记地址 https://zcm6.invalid/open?u=<编码后的 url>，扩展跳到真实网址并分组。
+# 用法：pcopen <url>
+set -uo pipefail
+DETACH='F:\BaiduSyncdisk\version20240608\main_code_space\pjvasp_package\ssh_utils\pei_ssh_univ_pc_detach.ps1'
+(( $# == 1 )) || { echo "❌ ERROR: 用法：pcopen <url>" >&2; exit 1; }
+[[ "$1" =~ ^https?:// ]] || { echo "❌ ERROR: 只支持 http(s) 网址：$1" >&2; exit 1; }
+marker="https://zcm6.invalid/open?u=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1")"
+echo "▶️  本机浏览器打开（zcm6 分组）：$1"
+# url.dll 的 FileProtocolHandler 交给默认浏览器，避开 `start` 把第一个带引号参数当窗口标题的坑
+ssh pc "powershell -NoProfile -File $DETACH rundll32 url.dll,FileProtocolHandler \"$marker\""
