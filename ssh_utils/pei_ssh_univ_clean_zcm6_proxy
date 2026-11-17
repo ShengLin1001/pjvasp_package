@@ -14,8 +14,11 @@ fail() { echo "❌ ERROR: $1" >&2; exit 1; }
 warn() { echo "⚠️  $1" >&2; }
 
 # OpenSSH 10 每次连接都打印两遍后量子警告；只滤掉这一类 stderr，其它报错照常显示
+filter_ssh_noise() { grep -v -E 'post-quantum|store now|pq\.html|be upgraded' >&2; }
+
+# 超时选项让断网时尽快失败，不卡住 pei_ssh_univ_keep_zcm6_proxy 的重连循环
 ssh_remote() {
-    ssh "$HOST" bash -s "$@" 2> >(grep -v -E 'post-quantum|store now|pq\.html|be upgraded' >&2)
+    ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$HOST" bash -s "$@" 2> >(filter_ssh_noise)
 }
 
 get_local_proxy() {
@@ -91,7 +94,7 @@ main() {
         exit 0
     fi
     mapfile -t lcand < <(grep '^CAND' <<<"$state" | cut -d' ' -f2-)
-    (( ${#lcand[@]} > 0 )) || fail "端口 $PORT 被占用，但不是你的交互式 sshd（可能是别的用户），本脚本不处理"
+    (( ${#lcand[@]} > 0 )) || fail "端口 $PORT 被占用，但不是你的交互式 sshd（pei_ssh_univ_keep_zcm6_proxy 的残留隧道由它重启时自动清理；否则可能是别的用户），本脚本不处理"
     echo "⚠️  端口 $PORT 被占用，候选会话（PID TTY 空闲 启动时间）："
     printf '    %s\n' "${lcand[@]}"
     mapfile -t lpid < <(printf '%s\n' "${lcand[@]}" | cut -d' ' -f1)
